@@ -6,8 +6,8 @@ import scipy.special as special
 from matplotlib import pyplot as plt
 import abc
 
-from pyhsmm.abstractions import Distribution, GibbsSampling, MeanField, Collapsed
-from pyhsmm.util.stats import sample_niw, sample_discrete, \
+from abstractions import Distribution, GibbsSampling, MeanField, Collapsed
+from util.stats import sample_niw, sample_discrete, \
         sample_discrete_from_log, getdatasize, combinedata
 
 class Gaussian(GibbsSampling, MeanField, Collapsed, Distribution):

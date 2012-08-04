@@ -4,6 +4,8 @@ import scipy.stats as stats
 import scipy.special as special
 from matplotlib import pyplot as plt
 
+from abstractions import DurationDistribution, GibbsSampling
+
 # TODO switch from scipy to numpy for basic distribution sampling
 
 # TODO consider making hyperparameters not explicit so that methods can be more
