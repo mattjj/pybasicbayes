@@ -2,7 +2,7 @@ import abc
 import numpy as np
 from warnings import warn
 
-from pybasicbayes.util.stats import combinedata
+from util.stats import combinedata
 
 '''
 Abstracted interfaces that distribution objects may implement.

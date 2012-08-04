@@ -521,18 +521,18 @@ class Multinomial(GibbsSampling, Distribution): # TODO meanfield
             self.resample()
 
     def rvs(self,size=[]):
-        return sample_discrete(self.weights,size)
+        return sample_discrete(self.weights,size,dtype=np.float)
 
     def log_likelihood(self,x):
         return np.log(self.weights)[x]
 
     def _posterior_hypparams(self,counts):
-        return self.alphav + counts,
+        return self.alphav_0 + counts,
 
     ### Gibbs sampling
 
     def resample(self,data=[]):
-        self.weights = np.random.dirichlet(*self._posterior_hypparams(*self.get_statistics(data)))
+        self.weights = np.random.dirichlet(*self._posterior_hypparams(*self._get_statistics(data)))
 
     def _get_statistics(self,data):
         assert isinstance(data,np.ndarray) or \

@@ -4,7 +4,7 @@ from util.stats import sample_discrete_from_log
 
 class Labels(object):
     def __init__(self,components,weights,data=None,N=None,z=None):
-        assert data is not None or N is not None
+        assert data is not None or (N is not None and z is None)
 
         self.components = components
         self.weights = weights
@@ -22,8 +22,8 @@ class Labels(object):
             else:
                 self.resample()
 
-    def generate(self):
-        raise NotImplementedError
+    def generate(self,N):
+        self.z = self.weights.rvs(size=N)
 
     def resample(self):
         data = self.data

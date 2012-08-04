@@ -2,10 +2,10 @@ from __future__ import division
 import numpy as np
 na = np.newaxis
 
-from pybasicbayes.abstractions import ModelGibbsSampling, Model, Distribution
+from abstractions import ModelGibbsSampling, Model, Distribution
 
-from pybasicbayes.observations import Multinomial
-from pybasicbayes.internals.labels import Labels
+from observations import Multinomial
+from internals.labels import Labels
 
 class Mixture(ModelGibbsSampling, Model, Distribution):
     '''
