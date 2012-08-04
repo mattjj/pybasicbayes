@@ -122,7 +122,7 @@ class ModelGibbsSampling(Model):
     __metaclass__ = abc.ABCMeta
 
     @abc.abstractmethod
-    def resample(self):
+    def resample_model(self):
         pass
 
 class ModelMeanField(Model):
@@ -132,4 +132,4 @@ class ModelMeanField(Model):
     def MF_coordinate_descent(self,convergence_tol):
         pass
 
-# TODO parallel gibbs sampling model algorithm
+# TODO parallel gibbs sampling model algorithm interface

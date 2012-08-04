@@ -33,9 +33,26 @@ class Mixture(ModelGibbsSampling, Model, Distribution):
         return self.weights.log_likelihood(np.arange(len(self.components))) + \
                 np.concatenate([c.log_likelihood(x) for c in self.components]).T
 
+    def resample(self,data):
+        # acts like distribution resampling: doesn't remember data, but does
+        # update instantiated parameters
+
+        # temporarily add the passed data
+        self.add_data(data) # this does one ``resampling'' step for labels
+
+        # now resample components
+        for idx, c in enumerate(self.components):
+            c.resample(data=[l.data[l.z == idx] for l in self.labels_list])
+
+        # and weights
+        self.weights.resample([l.z for l in self.labels_list])
+
+        # remove the passed data
+        self.labels_list.pop()
+
     ### Gibbs sampling
 
-    def resample(self):
+    def resample_model(self):
         for l in self.labels_list:
             l.resample()
 
