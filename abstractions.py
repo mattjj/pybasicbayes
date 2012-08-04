@@ -122,15 +122,17 @@ class ModelGibbsSampling(Model):
     __metaclass__ = abc.ABCMeta
 
     @abc.abstractmethod
-    def resample_model(self):
+    def resample_model(self): # TODO niter?
         pass
 
 class ModelMeanField(Model):
     __metaclass__ = abc.ABCMeta
 
     @abc.abstractmethod
-    def MF_coordinate_descent(self,convergence_tol):
+    def meanfield_coordinate_descent(self): # TODO convergence tol?
         pass
+
+    # TODO VLB?
 
 # TODO parallel gibbs sampling model algorithm interface... uses ipython and
 # (hopefully custom) pickling

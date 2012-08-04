@@ -88,11 +88,14 @@ class Gaussian(GibbsSampling, MeanField, Collapsed, Distribution):
     ### Mean Field
 
     def meanfieldupdate(self,data,weights):
+        # TODO untested
         assert getdatasize(data) > 0
         self._mu_mf, self._sigma_mf, self._kappa_mf, self._nu_mf = \
                 self._posterior_hypparams(*self._get_weighted_statistics(data,weights))
+        self.mu, self.sigma = self._mu_mf, self._sigma_mf/(self._nu_mf - self.D - 1) # for plotting
 
     def expected_log_likelihood(self,x):
+        # TODO untested
         mu_n, sigma_n, kappa_n, nu_n = self._mu_mf, self._sigma_mf, self._kappa_mf, self._nu_mf
         D = self.D
 
@@ -107,6 +110,7 @@ class Gaussian(GibbsSampling, MeanField, Collapsed, Distribution):
                 (np.linalg.solve(sigma_n,x.T).T * x).sum(1)
 
     def _get_weighted_statistics(self,data,weights):
+        # TODO untested
         # NOTE: _get_statistics is special case with all weights being 1
         # this is kept as a separate method for speed and modularity
         D = self.D
@@ -165,7 +169,7 @@ class Gaussian(GibbsSampling, MeanField, Collapsed, Distribution):
             o.global_vecs = vecs
 
     def plot(self,data=None,color='b'):
-        from pyhsmm.util.plot import project_data, plot_gaussian_projection, pca
+        from util.plot import project_data, plot_gaussian_projection, pca
         # if global projection vecs exist, use those
         # otherwise, when dim>2, do a pca on the data
         try:
@@ -485,7 +489,7 @@ class ScalarGaussianFixedvar(ScalarGaussian, GibbsSampling):
         return n, xbar
 
 
-class Multinomial(GibbsSampling, Distribution): # TODO meanfield
+class Multinomial(GibbsSampling, MeanField, Distribution):
     '''
     This class represents a multinomial distribution over labels, where the
     parameter is weights and the prior is a Dirichlet distribution.
@@ -521,7 +525,7 @@ class Multinomial(GibbsSampling, Distribution): # TODO meanfield
             self.resample()
 
     def rvs(self,size=[]):
-        return sample_discrete(self.weights,size,dtype=np.float)
+        return sample_discrete(self.weights,size)
 
     def log_likelihood(self,x):
         return np.log(self.weights)[x]
@@ -545,12 +549,37 @@ class Multinomial(GibbsSampling, Distribution): # TODO meanfield
             counts = sum(np.bincount(d,minlength=K) for d in data)
         return counts,
 
+    ### Mean Field
 
+    def meanfieldupdate(self,data,weights):
+        assert getdatasize(data) > 0
+        self._alpha_mf = self._posterior_hypparams(*self._get_weighted_statistics(data,weights))
+        self.weights = self._alpha_mf / self._alpha_mf.sum()
+
+    def expected_log_likelihood(self,x):
+        # this may only make sense if np.all(x == np.arange(self.K))...
+        return special.digamma(self._alpha_mf[x]) - special.digamma(self._alpha_mf.sum())
+
+    def _get_weighted_statistics(self,data,weights):
+        # data is just a placeholder; technically it should be
+        # np.arange(self.K)[na,:].repeat(N,axis=0)
+        assert isinstance(weights,np.array) or \
+                (isinstance(weights,list) and
+                        all(isinstance(w,np.ndarray) for w in weights))
+
+        K = self.K
+        if isinstance(data,np.ndarray):
+            counts = weights.sum(0)
+        else:
+            counts = sum(w.sum(0) for w in weights)
+        return counts,
+
+
+# TODO implement a Gamma distribution for concentration parameter resampling!
 
 
 # TODO TODO below here
 
-# TODO make a collapsed crp mixture and a directassignment crp mixture
 # class DiagonalGaussianNonconj(DiagonalGaussian): # TODO for jackie subhmms
 #     '''
 #     sigmasq_0, alpha_0, beta_0 parameters can either be vectors of same length

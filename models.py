@@ -1,19 +1,22 @@
 from __future__ import division
 import numpy as np
 na = np.newaxis
+from matplotlib import pyplot as plt
+from matplotlib import cm
 
-from abstractions import ModelGibbsSampling, Model, Distribution
+from abstractions import ModelGibbsSampling, ModelMeanField, Model, Distribution
+from abstractions import GibbsSampling, MeanField
 
 from observations import Multinomial
 from internals.labels import Labels
 
-class Mixture(ModelGibbsSampling, Model, Distribution):
+class Mixture(ModelGibbsSampling, ModelMeanField, Distribution):
     '''
     This class is for mixtures of observation distributions.
     '''
-    def __init__(self,alpha,components,weights=None):
+    def __init__(self,alpha_0,components,weights=None):
         self.components = components
-        self.weights = Multinomial(alpha=alpha,K=len(components),weights=weights)
+        self.weights = Multinomial(alpha_0=alpha_0,K=len(components),weights=weights)
 
         self.labels_list = []
 
@@ -34,7 +37,7 @@ class Mixture(ModelGibbsSampling, Model, Distribution):
 
     ### Distribution
 
-    def log_likeihood(self,x):
+    def log_likelihood(self,x):
         return self.weights.log_likelihood(np.arange(len(self.components))) + \
                 np.concatenate([c.log_likelihood(x) for c in self.components]).T
 
@@ -59,6 +62,9 @@ class Mixture(ModelGibbsSampling, Model, Distribution):
     ### Gibbs sampling
 
     def resample_model(self):
+        assert all(isinstance(c,GibbsSampling) for c in self.components), \
+                'Components must implement GibbsSampling'
+
         for l in self.labels_list:
             l.resample()
 
@@ -67,3 +73,50 @@ class Mixture(ModelGibbsSampling, Model, Distribution):
 
         self.weights.resample([l.z for l in self.labels_list])
 
+    ### Mean Field
+
+    def meanfield_coordinate_ascent_step(self):
+        # TODO i could make this run to convergence isntead
+        assert all(isinstance(c,MeanField) for c in self.components), \
+                'Components must implement MeanField'
+
+        # ask labels to get weights over z, stored as l.r
+        for l in self.labels_list:
+            l.compute_responsbilities()
+
+        # pass the weights to pi
+        self.weights.meanfieldupdate(None,[l.r for l in self.labels_list])
+
+        # pass the weights to the components
+        for idx, c in enumerate(self.components):
+            c.meanfieldupdate([l.data for l in self.labels_list],
+                    [l.r[:,idx] for l in self.labels_list])
+
+    ### Misc.
+
+    def plot(self,color=None):
+        plt.figure()
+        # TODO reduce repeated code between this and hsmm.plot
+        cmap = cm.get_cmap()
+        label_colors = {}
+        used_labels = reduce(set.union,[set(l.z) for l in self.labels_list],set([]))
+        num_labels = len(used_labels)
+        num_subfig_rows = len(self.labels_list)
+
+        for idx,label in enumerate(used_labels):
+            label_colors[label] = idx/(num_labels-1 if num_labels > 1 else 1) if color is None else color
+
+        for subfigidx,l in enumerate(self.labels_list):
+            # plot the current observation distributions (and obs. if given)
+            plt.subplot(num_subfig_rows,1,1+subfigidx)
+            self.components[0]._plot_setup(self.components)
+            for label, o in enumerate(self.components):
+                if label in l.z:
+                    o.plot(color=cmap(label_colors[label]),
+                            data=l.data[l.z == label] if l.data is not None else None)
+
+class CollapsedDPMixture(ModelGibbsSampling, Model):
+    pass
+
+class DirectAssignmentDPMixture(ModelGibbsSampling, Model):
+    pass
