@@ -132,4 +132,5 @@ class ModelMeanField(Model):
     def MF_coordinate_descent(self,convergence_tol):
         pass
 
-# TODO parallel gibbs sampling model algorithm interface
+# TODO parallel gibbs sampling model algorithm interface... uses ipython and
+# (hopefully custom) pickling

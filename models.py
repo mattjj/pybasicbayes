@@ -21,11 +21,16 @@ class Mixture(ModelGibbsSampling, Model, Distribution):
         self.labels_list.append(Labels(data=data,components=self.components,weights=self.weights))
 
     def generate(self,N,keep=True):
-        templabels = Labels(components=self.components,weights=self.weights,N=N)
+        templabels = Labels(components=self.components,weights=self.weights,N=N) # this samples labels
+
         counts = np.bincount(templabels.z,minlength=len(self.components))
         out = np.concatenate([c.rvs(size=n) for c,n in zip(self.components,counts)])
         out = out[np.random.permutation(N)]
-        return out
+
+        if keep:
+            self.states_list.append(templabels)
+
+        return out, templabels.z
 
     ### Distribution
 
@@ -39,6 +44,7 @@ class Mixture(ModelGibbsSampling, Model, Distribution):
 
         # temporarily add the passed data
         self.add_data(data) # this does one ``resampling'' step for labels
+        # we don't resample other labels that might be in labels_list
 
         # now resample components
         for idx, c in enumerate(self.components):

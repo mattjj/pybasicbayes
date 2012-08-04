@@ -1,5 +1,35 @@
 from __future__ import division
 
+from util.stats import sample_discrete_from_log
+
+class Labels(object):
+    def __init__(self,components,weights,data=None,N=None,z=None):
+        assert data is not None or N is not None
+
+        self.components = components
+        self.weights = weights
+
+        if data is None:
+            # generating
+            self.N = N
+            self.generate()
+        else:
+            self.data = data
+            self.N = data.shape[0]
+
+            if z is not None:
+                self.z = z
+            else:
+                self.resample()
+
+    def generate(self):
+        raise NotImplementedError
+
+    def resample(self):
+        data = self.data
+        raise NotImplementedError
+
+    
 
 # TODO but then... how do i use a mixture in the context of another model? well,
 # i can treat a model like a distribution too... basically call log_likelihood
