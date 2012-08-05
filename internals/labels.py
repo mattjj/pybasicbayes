@@ -3,6 +3,8 @@ import numpy as np
 na = np.newaxis
 import numpy.ma as ma
 
+import pdb
+
 from util.stats import sample_discrete_from_log, sample_discrete
 
 class Labels(object):
@@ -49,7 +51,7 @@ class Labels(object):
 
 class CRPLabels(object):
     def __init__(self,model,alpha_0,obs_distn,data=None,N=None):
-        assert data is not None ^ N is not None
+        assert (data is not None) ^ (N is not None)
         self.alpha_0 = alpha_0
         self.obs_distn = obs_distn
         self.model = model
@@ -59,31 +61,48 @@ class CRPLabels(object):
             self._generate(N)
         else:
             self.data = data
-            self.resample()
+            self._generate(data.shape[0])
+            self.resample() # one resampling step
 
     def _generate(self,N):
         # run a CRP forwards
         alpha_0 = self.alpha_0
-        self.z = np.zeros(N)
+        self.z = np.zeros(N,dtype=np.int)
         for n in range(N):
-            self.z[n] = sample_discrete(np.concatenate((np.bincount(self.z),alpha_0)))
+            self.z[n] = sample_discrete(np.concatenate((np.bincount(self.z[:n]),(alpha_0,))))
 
     def resample(self):
         al, o = np.log(self.alpha_0), self.obs_distn
-        self.z = ma.masked_array(self.z)
+        self.z = ma.masked_array(self.z,mask=np.zeros(self.z.shape))
         model = self.model
 
         for n in np.random.permutation(self.data.shape[0]):
             # mask out n
             self.z.mask[n] = True
 
-            # form the scores
-            scores = [np.log(model._get_counts(k))+o.log_predictive(self.data[n],model._get_data_withlabel(k)) \
-                    for k in model._get_occupied()] + [al + o.log_marginal_likelihood(self.data[n])]
+            # form the scores and sample them
+            ks = list(model._get_occupied())
+            scores = np.array([
+                np.log(model._get_counts(k))+ o.log_predictive(self.data[n],model._get_data_withlabel(k)) \
+                        for k in ks] + [al + o.log_marginal_likelihood(self.data[n])])
+
+            idx = sample_discrete_from_log(scores)
+            if idx == scores.shape[0]-1:
+                self.z[n] = self._new_label(ks)
+            else:
+                self.z[n] = ks[idx]
 
             # sample
             # note: the mask gets fixed by assigning into the array
-            self.z[n] = sample_discrete_from_log(scores)
+            self.z[n] = sample_discrete_from_log(np.array(scores))
+
+    def _new_label(self,ks):
+        # return a label that isn't already used...
+        newlabel = np.random.randint(low=0,high=5*max(ks))
+        while newlabel in ks:
+            newlabel = np.random.randint(low=0,high=5*max(ks))
+        return newlabel
+
 
     def _get_counts(self,k):
         return np.sum(self.z == k)
@@ -92,5 +111,8 @@ class CRPLabels(object):
         return self.data[self.z == k]
 
     def _get_occupied(self):
-        return set(self.z)
+        if ma.is_masked(self.z):
+            return set(self.z[~self.z.mask])
+        else:
+            return set(self.z)
 

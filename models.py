@@ -16,6 +16,7 @@ class Mixture(ModelGibbsSampling, ModelMeanField, Distribution):
     This class is for mixtures of observation distributions.
     '''
     def __init__(self,alpha_0,components,weights=None):
+        assert len(components) > 0
         self.components = components
         self.weights = Multinomial(alpha_0=alpha_0,K=len(components),weights=weights)
 
@@ -27,9 +28,14 @@ class Mixture(ModelGibbsSampling, ModelMeanField, Distribution):
     def generate(self,N,keep=True):
         templabels = Labels(components=self.components,weights=self.weights,N=N) # this samples labels
 
+        out = np.empty(self.components[0].rvs(size=N).shape)
         counts = np.bincount(templabels.z,minlength=len(self.components))
-        out = np.concatenate([c.rvs(size=n) for c,n in zip(self.components,counts)])
-        # outpermuted = out[np.random.permutation(N)]
+        for idx,(c,count) in enumerate(zip(self.components,counts)):
+            out[templabels.z == idx,...] = c.rvs(size=count)
+
+        perm = np.random.permutation(N)
+        out = out[perm]
+        templabels.z = templabels.z[perm]
 
         if keep:
             templabels.data = out
@@ -127,14 +133,34 @@ class CollapsedMixture(ModelGibbsSampling, Model):
     __metaclass__ = abc.ABCMeta
 
     def _get_counts(self,k):
-        return sum(l.get_counts_from(k) for l in self.labels_list)
+        return sum(l._get_counts(k) for l in self.labels_list)
 
     def _get_data_withlabel(self,k):
-        return [l.get_data_withlabel(k) for l in self.labels_list]
+        return [l._get_data_withlabel(k) for l in self.labels_list]
 
     def _get_occupied(self):
-        return reduce(set.union,(l.get_occupied() for l in self.labels_list))
+        return reduce(set.union,(l._get_occupied() for l in self.labels_list),set([]))
 
+    def plot(self):
+        plt.figure()
+        cmap = cm.get_cmap()
+        used_labels = self._get_occupied()
+        num_labels = len(used_labels)
+
+        label_colors = {}
+        for idx,label in enumerate(used_labels):
+            label_colors[label] = idx/(num_labels-1. if num_labels > 1 else 1.)
+
+        for subfigidx,l in enumerate(self.labels_list):
+            plt.subplot(len(self.labels_list),1,1+subfigidx)
+            # TODO assuming data is 2D
+            for label in used_labels:
+                if label in l.z:
+                    plt.plot(l.data[l.z==label,0],l.data[l.z==label,1],
+                            color=cmap(label_colors[label]),ls='None',marker='x')
+
+
+# TODO profile this
 class CRPMixture(CollapsedMixture):
     def __init__(self,alpha_0,obs_distn):
         assert isinstance(obs_distn,Collapsed)
@@ -146,9 +172,26 @@ class CRPMixture(CollapsedMixture):
     def add_data(self,data):
         self.labels_list.append(CRPLabels(model=self,data=data,alpha_0=self.alpha_0,obs_distn=self.obs_distn))
 
-    def resample(self):
+    def resample_model(self):
         for l in self.labels_list:
             l.resample()
 
-class DirectAssignmentDPMixture(ModelGibbsSampling, Model):
-    pass
+    def generate(self,N,keep=True):
+        templabels = CRPLabels(model=self,alpha_0=self.alpha_0,obs_distn=self.obs_distn,N=N)
+
+        counts = np.bincount(templabels.z)
+        out = np.empty(self.obs_distn.rvs(size=N).shape)
+        for idx, count in enumerate(counts):
+            self.obs_distn.resample()
+            out[templabels.z == idx,...] = self.obs_distn.rvs(size=count)
+
+        perm = np.random.permutation(N)
+        out = out[perm]
+        templabels.z = templabels.z[perm]
+
+        if keep:
+            templabels.data = out
+            self.labels_list.append(templabels)
+
+        return out, templabels.z
+
