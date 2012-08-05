@@ -4,10 +4,6 @@ from warnings import warn
 
 from util.stats import combinedata
 
-'''
-Abstracted interfaces that distribution objects may implement.
-'''
-
 # NOTE: data is always a (possibly masked) np.ndarray or list of (possibly
 # masked) np.ndarrays.
 
