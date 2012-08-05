@@ -146,13 +146,13 @@ class Gaussian(GibbsSampling, MeanField, Collapsed, Distribution):
 
     ### Collapsed
 
-    def marginal_log_likelihood(self,data):
+    def log_marginal_likelihood(self,data):
         n, D = getdatasize(data), self.D
-        return self.prior_log_partition_function(*self._posterior_hypparams(*self._get_statistics(data))) \
-                - self.prior_log_partition_function(self.mu_0,self.sigma_0,self.kappa_0,self.nu_0) \
+        return self._log_partition_function(*self._posterior_hypparams(*self._get_statistics(data))) \
+                - self._log_partition_function(self.mu_0,self.sigma_0,self.kappa_0,self.nu_0) \
                 - n*D/2 * np.log(2*np.pi)
 
-    def prior_log_partition_function(self,mu,sigma,kappa,nu):
+    def _log_partition_function(self,mu,sigma,kappa,nu):
         D = self.D
         return nu*D/2*np.log(2) + special.multigammaln(nu/2,D) + D/2*np.log(2*np.pi/kappa) \
                 - nu/2*np.log(np.linalg.det(sigma))
@@ -429,7 +429,7 @@ class ScalarGaussianNIX(ScalarGaussian, GibbsSampling, Collapsed):
 
     ### Collapsed
 
-    def marginal_log_likelihood(self,data):
+    def log_marginal_likelihood(self,data):
         n = getdatasize(data)
         mu_0, kappa_0, sigmasq_0, nu_0 = self.mu_0, self.kappa_0, self.sigmasq_0, self.nu_0
         mu_n, kappa_n, sigmasq_n, nu_n = self._posterior_hypparams(*self._get_statistics(data))

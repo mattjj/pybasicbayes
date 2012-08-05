@@ -3,12 +3,13 @@ import numpy as np
 na = np.newaxis
 from matplotlib import pyplot as plt
 from matplotlib import cm
+import abc
 
 from abstractions import ModelGibbsSampling, ModelMeanField, Model, Distribution
-from abstractions import GibbsSampling, MeanField
+from abstractions import GibbsSampling, MeanField, Collapsed
 
 from observations import Multinomial
-from internals.labels import Labels
+from internals.labels import Labels, CRPLabels
 
 class Mixture(ModelGibbsSampling, ModelMeanField, Distribution):
     '''
@@ -36,7 +37,7 @@ class Mixture(ModelGibbsSampling, ModelMeanField, Distribution):
 
         return out, templabels.z
 
-    ### Distribution
+    ### Distribution (so this class can be used as a component in other models)
 
     def log_likelihood(self,x):
         return self.weights.log_likelihood(np.arange(len(self.components))) + \
@@ -121,8 +122,33 @@ class Mixture(ModelGibbsSampling, ModelMeanField, Distribution):
                     o.plot(color=cmap(label_colors[label]),
                             data=l.data[l.z == label] if l.data is not None else None)
 
-class CollapsedDPMixture(ModelGibbsSampling, Model):
-    pass
+
+class CollapsedMixture(ModelGibbsSampling, Model):
+    __metaclass__ = abc.ABCMeta
+
+    def _get_counts(self,k):
+        return sum(l.get_counts_from(k) for l in self.labels_list)
+
+    def _get_data_withlabel(self,k):
+        return [l.get_data_withlabel(k) for l in self.labels_list]
+
+    def _get_occupied(self):
+        return reduce(set.union,(l.get_occupied() for l in self.labels_list))
+
+class CRPMixture(CollapsedMixture):
+    def __init__(self,alpha_0,obs_distn):
+        assert isinstance(obs_distn,Collapsed)
+        self.obs_distn = obs_distn
+        self.alpha_0 = alpha_0
+
+        self.labels_list = []
+
+    def add_data(self,data):
+        self.labels_list.append(CRPLabels(model=self,data=data,alpha_0=self.alpha_0,obs_distn=self.obs_distn))
+
+    def resample(self):
+        for l in self.labels_list:
+            l.resample()
 
 class DirectAssignmentDPMixture(ModelGibbsSampling, Model):
     pass

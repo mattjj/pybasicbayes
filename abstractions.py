@@ -1,6 +1,5 @@
 import abc
 import numpy as np
-from warnings import warn
 
 from util.stats import combinedata
 
@@ -66,12 +65,15 @@ class Collapsed(Distribution):
     __metaclass__ = abc.ABCMeta
 
     @abc.abstractmethod
-    def marginal_log_likelihood(self,data):
+    def log_marginal_likelihood(self,data):
         pass
 
-    def predictive(self,newdata,olddata):
-        return np.exp(self.marginal_log_likelihood(combinedata((newdata,olddata)))
-                    - self.marginal_log_likelihood(olddata))
+    def log_predictive(self,newdata,olddata):
+        return self.log_marginal_likelihood(combinedata((newdata,olddata))) \
+                    - self.log_marginal_likelihood(olddata)
+
+    def predictive(self,*args,**kwargs):
+        return np.exp(self.log_predictive(*args,**kwargs))
 
 class MaxLikelihood(Distribution):
     __metaclass__ = abc.ABCMeta
@@ -107,7 +109,7 @@ class Model(object):
         pass
 
     def rvs(self,*args,**kwargs):
-        return self.generate(*args,keep=False,**kwargs)
+        return self.generate(*args,keep=False,**kwargs)[0] # 0th component is data, not latent stuff
 
 ##################################################
 #  Algorithm interfaces for inference in models  #
