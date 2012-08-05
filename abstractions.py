@@ -111,7 +111,6 @@ class Model(object):
         pass
 
     def rvs(self,*args,**kwargs):
-        warn('Calling rvs() on a model, using Model.generate(keep=False)...')
         return self.generate(*args,keep=False,**kwargs)
 
 ##################################################
@@ -129,7 +128,7 @@ class ModelMeanField(Model):
     __metaclass__ = abc.ABCMeta
 
     @abc.abstractmethod
-    def meanfield_coordinate_descent(self): # TODO convergence tol?
+    def meanfield_coordinate_descent_step(self): # TODO convergence tol?
         pass
 
     # TODO VLB?

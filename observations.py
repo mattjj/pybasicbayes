@@ -25,10 +25,10 @@ class Gaussian(GibbsSampling, MeanField, Collapsed, Distribution):
     '''
 
     def __init__(self,mu_0,sigma_0,kappa_0,nu_0,mu=None,sigma=None):
-        self._mu_mf    = self.mu_0    = mu_0
-        self._sigma_mf = self.sigma_0 = sigma_0
-        self._kappa_mf = self.kappa_0 = kappa_0
-        self._nu_mf    = self.nu_0    = nu_0
+        self.mu_0    = mu_0
+        self.sigma_0 = sigma_0
+        self.kappa_0 = kappa_0
+        self.nu_0    = nu_0
 
         self.D = mu_0.shape[0]
         assert sigma_0.shape == (self.D,self.D) and self.D >= 2
@@ -38,6 +38,10 @@ class Gaussian(GibbsSampling, MeanField, Collapsed, Distribution):
         else:
             self.mu = mu
             self.sigma = sigma
+        self._mu_mf = self.mu
+        self._sigma_mf = self.sigma
+        self._kappa_mf = kappa_0
+        self._nu_mf = nu_0
 
     def rvs(self,size=[]):
         return np.random.multivariate_normal(mean=self.mu,cov=self.sigma,size=size)
@@ -88,7 +92,6 @@ class Gaussian(GibbsSampling, MeanField, Collapsed, Distribution):
     ### Mean Field
 
     def meanfieldupdate(self,data,weights):
-        # TODO untested
         assert getdatasize(data) > 0
         self._mu_mf, self._sigma_mf, self._kappa_mf, self._nu_mf = \
                 self._posterior_hypparams(*self._get_weighted_statistics(data,weights))
@@ -102,11 +105,11 @@ class Gaussian(GibbsSampling, MeanField, Collapsed, Distribution):
         x = np.reshape(x,(-1,D)) - mu_n
 
         # see Eq. 10.65 in Bishop
-        loglmbdatilde = special.digamma((nu_n+np.arange(D))/2).sum() \
+        loglmbdatilde = special.digamma((nu_n-np.arange(D))/2).sum() \
                 + D*np.log(2) - np.log(np.linalg.det(sigma_n))
 
         # see Eq. 10.67 in Bishop
-        return np.sqrt(loglmbdatilde) - D/(2*kappa_n) - nu_n/2 * \
+        return loglmbdatilde/2 - D/(2*kappa_n) - nu_n/2 * \
                 (np.linalg.solve(sigma_n,x.T).T * x).sum(1)
 
     def _get_weighted_statistics(self,data,weights):
@@ -125,14 +128,20 @@ class Gaussian(GibbsSampling, MeanField, Collapsed, Distribution):
 
         if isinstance(data,np.ndarray):
             neff = weights.sum()
-            xbar = np.dot(weights,np.reshape(data,(-1,D))) / neff
-            centered = np.reshape(data,(-1,D)) - xbar
-            sumsq = np.dot(centered.T,(weights[:,na] * centered))
+            if neff > 0:
+                xbar = np.dot(weights,np.reshape(data,(-1,D))) / neff
+                centered = np.reshape(data,(-1,D)) - xbar
+                sumsq = np.dot(centered.T,(weights[:,na] * centered))
+            else:
+                xbar, sumsq = None, None
         else:
             neff = sum(w.sum() for w in weights)
-            xbar = sum(np.dot(w,np.reshape(d,(-1,D))) for w,d in zip(weights,data)) / neff
-            sumsq = sum(np.dot((np.reshape(d,(-1,D))-xbar).T,w[:,na]*(np.reshape(d,(-1,D))-xbar))
-                    for w,d in zip(weights,data))
+            if neff > 0:
+                xbar = sum(np.dot(w,np.reshape(d,(-1,D))) for w,d in zip(weights,data)) / neff
+                sumsq = sum(np.dot((np.reshape(d,(-1,D))-xbar).T,w[:,na]*(np.reshape(d,(-1,D))-xbar))
+                        for w,d in zip(weights,data))
+            else:
+                xbar, sumsq = None, None
         return neff, xbar, sumsq
 
     ### Collapsed
@@ -523,6 +532,7 @@ class Multinomial(GibbsSampling, MeanField, Distribution):
             self.weights = weights
         else:
             self.resample()
+        self._alpha_mf = self.weights * self.alphav_0.sum()
 
     def rvs(self,size=[]):
         return sample_discrete(self.weights,size)
@@ -531,12 +541,12 @@ class Multinomial(GibbsSampling, MeanField, Distribution):
         return np.log(self.weights)[x]
 
     def _posterior_hypparams(self,counts):
-        return self.alphav_0 + counts,
+        return self.alphav_0 + counts
 
     ### Gibbs sampling
 
     def resample(self,data=[]):
-        self.weights = np.random.dirichlet(*self._posterior_hypparams(*self._get_statistics(data)))
+        self.weights = np.random.dirichlet(self._posterior_hypparams(*self._get_statistics(data)))
 
     def _get_statistics(self,data):
         assert isinstance(data,np.ndarray) or \
@@ -552,9 +562,8 @@ class Multinomial(GibbsSampling, MeanField, Distribution):
     ### Mean Field
 
     def meanfieldupdate(self,data,weights):
-        assert getdatasize(data) > 0
         self._alpha_mf = self._posterior_hypparams(*self._get_weighted_statistics(data,weights))
-        self.weights = self._alpha_mf / self._alpha_mf.sum()
+        self.weights = self._alpha_mf / self._alpha_mf.sum() # for plotting
 
     def expected_log_likelihood(self,x):
         # this may only make sense if np.all(x == np.arange(self.K))...
@@ -563,11 +572,10 @@ class Multinomial(GibbsSampling, MeanField, Distribution):
     def _get_weighted_statistics(self,data,weights):
         # data is just a placeholder; technically it should be
         # np.arange(self.K)[na,:].repeat(N,axis=0)
-        assert isinstance(weights,np.array) or \
+        assert isinstance(weights,np.ndarray) or \
                 (isinstance(weights,list) and
                         all(isinstance(w,np.ndarray) for w in weights))
 
-        K = self.K
         if isinstance(data,np.ndarray):
             counts = weights.sum(0)
         else:

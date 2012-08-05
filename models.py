@@ -28,10 +28,11 @@ class Mixture(ModelGibbsSampling, ModelMeanField, Distribution):
 
         counts = np.bincount(templabels.z,minlength=len(self.components))
         out = np.concatenate([c.rvs(size=n) for c,n in zip(self.components,counts)])
-        out = out[np.random.permutation(N)]
+        # outpermuted = out[np.random.permutation(N)]
 
         if keep:
-            self.states_list.append(templabels)
+            templabels.data = out
+            self.labels_list.append(templabels)
 
         return out, templabels.z
 
@@ -75,14 +76,14 @@ class Mixture(ModelGibbsSampling, ModelMeanField, Distribution):
 
     ### Mean Field
 
-    def meanfield_coordinate_ascent_step(self):
-        # TODO i could make this run to convergence isntead
+    def meanfield_coordinate_descent_step(self):
         assert all(isinstance(c,MeanField) for c in self.components), \
                 'Components must implement MeanField'
+        assert len(self.labels_list) > 0, 'Must have data to run MeanField'
 
         # ask labels to get weights over z, stored as l.r
         for l in self.labels_list:
-            l.compute_responsbilities()
+            l.compute_responsibilities()
 
         # pass the weights to pi
         self.weights.meanfieldupdate(None,[l.r for l in self.labels_list])
@@ -95,8 +96,13 @@ class Mixture(ModelGibbsSampling, ModelMeanField, Distribution):
     ### Misc.
 
     def plot(self,color=None):
-        plt.figure()
         # TODO reduce repeated code between this and hsmm.plot
+        plt.figure()
+        # for plotting purposes, make sure each l has a z
+        # in the mean field case, it will make hard assignments to z, but still
+        # use the parameters from the mean field updates
+        for l in self.labels_list:
+            l.resample()
         cmap = cm.get_cmap()
         label_colors = {}
         used_labels = reduce(set.union,[set(l.z) for l in self.labels_list],set([]))

@@ -14,7 +14,7 @@ class Labels(object):
         if data is None:
             # generating
             self.N = N
-            self.generate()
+            self.generate(N)
         else:
             self.data = data
             self.N = data.shape[0]
@@ -36,12 +36,15 @@ class Labels(object):
         self.z = sample_discrete_from_log(scores,axis=1)
 
     def compute_responsibilities(self):
-        data, K = self.data, len(self.components)
-        component_scores = np.zeros((data.shape,K))
+        data, N, K = self.data, self.data.shape[0], len(self.components)
+        component_scores = np.zeros((N,K))
 
         for idx, c in enumerate(self.components):
             component_scores[:,idx] = c.expected_log_likelihood(data)
 
-        self.r = self.weights.expected_log_likelihood(np.arange(len(self.components))) \
+        logr = self.weights.expected_log_likelihood(np.arange(len(self.components))) \
                 + component_scores
+
+        self.r = np.exp(logr - logr.max(1)[:,na])
+        self.r /= self.r.sum(1)[:,na]
 
