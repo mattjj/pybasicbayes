@@ -51,7 +51,7 @@ class Labels(object):
         # return avg energy plus entropy, our contribution to the mean field
         # variational lower bound
         logr = np.log(self.r)
-        logr[np.isinf(logr)] = -999999999 # just need 0*-inf = 0
+        logr[np.isinf(logr)] = -999999999 # -np.inf * 0 = 0
         q_entropy = -1*(self.r*logr).sum()
         p_avgengy = (self.r * logpitilde).sum()
 
