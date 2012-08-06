@@ -10,7 +10,7 @@ from abstractions import Distribution, GibbsSampling, MeanField, Collapsed
 from util.stats import sample_niw, invwishart_entropy, invwishart_log_partitionfunction, \
         sample_discrete, getdatasize
 
-class Gaussian(GibbsSampling, MeanField, Collapsed, Distribution):
+class Gaussian(GibbsSampling, MeanField, Collapsed):
     '''
     Multivariate Gaussian observation distribution class. NOTE: Only works for 2
     or more dimensions. For a scalar Gaussian, use one of the scalar classes.
@@ -215,7 +215,7 @@ class Gaussian(GibbsSampling, MeanField, Collapsed, Distribution):
         plot_gaussian_projection(self.mu,self.sigma,vecs,color=color)
 
 
-class DiagonalGaussian(GibbsSampling, Distribution):
+class DiagonalGaussian(GibbsSampling):
     '''
     Product of normal-inverse-gamma priors over mu (mean vector) and sigmas
     (vector of scalar variances).
@@ -294,7 +294,7 @@ class DiagonalGaussian(GibbsSampling, Distribution):
         return n, xbar, sumsq
 
 
-class IsotropicGaussian(GibbsSampling, Distribution):
+class IsotropicGaussian(GibbsSampling):
     '''
     Normal-Inverse-Gamma prior over mu (mean vector) and sigma (scalar
     variance). Essentially, all coordinates of all observations inform the
@@ -515,7 +515,7 @@ class ScalarGaussianFixedvar(ScalarGaussian, GibbsSampling):
         return n, xbar
 
 
-class Multinomial(GibbsSampling, MeanField, Distribution):
+class Multinomial(GibbsSampling, MeanField):
     '''
     This class represents a multinomial distribution over labels, where the
     parameter is weights and the prior is a Dirichlet distribution.
@@ -610,6 +610,9 @@ class Multinomial(GibbsSampling, MeanField, Distribution):
             counts = sum(w.sum(0) for w in weights)
         return counts,
 
+
+class Gamma(GibbsSampling):
+    pass
 
 # TODO implement a Gamma distribution for concentration parameter resampling!
 

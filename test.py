@@ -3,9 +3,9 @@ import numpy as np
 np.seterr(invalid='raise')
 from matplotlib import pyplot as plt
 
-import models, observations
+import models, distributions
 
-blah = models.Mixture(alpha_0=2,components=[observations.Gaussian(mu_0=np.zeros(2),sigma_0=np.eye(2),kappa_0=0.01,nu_0=4) for itr in range(20)])
+blah = models.Mixture(alpha_0=2,components=[distributions.Gaussian(mu_0=np.zeros(2),sigma_0=np.eye(2),kappa_0=0.01,nu_0=4) for itr in range(20)])
 
 blah.generate(200) # starts blah at truth, cheating!
 

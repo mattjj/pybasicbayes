@@ -134,8 +134,7 @@ class ModelMeanField(Model):
 
     # TODO VLB?
 
-class ModelHybridInference(ModelGibbsSampling,ModelMeanField):
-    pass
-
 # TODO parallel gibbs sampling model algorithm interface... uses ipython and
 # (hopefully custom) pickling
+
+# TODO hybrid model inference

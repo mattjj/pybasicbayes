@@ -5,15 +5,15 @@ from matplotlib import pyplot as plt
 from matplotlib import cm
 import abc
 
-from abstractions import ModelGibbsSampling, ModelMeanField, Model, Distribution
+from abstractions import ModelGibbsSampling, ModelMeanField, Distribution
 from abstractions import GibbsSampling, MeanField, Collapsed
 
-from observations import Multinomial
+from distributions import Multinomial
 from internals.labels import Labels, CRPLabels
 
 class Mixture(ModelGibbsSampling, ModelMeanField, Distribution):
     '''
-    This class is for mixtures of observation distributions.
+    This class is for mixtures of other distributions.
     '''
     def __init__(self,alpha_0,components,weights=None):
         assert len(components) > 0
@@ -140,7 +140,7 @@ class Mixture(ModelGibbsSampling, ModelMeanField, Distribution):
                             data=l.data[l.z == label] if l.data is not None else None)
 
 
-class CollapsedMixture(ModelGibbsSampling, Model):
+class CollapsedMixture(ModelGibbsSampling):
     __metaclass__ = abc.ABCMeta
 
     def _get_counts(self,k):
