@@ -611,10 +611,109 @@ class Multinomial(GibbsSampling, MeanField):
         return counts,
 
 
-class Gamma(GibbsSampling):
-    pass
+################################
+#  Special Case Distributions  #
+################################
 
-# TODO implement a Gamma distribution for concentration parameter resampling!
+# TODO maybe move to another module?
+
+class CRPGamma(GibbsSampling):
+    '''
+    Implements Gamma(a,b) prior over DP/CRP concentration parameter given
+    CRP data (integrating out the weights). NOT for Gamma/Poisson, which would
+    be called Poisson.
+    see appendix A of http://www.cs.berkeley.edu/~jordan/papers/hdp.pdf
+    and appendix C of Emily Fox's PhD thesis
+    the notation of w's and s's follows from the HDP paper
+    '''
+    # NOTE: I tend to pass 1/scale into scipy and numpy functions, since we want
+    # the mean to be a/b (as on wikipedia) and not a*b as numpy/scipy do with
+    # their scale arg
+    def __init__(self,alpha_0,beta_0,concentration=None):
+        self.a = alpha_0
+        self.b = beta_0
+
+        if concentration is not None:
+            self.concentration = concentration
+        else:
+            self.resample()
+
+    def log_likelihood(self,x):
+        raise NotImplementedError, 'product of gammas' # TODO
+
+    def rvs(self,size=[]):
+        raise NotImplementedError, 'set of CRPs' # TODO
+
+    def resample(self,data=[],niter=10):
+        for itr in range(niter):
+            alpha_n, beta_n = self._posterior_hypparams(*self._get_statistics(data))
+            self.concentration = np.random.gamma(alpha_n,scale=1./beta_n)
+
+    def _posterior_hypparams(self,sample_numbers,total_num_distinct):
+        if sample_numbers > 0:
+            wvec = np.random.beta(self.concentration+1,sample_numbers)
+            svec = np.array(stats.bernoulli.rvs(sample_numbers/(sample_numbers+self.concentration)))
+            return self.alpha_0 + total_num_distinct-svec.sum(), (self.beta_0 - np.log(wvec).sum())
+        else:
+            return self.alpha_0, self.beta_0
+
+    def _get_statistics(data):
+        # data is a list of CRP samples, each of which is written as counts of
+        # customers at tables, i.e.
+        # [5 7 2 ... 3 0 0 0 0 0 ... ]
+        # each CRP sample in the list has to be referring to the same indices
+        # but order doesn't matter (it can be before or after the size-biased
+        # permutation...
+        assert isinstance(data,np.ndarray) or \
+                (isinstance(data,list) and all(isinstance(d,np.ndarray) for d in data))
+
+        if isinstance(data,np.ndarray):
+            sample_numbers = np.array(data.sum())
+            total_num_distinct = len(set(data))
+        else:
+            if len(data) > 0:
+                sample_numbers = np.array([d.sum() for d in data])
+                total_num_distinct = len(reduce(set.union,(set(d) for d in data)))
+            else:
+                sample_numbers = 0
+                total_num_distinct = 0
+        return sample_numbers, total_num_distinct
+
+
+class DirGamma(CRPGamma):
+    '''
+    Implements a Gamma(a,b) prior over finite dirichlet concentration parameter,
+    which works by splitting the atoms back into infinite-restaurant table
+    counts and then doing CRP concentration parameter resampling. (Marginalizes
+    out the weights pi.)
+    '''
+    def resample(self,data=[],niter=10):
+        for itr in range(niter):
+            super(DirGamma,self).resample(data)
+
+    def _get_statistics(self,data):
+        # data is an array of counts or a list of them
+        assert isinstance(data,np.ndarray) or \
+                isinstance(data,list) and all(isinstance(d,np.ndarray) for d in data)
+
+        if isinstance(data,np.ndarray):
+            counts = np.array(data,ndmin=2)
+        else:
+            counts = np.array(data)
+
+        # sample m's
+        if counts.size == 0:
+            return 0, 0
+        else:
+            m = np.zeros(counts.shape)
+            # splits tables by running CRP 'new table' process forwards
+            # TODO extend to HDP functionality by adding reweighted columns
+            for (rowidx,colidx), val in np.ndenumerate(counts):
+                n = 0.
+                for i in range(val):
+                    m[rowidx,colidx] += np.random.random() < self.concentration / (n+self.concentration)
+                    n += 1
+            return counts.sum(1), m.sum()
 
 
 # TODO TODO below here
