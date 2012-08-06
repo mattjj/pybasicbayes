@@ -3,10 +3,9 @@ import numpy as np
 na = np.newaxis
 import numpy.ma as ma
 
-from abstractions import GibbsSampling, MeanField
 from util.stats import sample_discrete_from_log, sample_discrete
 
-class Labels(GibbsSampling, MeanField):
+class Labels(object):
     def __init__(self,components,weights,data=None,N=None,z=None):
         assert data is not None or (N is not None and z is None)
 
@@ -51,13 +50,15 @@ class Labels(GibbsSampling, MeanField):
 
         # return avg energy plus entropy, our contribution to the mean field
         # variational lower bound
-        q_entropy = -1*(self.r*np.log(self.r)).sum()
+        logr = np.log(self.r)
+        logr[np.isinf(logr)] = -999999999 # just need 0*-inf = 0
+        q_entropy = -1*(self.r*logr).sum()
         p_avgengy = (self.r * logpitilde).sum()
 
         return p_avgengy + q_entropy
 
 
-class CRPLabels(GibbsSampling):
+class CRPLabels(object):
     def __init__(self,model,alpha_0,obs_distn,data=None,N=None):
         assert (data is not None) ^ (N is not None)
         self.alpha_0 = alpha_0

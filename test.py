@@ -12,9 +12,11 @@ blah.generate(200) # starts blah at truth, cheating!
 blah.plot()
 plt.title('initial zs')
 
-for itr in range(200):
-    blah.meanfield_coordinate_descent_step()
+vals = [blah.meanfield_coordinate_descent_step() for itr in range(200)]
 
 blah.plot()
 plt.title('final badness')
 plt.show()
+
+plt.figure()
+plt.plot(vals)

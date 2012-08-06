@@ -588,8 +588,8 @@ class Multinomial(GibbsSampling, MeanField, Distribution):
         logpitilde = self.expected_log_likelihood(np.arange(self.K))
         q_entropy = -1* ((logpitilde*(self._alpha_mf-1)).sum() \
                 + special.gammaln(self._alpha_mf.sum()) - special.gammaln(self._alpha_mf).sum())
-        p_avgengy = special.gammaln(self.alpha_0.sum()) - special.gammaln(self.alpha_0).sum() \
-                + (self.alpha_0-1)*logpitilde.sum()
+        p_avgengy = special.gammaln(self.alphav_0.sum()) - special.gammaln(self.alphav_0).sum() \
+                + ((self.alphav_0-1)*logpitilde).sum()
 
         return p_avgengy + q_entropy
 
