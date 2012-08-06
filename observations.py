@@ -7,7 +7,8 @@ from matplotlib import pyplot as plt
 import abc
 
 from abstractions import Distribution, GibbsSampling, MeanField, Collapsed
-from util.stats import sample_niw, sample_discrete, getdatasize
+from util.stats import sample_niw, invwishart_entropy, invwishart_log_partitionfunction, \
+        sample_discrete, getdatasize
 
 class Gaussian(GibbsSampling, MeanField, Collapsed, Distribution):
     '''
@@ -93,27 +94,43 @@ class Gaussian(GibbsSampling, MeanField, Collapsed, Distribution):
 
     def meanfieldupdate(self,data,weights):
         assert getdatasize(data) > 0
+        # update
         self._mu_mf, self._sigma_mf, self._kappa_mf, self._nu_mf = \
                 self._posterior_hypparams(*self._get_weighted_statistics(data,weights))
         self.mu, self.sigma = self._mu_mf, self._sigma_mf/(self._nu_mf - self.D - 1) # for plotting
 
+        # return avg energy plus entropy, our contribution to the mean field
+        # variational lower bound
+        D = self.D
+        loglmbdatilde = self._loglmbdatilde()
+        # see Eq. 10.77 in Bishop
+        q_entropy = -1 * (0.5 * (loglmbdatilde + self.D * (np.log(self._kappa_mf/(2*np.pi))-1)) \
+                - invwishart_entropy(self._sigma_mf,self._nu_mf))
+        # see Equ. 10.74 in Bishop, we aren't summing over K
+        p_avgengy = 0.5 * (D * np.log(self.kappa_0/(2*np.pi)) + loglmbdatilde \
+                - D*self.kappa_0/self._kappa_mf - self.kappa_0*self._nu_mf*\
+                np.dot(self._mu_mf - self.mu_0,np.linalg.solve(self._sigma_mf,self._mu_mf - self.mu_0))) \
+                - invwishart_log_partitionfunction(self.sigma_0,self.nu_0) \
+                + (self.nu_0 - D - 1)/2*loglmbdatilde - 1/2*self._nu_mf*\
+                np.linalg.solve(self._sigma_mf,self.sigma_0).trace()
+
+        return p_avgengy + q_entropy
+
     def expected_log_likelihood(self,x):
-        # TODO untested
         mu_n, sigma_n, kappa_n, nu_n = self._mu_mf, self._sigma_mf, self._kappa_mf, self._nu_mf
         D = self.D
-
-        x = np.reshape(x,(-1,D)) - mu_n
-
-        # see Eq. 10.65 in Bishop
-        loglmbdatilde = special.digamma((nu_n-np.arange(D))/2).sum() \
-                + D*np.log(2) - np.log(np.linalg.det(sigma_n))
+        x = np.reshape(x,(-1,D)) - mu_n # x is now centered
 
         # see Eq. 10.67 in Bishop
-        return loglmbdatilde/2 - D/(2*kappa_n) - nu_n/2 * \
+        return self._loglmbdatilde()/2 - D/(2*kappa_n) - nu_n/2 * \
                 (np.linalg.solve(sigma_n,x.T).T * x).sum(1)
 
+    def _loglmbdatilde(self):
+        # see Eq. 10.65 in Bishop
+        return special.digamma((self._nu_mf-np.arange(self.D))/2).sum() \
+                + self.D*np.log(2) - np.log(np.linalg.det(self._sigma_mf))
+
     def _get_weighted_statistics(self,data,weights):
-        # TODO untested
         # NOTE: _get_statistics is special case with all weights being 1
         # this is kept as a separate method for speed and modularity
         D = self.D
@@ -562,8 +579,19 @@ class Multinomial(GibbsSampling, MeanField, Distribution):
     ### Mean Field
 
     def meanfieldupdate(self,data,weights):
+        # update
         self._alpha_mf = self._posterior_hypparams(*self._get_weighted_statistics(data,weights))
         self.weights = self._alpha_mf / self._alpha_mf.sum() # for plotting
+
+        # return avg energy plus entropy, our contribution to the vlb
+        # see Eq. 10.66 in Bishop
+        logpitilde = self.expected_log_likelihood(np.arange(self.K))
+        q_entropy = -1* ((logpitilde*(self._alpha_mf-1)).sum() \
+                + special.gammaln(self._alpha_mf.sum()) - special.gammaln(self._alpha_mf).sum())
+        p_avgengy = special.gammaln(self.alpha_0.sum()) - special.gammaln(self.alpha_0).sum() \
+                + (self.alpha_0-1)*logpitilde.sum()
+
+        return p_avgengy + q_entropy
 
     def expected_log_likelihood(self,x):
         # this may only make sense if np.all(x == np.arange(self.K))...

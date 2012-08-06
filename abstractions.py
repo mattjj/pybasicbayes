@@ -59,6 +59,9 @@ class MeanField(Distribution):
 
     @abc.abstractmethod
     def meanfieldupdate(self,data,weights):
+        '''
+        Returns component's entropy-minus-average-log-prior term
+        '''
         pass
 
 class Collapsed(Distribution):
@@ -130,6 +133,9 @@ class ModelMeanField(Model):
         pass
 
     # TODO VLB?
+
+class ModelHybridInference(ModelGibbsSampling,ModelMeanField):
+    pass
 
 # TODO parallel gibbs sampling model algorithm interface... uses ipython and
 # (hopefully custom) pickling

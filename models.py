@@ -88,17 +88,28 @@ class Mixture(ModelGibbsSampling, ModelMeanField, Distribution):
                 'Components must implement MeanField'
         assert len(self.labels_list) > 0, 'Must have data to run MeanField'
 
+        vlb = 0. # variatinoal lower bound
+
         # ask labels to get weights over z, stored as l.r
         for l in self.labels_list:
-            l.compute_responsibilities()
+            vlb += l.meanfieldupdate()
 
         # pass the weights to pi
-        self.weights.meanfieldupdate(None,[l.r for l in self.labels_list])
+        vlb += self.weights.meanfieldupdate(None,[l.r for l in self.labels_list]) # None is a placeholder
 
         # pass the weights to the components
         for idx, c in enumerate(self.components):
-            c.meanfieldupdate([l.data for l in self.labels_list],
+            vlb += c.meanfieldupdate([l.data for l in self.labels_list],
                     [l.r[:,idx] for l in self.labels_list])
+
+        # finally, need the evidence term in the vlb
+        component_scores = np.zeros(len(self.components))
+        for idx, c in enumerate(self.components):
+            component_scores[idx] = sum(c.expected_log_likelihood(l.data).sum(0)
+                    for l in self.labels_list)
+        vlb += 0.5 * (sum(l.r.sum(0) for l in self.labels_list) * component_scores).sum()
+
+        return vlb
 
     ### Misc.
 
