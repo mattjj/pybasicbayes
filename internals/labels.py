@@ -55,7 +55,7 @@ class Labels(object):
         errs = np.seterr(invalid='ignore',divide='ignore')
         logr = np.log(self.r)
         prod = self.r*logr
-        prod[np.isnan(prod)] = 0. # 0 * -inf = 0
+        prod[np.isnan(prod)] = 0. # 0 * -inf = 0.
         np.seterr(**errs)
 
         logpitilde = self.weights.expected_log_likelihood(np.arange(len(self.components)))

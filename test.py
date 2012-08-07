@@ -6,19 +6,20 @@ import copy
 
 import models, distributions
 
-priormodel = models.Mixture(alpha_0=1,
-        components=[distributions.Gaussian(mu_0=np.zeros(2),sigma_0=np.eye(2),kappa_0=0.05,nu_0=5)
-            for itr in range(30)])
+alpha_0=0.5
+obs_hypparams=dict(mu_0=np.zeros(2),sigma_0=np.eye(2),kappa_0=0.05,nu_0=5)
 
-data = priormodel.rvs(100)
+priormodel = models.Mixture(alpha_0=alpha_0,
+        components=[distributions.Gaussian(**obs_hypparams) for itr in range(50)])
+
+data = priormodel.rvs(300)
 
 plt.figure()
 plt.plot(data[:,0],data[:,1],'kx')
 plt.title('data')
 
-posteriormodel = models.Mixture(alpha_0=1,
-        components=[distributions.Gaussian(mu_0=np.zeros(2),sigma_0=np.eye(2),kappa_0=0.05,nu_0=5)
-            for itr in range(30)])
+posteriormodel = models.Mixture(alpha_0=alpha_0,
+        components=[distributions.Gaussian(**obs_hypparams) for itr in range(50)])
 
 posteriormodel.add_data(data)
 
@@ -33,7 +34,7 @@ for superitr in range(20):
     print '%d iterations' % (itr+1)
     allvals.append(vals)
     allmodels.append(copy.deepcopy(posteriormodel))
-    for itr in range(200):
+    for itr in range(50):
         posteriormodel.resample_model()
 
 

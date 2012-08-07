@@ -116,7 +116,7 @@ class Mixture(ModelGibbsSampling, ModelMeanField, Distribution):
         # finally, need the evidence term in the vlb
         for l in self.labels_list:
             vlb += 0.5 * (l.r.sum(0) * np.array([c.expected_log_likelihood(l.data).sum()
-                for c in self.components])).sum()
+                for c in self.components])).sum() # TODO check this sum
 
         return vlb
 
