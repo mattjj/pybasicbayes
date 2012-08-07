@@ -25,7 +25,7 @@ posteriormodel.add_data(data)
 
 allvals = []
 allmodels = []
-for superitr in range(20):
+for superitr in range(10):
     vals = []
     for itr in range(200):
         vals.append(posteriormodel.meanfield_coordinate_descent_step())
@@ -34,7 +34,7 @@ for superitr in range(20):
     print '%d iterations' % (itr+1)
     allvals.append(vals)
     allmodels.append(copy.deepcopy(posteriormodel))
-    for itr in range(50):
+    for itr in range(200):
         posteriormodel.resample_model()
 
 

@@ -3,6 +3,7 @@ import numpy as np
 na = np.newaxis
 from matplotlib import pyplot as plt
 from matplotlib import cm
+import scipy.special as special
 import abc
 
 from abstractions import ModelGibbsSampling, ModelMeanField, Distribution
@@ -116,7 +117,10 @@ class Mixture(ModelGibbsSampling, ModelMeanField, Distribution):
         # finally, need the evidence term in the vlb
         for l in self.labels_list:
             vlb += 0.5 * (l.r.sum(0) * np.array([c.expected_log_likelihood(l.data).sum()
-                for c in self.components])).sum() # TODO check this sum
+                for c in self.components])).sum()
+
+        # add in symmetry factor
+        vlb += special.gammaln(len(self.components)+1)
 
         return vlb
 
