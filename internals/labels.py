@@ -35,8 +35,9 @@ class Labels(object):
         self.z = sample_discrete_from_log(scores,axis=1)
 
     def meanfieldupdate(self):
-        # update
         data, N, K = self.data, self.data.shape[0], len(self.components)
+
+        # update, see Eq. 10.67 in Bishop
         component_scores = np.zeros((N,K))
 
         for idx, c in enumerate(self.components):
@@ -48,12 +49,19 @@ class Labels(object):
         self.r = np.exp(logr - logr.max(1)[:,na])
         self.r /= self.r.sum(1)[:,na]
 
+    def get_vlb(self):
         # return avg energy plus entropy, our contribution to the mean field
         # variational lower bound
+        errs = np.seterr(invalid='ignore',divide='ignore')
         logr = np.log(self.r)
-        logr[np.isinf(logr)] = -9999999 # -np.inf * 0 = 0
-        q_entropy = -1*(self.r*logr).sum()
-        p_avgengy = (self.r * logpitilde).sum()
+        prod = self.r*logr
+        prod[np.isnan(prod)] = 0. # 0 * -inf = 0
+        np.seterr(**errs)
+
+        logpitilde = self.weights.expected_log_likelihood(np.arange(len(self.components)))
+
+        q_entropy = -1*(prod).sum()
+        p_avgengy = (self.r*logpitilde).sum()
 
         return p_avgengy + q_entropy
 

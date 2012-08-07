@@ -69,7 +69,8 @@ class Gaussian(GibbsSampling, MeanField, Collapsed):
     ### Gibbs sampling
 
     def resample(self,data=[]):
-        self.mu, self.sigma = sample_niw(*self._posterior_hypparams(*self._get_statistics(data)))
+        self._mu_mf, self._sigma_mf = self.mu, self.sigma = \
+                sample_niw(*self._posterior_hypparams(*self._get_statistics(data)))
 
     def _get_statistics(self,data):
         assert isinstance(data,np.ndarray) or \
@@ -92,6 +93,8 @@ class Gaussian(GibbsSampling, MeanField, Collapsed):
 
     ### Mean Field
 
+    # NOTE my sumsq is Nk*Sk
+
     def meanfieldupdate(self,data,weights):
         assert getdatasize(data) > 0
         # update
@@ -99,6 +102,7 @@ class Gaussian(GibbsSampling, MeanField, Collapsed):
                 self._posterior_hypparams(*self._get_weighted_statistics(data,weights))
         self.mu, self.sigma = self._mu_mf, self._sigma_mf/(self._nu_mf - self.D - 1) # for plotting
 
+    def get_vlb(self):
         # return avg energy plus entropy, our contribution to the mean field
         # variational lower bound
         D = self.D
@@ -106,7 +110,7 @@ class Gaussian(GibbsSampling, MeanField, Collapsed):
         # see Eq. 10.77 in Bishop
         q_entropy = -1 * (0.5 * (loglmbdatilde + self.D * (np.log(self._kappa_mf/(2*np.pi))-1)) \
                 - invwishart_entropy(self._sigma_mf,self._nu_mf))
-        # see Equ. 10.74 in Bishop, we aren't summing over K
+        # see Eq. 10.74 in Bishop, we aren't summing over K
         p_avgengy = 0.5 * (D * np.log(self.kappa_0/(2*np.pi)) + loglmbdatilde \
                 - D*self.kappa_0/self._kappa_mf - self.kappa_0*self._nu_mf*\
                 np.dot(self._mu_mf - self.mu_0,np.linalg.solve(self._sigma_mf,self._mu_mf - self.mu_0))) \
@@ -538,7 +542,7 @@ class Multinomial(GibbsSampling, MeanField):
         assert (isinstance(alphav_0,np.ndarray) and alphav_0.ndim == 1) ^ \
                 (K is not None and alpha_0 is not None)
 
-        if isinstance(alphav_0,np.ndarray):
+        if alphav_0 is not None:
             self.alphav_0 = alphav_0
             self.K = alphav_0.shape[0]
         else:
@@ -583,6 +587,7 @@ class Multinomial(GibbsSampling, MeanField):
         self._alpha_mf = self._posterior_hypparams(*self._get_weighted_statistics(data,weights))
         self.weights = self._alpha_mf / self._alpha_mf.sum() # for plotting
 
+    def get_vlb(self):
         # return avg energy plus entropy, our contribution to the vlb
         # see Eq. 10.66 in Bishop
         logpitilde = self.expected_log_likelihood(np.arange(self.K))

@@ -2,26 +2,54 @@ from __future__ import division
 import numpy as np
 np.seterr(invalid='raise')
 from matplotlib import pyplot as plt
+import copy
 
 import models, distributions
 
-blah = models.Mixture(alpha_0=1,
-        components=[distributions.Gaussian(mu_0=np.zeros(2),sigma_0=np.eye(2),kappa_0=0.1,nu_0=4)
+priormodel = models.Mixture(alpha_0=1,
+        components=[distributions.Gaussian(mu_0=np.zeros(2),sigma_0=np.eye(2),kappa_0=0.05,nu_0=5)
             for itr in range(30)])
 
-data = blah.rvs(300)
-
-blah.add_data(data)
-
-blah.plot()
-plt.title('initial zs')
-
-vals = [blah.meanfield_coordinate_descent_step() for itr in range(50)]
-
-blah.plot()
-plt.title('final awesomeness')
+data = priormodel.rvs(100)
 
 plt.figure()
-plt.plot(vals)
+plt.plot(data[:,0],data[:,1],'kx')
+plt.title('data')
+
+posteriormodel = models.Mixture(alpha_0=1,
+        components=[distributions.Gaussian(mu_0=np.zeros(2),sigma_0=np.eye(2),kappa_0=0.05,nu_0=5)
+            for itr in range(30)])
+
+posteriormodel.add_data(data)
+
+allvals = []
+allmodels = []
+for superitr in range(20):
+    vals = []
+    for itr in range(200):
+        vals.append(posteriormodel.meanfield_coordinate_descent_step())
+        if len(vals) > 1 and vals[-1] < vals[-2] + 100:
+            break
+    print '%d iterations' % (itr+1)
+    allvals.append(vals)
+    allmodels.append(copy.deepcopy(posteriormodel))
+    for itr in range(200):
+        posteriormodel.resample_model()
+
+
+plt.figure()
+for vals in allvals:
+    plt.plot(vals)
+
+bestmodel = np.argmax([lambda v: v[-1] for v in allvals])
+allmodels[bestmodel].plot()
+plt.title('bestmodel')
+
+worstmodel = np.argmin([lambda v: v[-1] in allvals])
+allmodels[worstmodel].plot()
+plt.title('worstmodel')
+
+allmodels[0].plot()
+plt.title('firstmodel')
 
 plt.show()
