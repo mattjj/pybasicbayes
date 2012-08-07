@@ -443,9 +443,12 @@ class ScalarGaussianNIX(ScalarGaussian, GibbsSampling, Collapsed):
             sumsqc = ((data-ybar)**2).sum()
         else:
             n = sum(d.size for d in data)
-            ybar = sum(d.sum() for d in data)/n
-            sumsqc = sum(np.sum((d-ybar)**2) for d in data)
-
+            if n > 0:
+                ybar = sum(d.sum() for d in data)/n
+                sumsqc = sum(np.sum((d-ybar)**2) for d in data)
+            else:
+                ybar = None
+                sumsqc = None
         return n, ybar, sumsqc
 
     ### Collapsed

@@ -201,6 +201,12 @@ class CRPMixture(CollapsedMixture):
             l.resample()
 
     def generate(self,N,keep=True):
+        # TODO only works if there's no other data in the model; o/w need to add
+        # existing data to obs resample. should be an easy update.
+        # templabels needs to pay attention to its own counts as well as model
+        # counts
+        assert len(self.labels_list) == 0
+
         templabels = CRPLabels(model=self,alpha_0=self.alpha_0,obs_distn=self.obs_distn,N=N)
 
         counts = np.bincount(templabels.z)
