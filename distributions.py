@@ -4,6 +4,7 @@ from numpy import newaxis as na
 import scipy.stats as stats
 import scipy.special as special
 from matplotlib import pyplot as plt
+from warnings import warn
 import abc
 
 from abstractions import Distribution, GibbsSampling, MeanField, Collapsed
@@ -376,7 +377,7 @@ class ScalarGaussian(Distribution):
     '''
     __metaclass__ = abc.ABCMeta
 
-    def rvs(self,size=None):
+    def rvs(self,size=[]):
         return np.sqrt(self.sigmasq)*np.random.normal(size=size)+self.mu
 
     def log_likelihood(self,x):
@@ -435,13 +436,14 @@ class ScalarGaussianNIX(ScalarGaussian, GibbsSampling, Collapsed):
     def _get_statistics(cls,data):
         assert isinstance(data,np.ndarray) or \
                 (isinstance(data,list) and all((isinstance(d,np.ndarray))
-                    for d in data))
+                    for d in data)) or \
+                (isinstance(data,int) or isinstance(data,float))
 
         if isinstance(data,np.ndarray):
             n = data.size
             ybar = data.mean()
             sumsqc = ((data-ybar)**2).sum()
-        else:
+        elif isinstance(data,list):
             n = sum(d.size for d in data)
             if n > 0:
                 ybar = sum(d.sum() for d in data)/n
@@ -449,6 +451,11 @@ class ScalarGaussianNIX(ScalarGaussian, GibbsSampling, Collapsed):
             else:
                 ybar = None
                 sumsqc = None
+        else:
+            # must be a single unboxed scalar
+            n = 1.
+            ybar = data
+            sumsqc = 0
         return n, ybar, sumsqc
 
     ### Collapsed
@@ -457,16 +464,16 @@ class ScalarGaussianNIX(ScalarGaussian, GibbsSampling, Collapsed):
         n = getdatasize(data)
         mu_0, kappa_0, sigmasq_0, nu_0 = self.mu_0, self.kappa_0, self.sigmasq_0, self.nu_0
         mu_n, kappa_n, sigmasq_n, nu_n = self._posterior_hypparams(*self._get_statistics(data))
-        return np.exp(special.gammaln(nu_n/2) - special.gammaln(nu_0/2) \
+        return special.gammaln(nu_n/2) - special.gammaln(nu_0/2) \
                 + 0.5*(np.log(kappa_0) - np.log(kappa_n) \
                        + nu_0 * (np.log(nu_0) + np.log(sigmasq_0)) \
                          - nu_n * (np.log(nu_n) + np.log(sigmasq_n)) \
-                       - n*np.log(np.pi)))
+                       - n*np.log(np.pi))
 
-    def predictive_single(self,y,olddata):
+    def log_predictive_single(self,y,olddata):
         # mostly for testing or speed
         mu_n, kappa_n, sigmasq_n, nu_n = self._posterior_hypparams(*self._get_statistics(olddata))
-        return stats.t.pdf(y,nu_n,loc=mu_n,scale=np.sqrt((1+kappa_n)*sigmasq_n/kappa_n))
+        return stats.t.logpdf(y,nu_n,loc=mu_n,scale=np.sqrt((1+kappa_n)*sigmasq_n/kappa_n))
 
 
 class ScalarGaussianFixedvar(ScalarGaussian, GibbsSampling):
