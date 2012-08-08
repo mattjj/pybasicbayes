@@ -4,10 +4,9 @@ from numpy import newaxis as na
 import scipy.stats as stats
 import scipy.special as special
 from matplotlib import pyplot as plt
-from warnings import warn
 import abc
 
-from abstractions import Distribution, GibbsSampling, MeanField, Collapsed
+from abstractions import Distribution, GibbsSampling, MeanField, Collapsed, DurationDistribution
 from util.stats import sample_niw, invwishart_entropy, invwishart_log_partitionfunction, \
         sample_discrete, getdatasize
 
@@ -398,6 +397,9 @@ class ScalarGaussianNIX(ScalarGaussian, GibbsSampling, Collapsed):
     Normal-Inverse-Gamma; that's not implemented, but the hyperparameters can be
     mapped to NIX form.)
     '''
+    def __repr__(self):
+        return 'ScalarGaussianNIX(mu=%0.2f,sigmasq=%0.2f)' % (self.mu,self.sigmasq)
+
     def __init__(self,mu_0,kappa_0,sigmasq_0,nu_0,mubin=None,sigmasqbin=None):
         self.mu_0 = mu_0
         self.kappa_0 = kappa_0
@@ -480,6 +482,9 @@ class ScalarGaussianFixedvar(ScalarGaussian, GibbsSampling):
     '''
     Conjugate normal prior on mean.
     '''
+    def __repr__(self):
+        return 'ScalarGaussianFixedvar(mu=%0.2f)' % (self.mu,)
+
     def __init__(self,mu_0,tausq_0,sigmasq,mu=None,mubin=None,sigmasqbin=None):
         self.mu_0 = mu_0
         self.tausq_0 = tausq_0
@@ -548,6 +553,9 @@ class Multinomial(GibbsSampling, MeanField):
     Parameters:
         weights, a vector encoding a discrete pmf
     '''
+    def __repr__(self):
+        return 'Multinomial(weights=%s)' % (self.weights,)
+
     def __init__(self,alphav_0=None,weights=None,alpha_0=None,K=None):
         assert (isinstance(alphav_0,np.ndarray) and alphav_0.ndim == 1) ^ \
                 (K is not None and alpha_0 is not None)
@@ -626,11 +634,160 @@ class Multinomial(GibbsSampling, MeanField):
         return counts,
 
 
+class Geometric(GibbsSampling, Collapsed, DurationDistribution):
+    '''
+    Geometric distribution with a conjugate beta prior. NOTE: the support is
+    {1,2,3,...}
+
+    Hyperparameters:
+        alpha_0, beta_0
+
+    Parameter is the success probability:
+        p
+    '''
+    def __repr__(self):
+        return 'Geometric(p=%0.2f)' % (self.p,)
+
+    def __init__(self,alpha_0,beta_0,p=None):
+        self.alpha_0 = alpha_0
+        self.beta_0 = beta_0
+        if p is not None:
+            self.p = p
+        else:
+            self.resample()
+
+    def _posterior_hypparams(self,n,tot):
+        return self.alpha_0 + n, self.beta_0 + tot
+
+    def log_likelihood(self,x):
+        x = np.array(x,ndmin=1)
+        raw = np.empty(x.shape)
+        raw[x>0] = (x[x>0]-1.)*np.log(1.-self.p) + np.log(self.p)
+        raw[x<1] = -np.inf
+        return raw if raw.size > 1 else raw[0]
+
+    def pmf(self,x):
+        return stats.geom.pmf(x,self.p)
+
+    def log_sf(self,x):
+        return stats.geom.logsf(x,self.p)
+
+    def rvs(self,size=[]):
+        return np.random.geometric(self.p,size=size)
+
+    ### Gibbs sampling
+
+    def resample(self,data=[]):
+        self.p = np.random.beta(*self._posterior_hypparams(*self._get_statistics(data)))
+
+    def _get_statistics(self,data):
+        if isinstance(data,np.ndarray):
+            n = data.shape[0]
+            tot = data.sum()
+        elif isinstance(data,list):
+            n = sum(d.shape[0] for d in data)
+            tot = sum(d.sum() for d in data)
+        else:
+            assert isinstance(data,int)
+            n = 1
+            tot = data
+        return n, tot
+
+    ### Collapsed
+
+    def log_marginal_likelihood(self,data):
+        return special.betaln(*self._posterior_hypparams(*self._get_statistics(data)))
+
+
+class Poisson(GibbsSampling, Collapsed, Distribution):
+    '''
+    Poisson distribution with a conjugate Gamma prior.
+    NOTE: the support is {0,1,2,...} so this is not a DurationDistribution!
+    See PoissonDuration.
+
+    Hyperparameters (following Wikipedia's notation):
+        alpha_0, beta_0
+
+    Parameter is the mean/variance parameter:
+        lmbda
+    '''
+    def __repr__(self):
+        return 'Poisson(lmbda=%0.2f)' % (self.lmbda,)
+
+    def __init__(self,alpha_0,beta_0,lmbda=None):
+        self.alpha_0 = alpha_0
+        self.beta_0 = beta_0
+
+        if lmbda is not None:
+            self.lmbda = lmbda
+        else:
+            self.resample()
+
+    def _posterior_hypparams(self,n,tot):
+        return self.alpha_0 + tot, self.beta_0 + n
+
+    def rvs(self,size=[]):
+        return np.random.poisson(self.lmbda,size=size)
+
+    def log_likelihood(self,x):
+        lmbda = self.lmbda
+        x = np.array(x,ndmin=1)
+        raw = np.empty(x.shape)
+        raw[x>=0] = -lmbda + x[x>=0]*np.log(lmbda) - special.gammaln(x[x>=0]+1)
+        raw[x<0] = -np.inf
+        return raw if raw.size > 1 else raw[0]
+
+    ### Gibbs Sampling
+
+    def resample(self,data=[]):
+        alpha_n, beta_n = self._posterior_hypparams(*self._get_statistics(data))
+        self.lmbda = np.random.gamma(alpha_n,1./beta_n)
+
+    def _get_statistics(self,data):
+        if isinstance(data,np.ndarray):
+            n = data.shape[0]
+            tot = data.sum()
+        elif isinstance(data,list):
+            n = sum(d.shape[0] for d in data)
+            tot = sum(d.sum() for d in data)
+        else:
+            assert isinstance(data,int)
+            n = 1
+            tot = data
+        return n, tot
+
+    ### Collapsed
+
+    def log_marginal_likelihood(self,data):
+        alpha_n, beta_n = self._posterior_hypparams(self._get_statistics(data))
+        return special.gammaln(alpha_n) - alpha_n*np.log(beta_n)
+
+
+# TODO maybe move this to pyhsmm
+class PoissonDuration(Poisson, DurationDistribution):
+    def __repr__(self):
+        return 'PoissonDuration(lmbda=%0.2f,mean=%0.2f)' % (self.lmbda,self.lmbda+1)
+
+    def log_sf(self,x):
+        return stats.poisson.logsf(x-1)
+
+    def log_likelihood(self,x):
+        return super(PoissonDuration,self).log_likelihood(x-1)
+
+    def rvs(self,size=[]):
+        return super(PoissonDuration,self).rvs(size=size) + 1
+
+    def _get_statistics(self,data):
+        n, tot = super(PoissonDuration,self)._get_statistics(data)
+        tot -= n
+        return n, tot
+
+
 ################################
 #  Special Case Distributions  #
 ################################
 
-# TODO maybe move to another module?
+# TODO maybe move these to another module?
 
 class CRPGamma(GibbsSampling):
     '''

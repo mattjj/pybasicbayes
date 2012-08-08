@@ -119,8 +119,10 @@ class Mixture(ModelGibbsSampling, ModelMeanField, Distribution):
             vlb += 0.5 * (l.r.sum(0) * np.array([c.expected_log_likelihood(l.data).sum()
                 for c in self.components])).sum()
 
-        # add in symmetry factor
-        vlb += special.gammaln(len(self.components)+1)
+        # add in symmetry factor (if we're actually symmetric)
+        if len(set(self.weights.weights)) == 1 and \
+                len(set(type(c) for c in self.components)) == 1:
+            vlb += special.gammaln(len(self.components)+1)
 
         return vlb
 
