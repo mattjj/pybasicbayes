@@ -172,8 +172,6 @@ class Gaussian(GibbsSampling, MeanField, Collapsed):
         return self._log_partition_function(*self._posterior_hypparams(*self._get_statistics(data))) \
                 - self._log_partition_function(self.mu_0,self.sigma_0,self.kappa_0,self.nu_0) \
                 - n*D/2 * np.log(2*np.pi)
-                # TODO why is this extra term out here? should be in
-                # log_partition_function for it to be properly named!
 
     def _log_partition_function(self,mu,sigma,kappa,nu):
         D = self.D
@@ -683,14 +681,14 @@ class Geometric(GibbsSampling, Collapsed, DurationDistribution):
     def _get_statistics(self,data):
         if isinstance(data,np.ndarray):
             n = data.shape[0]
-            tot = data.sum()
+            tot = data.sum() - n
         elif isinstance(data,list):
             n = sum(d.shape[0] for d in data)
-            tot = sum(d.sum() for d in data)
+            tot = sum(d.sum() for d in data) - n
         else:
             assert isinstance(data,int)
             n = 1
-            tot = data
+            tot = data-1
         return n, tot
 
     ### Collapsed
@@ -701,6 +699,7 @@ class Geometric(GibbsSampling, Collapsed, DurationDistribution):
 
     def _log_partition_function(self,alpha,beta):
         return special.betaln(alpha,beta)
+
 
 class Poisson(GibbsSampling, Collapsed, Distribution):
     '''
@@ -763,7 +762,8 @@ class Poisson(GibbsSampling, Collapsed, Distribution):
 
     def log_marginal_likelihood(self,data):
         return self._log_partition_function(*self._posterior_hypparams(*self._get_statistics(data))) \
-                - self._log_partition_function(self.alpha_0,self.beta_0)
+                - self._log_partition_function(self.alpha_0,self.beta_0) \
+                - special.gammaln(data+1).sum()
 
     def _log_partition_function(self,alpha,beta):
         return special.gammaln(alpha) - alpha * np.log(beta)
