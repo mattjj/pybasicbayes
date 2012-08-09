@@ -44,7 +44,7 @@ class Gaussian(GibbsSampling, MeanField, Collapsed):
         self._kappa_mf = kappa_0
         self._nu_mf = nu_0
 
-    def rvs(self,size=[]):
+    def rvs(self,size=None):
         return np.random.multivariate_normal(mean=self.mu,cov=self.sigma,size=size)
 
     def log_likelihood(self,x):
@@ -172,6 +172,8 @@ class Gaussian(GibbsSampling, MeanField, Collapsed):
         return self._log_partition_function(*self._posterior_hypparams(*self._get_statistics(data))) \
                 - self._log_partition_function(self.mu_0,self.sigma_0,self.kappa_0,self.nu_0) \
                 - n*D/2 * np.log(2*np.pi)
+                # TODO why is this extra term out here? should be in
+                # log_partition_function for it to be properly named!
 
     def _log_partition_function(self,mu,sigma,kappa,nu):
         D = self.D
@@ -250,7 +252,7 @@ class DiagonalGaussian(GibbsSampling):
             self.mu = mu
             self.sigmas = sigmas
 
-    def rvs(self,size=[]):
+    def rvs(self,size=None):
         size = np.array(size,ndmin=1)
         return np.sqrt(self.sigmas)*np.random.normal(size=np.concatenate((size,self.mu.shape))) + self.mu
 
@@ -323,7 +325,7 @@ class IsotropicGaussian(GibbsSampling):
             self.mu = mu
             self.sigma = sigma
 
-    def rvs(self,size=[]):
+    def rvs(self,size=None):
         return np.sqrt(self.sigma)*np.random.normal(size=tuple(size)+self.mu.shape) + self.mu
 
     def log_likelihood(self,x):
@@ -376,12 +378,11 @@ class ScalarGaussian(Distribution):
     '''
     __metaclass__ = abc.ABCMeta
 
-    def rvs(self,size=[]):
+    def rvs(self,size=None):
         return np.sqrt(self.sigmasq)*np.random.normal(size=size)+self.mu
 
     def log_likelihood(self,x):
-        assert x.ndim == 2
-        assert x.shape[1] == 1
+        x = np.reshape(x,(-1,1))
         return (-0.5*(x-self.mu)**2/self.sigmasq - np.log(np.sqrt(2*np.pi*self.sigmasq))).flatten()
 
     def __repr__(self):
@@ -394,8 +395,7 @@ class ScalarGaussian(Distribution):
 class ScalarGaussianNIX(ScalarGaussian, GibbsSampling, Collapsed):
     '''
     Conjugate Normal-Inverse-ChiSquared prior. (Another parameterization is the
-    Normal-Inverse-Gamma; that's not implemented, but the hyperparameters can be
-    mapped to NIX form.)
+    Normal-Inverse-Gamma.
     '''
     def __repr__(self):
         return 'ScalarGaussianNIX(mu=%0.2f,sigmasq=%0.2f)' % (self.mu,self.sigmasq)
@@ -428,7 +428,7 @@ class ScalarGaussianNIX(ScalarGaussian, GibbsSampling, Collapsed):
     def resample(self,data=[]):
         mu_n, kappa_n, sigmasq_n, nu_n = self._posterior_hypparams(*self._get_statistics(data))
 
-        self.sigmasq = nu_n * sigmasq_n / stats.chi2.rvs(nu_n)
+        self.sigmasq = nu_n * sigmasq_n / np.random.chisquare(nu_n)
         self.mu = np.sqrt(self.sigmasq / kappa_n) * np.random.randn() + mu_n
 
         if self.mubin is not None and self.sigmasqbin is not None:
@@ -573,7 +573,7 @@ class Multinomial(GibbsSampling, MeanField):
             self.resample()
         self._alpha_mf = self.weights * self.alphav_0.sum()
 
-    def rvs(self,size=[]):
+    def rvs(self,size=None):
         return sample_discrete(self.weights,size)
 
     def log_likelihood(self,x):
@@ -672,7 +672,7 @@ class Geometric(GibbsSampling, Collapsed, DurationDistribution):
     def log_sf(self,x):
         return stats.geom.logsf(x,self.p)
 
-    def rvs(self,size=[]):
+    def rvs(self,size=None):
         return np.random.geometric(self.p,size=size)
 
     ### Gibbs sampling
@@ -696,8 +696,11 @@ class Geometric(GibbsSampling, Collapsed, DurationDistribution):
     ### Collapsed
 
     def log_marginal_likelihood(self,data):
-        return special.betaln(*self._posterior_hypparams(*self._get_statistics(data)))
+        return self._log_partition_function(*self._posterior_hypparams(*self._get_statistics(data))) \
+                - self._log_partition_function(self.alpha_0,self.beta_0)
 
+    def _log_partition_function(self,alpha,beta):
+        return special.betaln(alpha,beta)
 
 class Poisson(GibbsSampling, Collapsed, Distribution):
     '''
@@ -726,7 +729,7 @@ class Poisson(GibbsSampling, Collapsed, Distribution):
     def _posterior_hypparams(self,n,tot):
         return self.alpha_0 + tot, self.beta_0 + n
 
-    def rvs(self,size=[]):
+    def rvs(self,size=None):
         return np.random.poisson(self.lmbda,size=size)
 
     def log_likelihood(self,x):
@@ -759,8 +762,11 @@ class Poisson(GibbsSampling, Collapsed, Distribution):
     ### Collapsed
 
     def log_marginal_likelihood(self,data):
-        alpha_n, beta_n = self._posterior_hypparams(self._get_statistics(data))
-        return special.gammaln(alpha_n) - alpha_n*np.log(beta_n)
+        return self._log_partition_function(*self._posterior_hypparams(*self._get_statistics(data))) \
+                - self._log_partition_function(self.alpha_0,self.beta_0)
+
+    def _log_partition_function(self,alpha,beta):
+        return special.gammaln(alpha) - alpha * np.log(beta)
 
 
 # TODO maybe move this to pyhsmm
@@ -768,19 +774,28 @@ class PoissonDuration(Poisson, DurationDistribution):
     def __repr__(self):
         return 'PoissonDuration(lmbda=%0.2f,mean=%0.2f)' % (self.lmbda,self.lmbda+1)
 
+    def pmf(self,x):
+        return np.exp(self.log_pmf(x))
+
+    def log_pmf(self,x):
+        return self.log_likelihood(x)
+
     def log_sf(self,x):
-        return stats.poisson.logsf(x-1)
+        return stats.poisson.logsf(x-1,self.lmbda)
 
     def log_likelihood(self,x):
         return super(PoissonDuration,self).log_likelihood(x-1)
 
-    def rvs(self,size=[]):
+    def rvs(self,size=None):
         return super(PoissonDuration,self).rvs(size=size) + 1
 
     def _get_statistics(self,data):
         n, tot = super(PoissonDuration,self)._get_statistics(data)
         tot -= n
         return n, tot
+
+
+# TODO negative binomial
 
 
 ################################
@@ -813,7 +828,7 @@ class CRPGamma(GibbsSampling):
     def log_likelihood(self,x):
         raise NotImplementedError, 'product of gammas' # TODO
 
-    def rvs(self,size=[]):
+    def rvs(self,size=None):
         raise NotImplementedError, 'set of CRPs' # TODO
 
     def resample(self,data=[],niter=10):
@@ -926,66 +941,6 @@ class DirGamma(CRPGamma):
 #                 beta_n = self.beta_0 + ((data-self.mu)**2).sum(0)/2
 #                 self.sigmas = stats.invgamma.rvs(alpha_n,scale=beta_n,size=len(self.mu_0)) # size needed, apparent scipy bug
 
-
-
-# class IndicatorMultinomial(Multinomial):
-#     '''
-#     This class represents a multinomial distribution in an indicator/count form.
-#     For example, if len(alpha_vec) == 3, then five samples worth of indicator
-#     data may look like
-#     [[0,1,0],
-#      [1,0,0],
-#      [1,0,0],
-#      [0,0,1],
-#      [0,1,0]]
-#     Each row is an indicator of a sample, and summing over rows gives counts.
-
-#     Based on the way the methods are written, the data rows may also be count
-#     arrays themselves. The same sample set as in the previous example can also
-#     be represented as
-
-#     [[2,2,1]]
-
-#     or
-
-#     [[1,1,1],
-#      [1,1,0]]
-
-#     etc.
-
-#     Hyperparameters: alpha_vec
-#     Parameters: discrete, which is a vector encoding of a discrete
-#     probability distribution
-#     '''
-
-#     # TODO collapsed version
-
-#     def resample(self,data=np.array([]),**kwargs):
-#         if data.size == 0:
-#             counts = np.zeros(self.alpha_vec.shape)
-#         elif data.ndim == 2:
-#             counts = data.sum(0)
-#         else:
-#             counts = data
-#         self._resample_given_counts(counts)
-
-#     def log_likelihood(self,x):
-#         assert x.ndim == 2
-#         assert x.shape[1] == len(self.discrete)
-#         return (x * np.log(self.discrete)).sum(1)
-
-#     def rvs(self,size=0):
-#         assert type(size) == type(0)
-#         label_data = multinomial.rvs(self,size=size)
-#         out = np.zeros((size,len(self.alpha_vec)))
-#         out[np.arange(out.shape[0]),label_data] = 1
-#         return out
-
-#     @classmethod
-#     def test(cls):
-#         # I've tested this by hand
-#         raise NotImplementedError
-
 # class ScalarGaussianNonconj(ScalarGaussian, GibbsSampling):
 #     def __init__(self,mu_0,sigmasq_0,alpha,beta,mu=None,sigmasq=None,mubin=None,sigmasqbin=None):
 #         self.mu_0 = mu_0
@@ -1020,56 +975,6 @@ class DirGamma(CRPGamma):
 #                 alpha_n = self.alpha+n/2
 #                 beta_n = self.beta+((data-self.mu)**2).sum()/2
 #                 self.sigmasq = stats.invgamma.rvs(alpha_n,scale=beta_n)
-
-#         if self.mubin is not None and self.sigmasqbin is not None:
-#             self.mubin[...] = self.mu
-#             self.sigmasqbin[...] = self.sigmasq
-
-#     def __repr__(self):
-#         return 'gaussian_scalar_nonconj(mu=%f,sigmasq=%f)' % (self.mu,self.sigmasq)
-
-# class ScalarGaussianNonconjGelparams(ScalarGaussian, GibbsSampling): # TODO
-# next
-#     # TODO factor out some stuff into scalar gaussian base
-#     # uses parameters from Gelman's Bayesian Data Analysis
-#     def __init__(self,mu_0,tausq_0,sigmasq_0,nu_0,mu=None,sigmasq=None,mubin=None,sigmasqbin=None):
-#         self.mu_0 = mu_0
-#         self.tausq_0 = tausq_0
-#         self.sigmasq_0 = sigmasq_0
-#         self.nu_0 = nu_0
-
-#         self.mubin = mubin
-#         self.sigmasqbin = sigmasqbin
-
-#         if mu is None or sigmasq is None:
-#             self.resample()
-#         else:
-#             self.mu = mu
-#             self.sigmasq = sigmasq
-#             if mubin is not None and sigmasqbin is not None:
-#                 mubin[...] = mu
-#                 sigmasqbin[...] = sigmasq
-
-#     def resample(self,data=np.array([[]]),niter=10):
-#         if data.size == 0:
-#             # sample from prior
-#             self.mu = np.sqrt(self.tausq_0)*np.random.randn()+self.mu_0
-#             self.sigmasq = self.nu_0 * self.sigmasq_0 / stats.chi2.rvs(self.nu_0)
-#         else:
-#             assert data.ndim == 2 or data.ndim == 1 # TODO why is this important?
-#             data = np.reshape(data,(-1,1))
-#             n = len(data)
-#             mu_hat = data.mean()
-#             for iter in xrange(niter):
-#                 # resample mean given data and var
-#                 mu_n = (self.mu_0/self.tausq_0 + n*mu_hat/self.sigmasq)/(1/self.tausq_0 + n/self.sigmasq)
-#                 tausq_n = 1/(1/self.tausq_0 + n/self.sigmasq)
-#                 self.mu = np.sqrt(tausq_n)*np.random.randn()+mu_n
-#                 #resample variance given data and mean
-#                 v = np.var(data - self.mu)
-#                 nu_n = self.nu_0 + n
-#                 sigmasq_n = (self.nu_0 * self.sigmasq_0 + n*v)/(self.nu_0 + n)
-#                 self.sigmasq = nu_n * sigmasq_n / stats.chi2.rvs(nu_n)
 
 #         if self.mubin is not None and self.sigmasqbin is not None:
 #             self.mubin[...] = self.mu
