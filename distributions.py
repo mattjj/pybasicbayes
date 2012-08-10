@@ -639,7 +639,7 @@ class Multinomial(GibbsSampling, MeanField):
         return counts,
 
 
-class Geometric(GibbsSampling, Collapsed, DurationDistribution):
+class Geometric(GibbsSampling, Collapsed, Distribution):
     '''
     Geometric distribution with a conjugate beta prior. NOTE: the support is
     {1,2,3,...}
