@@ -198,7 +198,7 @@ class Gaussian(GibbsSampling, MeanField, Collapsed):
         for o in instance_list:
             o.global_vecs = vecs
 
-    def plot(self,data=None,color='b'):
+    def plot(self,data=None,color='b',plot_params=True):
         from util.plot import project_data, plot_gaussian_projection, pca
         # if global projection vecs exist, use those
         # otherwise, when dim>2, do a pca on the data
@@ -216,7 +216,8 @@ class Gaussian(GibbsSampling, MeanField, Collapsed):
             projected_data = project_data(data,vecs)
             plt.plot(projected_data[:,0],projected_data[:,1],marker='.',linestyle=' ',color=color)
 
-        plot_gaussian_projection(self.mu,self.sigma,vecs,color=color)
+        if plot_params:
+            plot_gaussian_projection(self.mu,self.sigma,vecs,color=color)
 
 
 class DiagonalGaussian(GibbsSampling):
@@ -386,7 +387,13 @@ class ScalarGaussian(Distribution):
     def __repr__(self):
         return 'ScalarGaussian(mu=%f,sigmasq=%f)' % (self.mu,self.sigmasq)
 
-    def plot(self,*args,**kwargs): # TODO
+    @classmethod
+    def _plot_setup(cls,instance_list):
+        pass
+
+    def plot(self,data=None,color='b',plot_params=True):
+        if data is not None:
+            pass
         raise NotImplementedError
 
 
@@ -667,9 +674,6 @@ class Geometric(GibbsSampling, Collapsed, DurationDistribution):
     def pmf(self,x):
         return stats.geom.pmf(x,self.p)
 
-    def log_sf(self,x):
-        return stats.geom.logsf(x,self.p)
-
     def rvs(self,size=None):
         return np.random.geometric(self.p,size=size)
 
@@ -763,10 +767,19 @@ class Poisson(GibbsSampling, Collapsed, Distribution):
     def log_marginal_likelihood(self,data):
         return self._log_partition_function(*self._posterior_hypparams(*self._get_statistics(data))) \
                 - self._log_partition_function(self.alpha_0,self.beta_0) \
-                - special.gammaln(data+1).sum()
+                - self._get_sum_of_gammas(data)
 
     def _log_partition_function(self,alpha,beta):
         return special.gammaln(alpha) - alpha * np.log(beta)
+
+    def _get_sum_of_gammas(self,data):
+        if isinstance(data,np.ndarray):
+            return special.gammaln(data+1).sum()
+        elif isinstance(data,list):
+            return sum(special.gammaln(d+1).sum() for d in data)
+        else:
+            assert isinstance(data,int)
+            return special.gammaln(data+1)
 
 
 # TODO maybe move this to pyhsmm
@@ -793,6 +806,17 @@ class PoissonDuration(Poisson, DurationDistribution):
         n, tot = super(PoissonDuration,self)._get_statistics(data)
         tot -= n
         return n, tot
+
+
+class GeometricDuration(Geometric, DurationDistribution):
+    def pmf(self,x):
+        return np.exp(self.log_pmf(x))
+
+    def log_pmf(self,x):
+        return self.log_likelihood(x)
+
+    def log_sf(self,x):
+        return stats.geom.logsf(x,self.p)
 
 
 # TODO negative binomial

@@ -59,10 +59,10 @@ class MeanField(Distribution):
 
     @abc.abstractmethod
     def meanfieldupdate(self,data,weights):
-        '''
-        Returns component's entropy-minus-average-log-prior term
-        '''
         pass
+
+    def get_vlb(self):
+        raise NotImplementedError
 
 class Collapsed(Distribution):
     __metaclass__ = abc.ABCMeta
