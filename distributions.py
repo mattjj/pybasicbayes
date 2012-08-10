@@ -794,7 +794,7 @@ class PoissonDuration(Poisson, DurationDistribution):
         return self.log_likelihood(x)
 
     def log_sf(self,x):
-        return stats.poisson.logsf(x-1,self.lmbda)
+        return stats.poisson.logsf(x-1,self.lmbda) # TODO implement myself
 
     def log_likelihood(self,x):
         return super(PoissonDuration,self).log_likelihood(x-1)
@@ -816,7 +816,7 @@ class GeometricDuration(Geometric, DurationDistribution):
         return self.log_likelihood(x)
 
     def log_sf(self,x):
-        return stats.geom.logsf(x,self.p)
+        return stats.geom.logsf(x,self.p) # TODO implement myself
 
 
 # TODO negative binomial
