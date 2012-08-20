@@ -6,11 +6,11 @@ import scipy.special as special
 from matplotlib import pyplot as plt
 import abc
 
-from warnings import warn
-
-from abstractions import Distribution, GibbsSampling, MeanField, Collapsed, DurationDistribution
-from util.stats import sample_niw, invwishart_entropy, invwishart_log_partitionfunction, \
-        sample_discrete, sample_discrete_from_log, getdatasize, flattendata
+from pybasicbayes.abstractions import Distribution, GibbsSampling,\
+        MeanField, Collapsed, DurationDistribution
+from pybasicbayes.util.stats import sample_niw, invwishart_entropy,\
+        invwishart_log_partitionfunction, sample_discrete,\
+        sample_discrete_from_log, getdatasize, flattendata
 
 class Gaussian(GibbsSampling, MeanField, Collapsed):
     '''
