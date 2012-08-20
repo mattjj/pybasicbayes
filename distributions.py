@@ -799,8 +799,10 @@ class NegativeBinomial(GibbsSampling):
     NOTE: the support is {0,1,2,...}. See NegativeBinomialDuration.
 
     Hyperparameters:
-        k_0, theta_0: r ~ Gamma(k, theta) or r = np.random.gamma(k,theta)
-        alpha_0, beta_0: p ~ Beta(alpha,beta) or p = np.random.beta(alpha,beta)
+        k_0, theta_0: r ~ Gamma(k, theta)
+                      or r = np.random.gamma(k,theta)
+        alpha_0, beta_0: p ~ Beta(alpha,beta)
+                      or p = np.random.beta(alpha,beta)
 
     Parameters:
         r
