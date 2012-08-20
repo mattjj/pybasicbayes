@@ -39,6 +39,12 @@ class DurationDistribution(Distribution):
         '''
         pass
 
+    def pmf(self,x):
+        return np.exp(self.log_pmf(x))
+
+    def log_pmf(self,x):
+        return self.log_likelihood(x)
+
 #########################################################
 #  Algorithm interfaces for inference in distributions  #
 #########################################################

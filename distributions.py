@@ -6,9 +6,11 @@ import scipy.special as special
 from matplotlib import pyplot as plt
 import abc
 
+from warnings import warn
+
 from abstractions import Distribution, GibbsSampling, MeanField, Collapsed, DurationDistribution
 from util.stats import sample_niw, invwishart_entropy, invwishart_log_partitionfunction, \
-        sample_discrete, getdatasize
+        sample_discrete, sample_discrete_from_log, getdatasize, flattendata
 
 class Gaussian(GibbsSampling, MeanField, Collapsed):
     '''
@@ -639,10 +641,10 @@ class Multinomial(GibbsSampling, MeanField):
         return counts,
 
 
-class Geometric(GibbsSampling, Collapsed, Distribution):
+class Geometric(GibbsSampling, Collapsed):
     '''
-    Geometric distribution with a conjugate beta prior. NOTE: the support is
-    {1,2,3,...}
+    Geometric distribution with a conjugate beta prior.
+    NOTE: the support is {1,2,3,...}
 
     Hyperparameters:
         alpha_0, beta_0
@@ -705,9 +707,10 @@ class Geometric(GibbsSampling, Collapsed, Distribution):
         return special.betaln(alpha,beta)
 
 
-class Poisson(GibbsSampling, Collapsed, Distribution):
+class Poisson(GibbsSampling, Collapsed):
     '''
     Poisson distribution with a conjugate Gamma prior.
+
     NOTE: the support is {0,1,2,...} so this is not a DurationDistribution!
     See PoissonDuration.
 
@@ -782,16 +785,93 @@ class Poisson(GibbsSampling, Collapsed, Distribution):
             return special.gammaln(data+1)
 
 
-# TODO maybe move this to pyhsmm
+class NegativeBinomial(GibbsSampling):
+    '''
+    Negative Binomial distribution with a conjugate beta prior on p and a
+    separate gamma prior on r. The parameter r does not need to be an integer.
+    If r is an integer, then x ~ NegBin(r,p) is the same as
+    x = np.random.geometric(1-p,size=r).sum() - r
+    where r is subtracted to make the geometric support be {0,1,2,...}
+
+    Uses the data augemntation sampling method from Zhou et al. ICML 2012
+
+    NOTE: the support is {0,1,2,...}. See NegativeBinomialDuration.
+
+    Hyperparameters:
+        k_0, theta_0: r ~ Gamma(k, theta) or r = np.random.gamma(k,theta)
+        alpha_0, beta_0: p ~ Beta(alpha,beta) or p = np.random.beta(alpha,beta)
+
+    Parameters:
+        r
+        p
+
+    Mean is r*p/(1-p), var is r*p/(1-p)**2
+    '''
+    def __repr__(self):
+        return 'NegativeBinomial(r=%0.2f,p=%0.2f)' % (self.r,self.p)
+
+    def __init__(self,k_0,theta_0,alpha_0,beta_0,r=None,p=None):
+        self.k_0 = k_0
+        self.theta_0 = theta_0
+        self.alpha_0 = alpha_0
+        self.beta_0 = beta_0
+
+        self._set_up_logF()
+
+        if r is None or p is None:
+            self.resample()
+        else:
+            self.r = r
+            self.p = p
+
+    def resample(self,data=[],niter=20):
+        if getdatasize(data) == 0:
+            self.p = np.random.beta(self.alpha_0,self.beta_0)
+            self.r = np.random.gamma(self.k_0,self.theta_0)
+        else:
+            data = flattendata(data)
+            N = data.shape[0]
+            logF = self.logF
+            L_i = np.zeros(N)
+            data_nz = data[data > 0]
+            for itr in range(niter):
+                logR = np.arange(1,logF.shape[1]+1)*np.log(self.r) + logF
+                L_i[data > 0] = sample_discrete_from_log(logR[data_nz-1,:data_nz.max()],axis=1)+1
+                self.r = np.random.gamma(self.k_0 + L_i.sum(), 1/(1/self.theta_0 - np.log(1-self.p)*N))
+                self.p = np.random.beta(self.alpha_0 + data.sum(), self.beta_0 + N*self.r)
+
+    def rvs(self,size=None):
+        return np.random.poisson(np.random.gamma(self.r,self.p/(1-self.p),size=size))
+
+    def log_likelihood(self,x):
+        x = np.array(x,ndmin=1)
+        xnn = x[x >= 0]
+        raw = np.empty(x.shape)
+        raw[x>=0] = special.gammaln(self.r + xnn) - special.gammaln(self.r) - special.gammaln(xnn+1)\
+                + self.r*np.log(1-self.p) + xnn*np.log(self.p)
+        raw[x<0] = -np.inf
+        return raw if raw.size > 1 else raw[0]
+
+    @classmethod
+    def _set_up_logF(cls):
+        if not hasattr(cls,'logF'):
+            # actually indexes logF[0,0] to correspond to log(F(1,1)) in Zhou
+            # paper, but keeps track of that alignment with the other code!
+            # especially arange(1,...), only using nonzero data and shifting it
+            SIZE = 250
+
+            logF = -np.inf * np.ones((SIZE,SIZE))
+            logF[0,0] = 0.
+            for m in range(1,logF.shape[0]):
+                prevrow = np.exp(logF[m-1] - logF[m-1].max())
+                logF[m] = np.log(np.convolve(prevrow,[0,m,1],'same')) + logF[m-1].max()
+            cls.logF = logF
+
+
+# TODO maybe move these to pyhsmm
 class PoissonDuration(Poisson, DurationDistribution):
     def __repr__(self):
         return 'PoissonDuration(lmbda=%0.2f,mean=%0.2f)' % (self.lmbda,self.lmbda+1)
-
-    def pmf(self,x):
-        return np.exp(self.log_pmf(x))
-
-    def log_pmf(self,x):
-        return self.log_likelihood(x)
 
     def log_sf(self,x):
         return stats.poisson.logsf(x-1,self.lmbda) # TODO implement myself
@@ -816,10 +896,23 @@ class GeometricDuration(Geometric, DurationDistribution):
         return self.log_likelihood(x)
 
     def log_sf(self,x):
-        return stats.geom.logsf(x,self.p) # TODO implement myself
+        return stats.geom.logsf(x,self.p) # TODO reimplement
 
 
-# TODO negative binomial
+class NegativeBinomialDuration(NegativeBinomial, DurationDistribution):
+    def __repr__(self):
+        return 'NegativeBinomialDuration(r=0.2f,p=%0.2f)' % (self.r,self.p)
+
+    def log_sf(self,x):
+        return np.log(special.betainc(x,self.r,self.p))
+
+    def log_likelihood(self,x):
+        return super(NegativeBinomialDuration,self).log_likelihood(x-1)
+
+    def rvs(self,size=None):
+        return super(NegativeBinomialDuration,self).rvs(size=size) + 1
+
+
 
 
 ################################
