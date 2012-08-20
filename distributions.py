@@ -792,6 +792,7 @@ class NegativeBinomial(GibbsSampling):
     If r is an integer, then x ~ NegBin(r,p) is the same as
     x = np.random.geometric(1-p,size=r).sum() - r
     where r is subtracted to make the geometric support be {0,1,2,...}
+    Mean is r*p/(1-p), var is r*p/(1-p)**2
 
     Uses the data augemntation sampling method from Zhou et al. ICML 2012
 
@@ -804,8 +805,6 @@ class NegativeBinomial(GibbsSampling):
     Parameters:
         r
         p
-
-    Mean is r*p/(1-p), var is r*p/(1-p)**2
     '''
     def __repr__(self):
         return 'NegativeBinomial(r=%0.2f,p=%0.2f)' % (self.r,self.p)
