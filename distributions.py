@@ -6,11 +6,17 @@ import scipy.special as special
 from matplotlib import pyplot as plt
 import abc
 
+import pdb
+
 from pybasicbayes.abstractions import Distribution, GibbsSampling,\
         MeanField, Collapsed, DurationDistribution
 from pybasicbayes.util.stats import sample_niw, invwishart_entropy,\
         invwishart_log_partitionfunction, sample_discrete,\
         sample_discrete_from_log, getdatasize, flattendata
+
+################
+#  Continuous  #
+################
 
 class Gaussian(GibbsSampling, MeanField, Collapsed):
     '''
@@ -387,7 +393,7 @@ class ScalarGaussian(Distribution):
         return (-0.5*(x-self.mu)**2/self.sigmasq - np.log(np.sqrt(2*np.pi*self.sigmasq))).flatten()
 
     def __repr__(self):
-        return 'ScalarGaussian(mu=%f,sigmasq=%f)' % (self.mu,self.sigmasq)
+        return self.__class__.__name__ + '(mu=%f,sigmasq=%f)' % (self.mu,self.sigmasq)
 
     @classmethod
     def _plot_setup(cls,instance_list):
@@ -401,12 +407,9 @@ class ScalarGaussian(Distribution):
 
 class ScalarGaussianNIX(ScalarGaussian, GibbsSampling, Collapsed):
     '''
-    Conjugate Normal-Inverse-ChiSquared prior. (Another parameterization is the
-    Normal-Inverse-Gamma.
+    Conjugate Normal-(Scaled-)Inverse-ChiSquared prior. (Another parameterization is the
+    Normal-Inverse-Gamma.)
     '''
-    def __repr__(self):
-        return 'ScalarGaussianNIX(mu=%0.2f,sigmasq=%0.2f)' % (self.mu,self.sigmasq)
-
     def __init__(self,mu_0,kappa_0,sigmasq_0,nu_0,mubin=None,sigmasqbin=None):
         self.mu_0 = mu_0
         self.kappa_0 = kappa_0
@@ -442,29 +445,27 @@ class ScalarGaussianNIX(ScalarGaussian, GibbsSampling, Collapsed):
             self.mubin[...] = self.mu
             self.sigmasqbin[...] = self.sigmasq
 
-    def _get_statistics(cls,data):
+    def _get_statistics(self,data):
         assert isinstance(data,np.ndarray) or \
                 (isinstance(data,list) and all((isinstance(d,np.ndarray))
                     for d in data)) or \
                 (isinstance(data,int) or isinstance(data,float))
 
-        if isinstance(data,np.ndarray):
-            n = data.size
-            ybar = data.mean()
-            sumsqc = ((data-ybar)**2).sum()
-        elif isinstance(data,list):
-            n = sum(d.size for d in data)
-            if n > 0:
+        n = getdatasize(data)
+        if n > 0:
+            if isinstance(data,np.ndarray):
+                ybar = data.mean()
+                sumsqc = ((data-ybar)**2).sum()
+            elif isinstance(data,list):
                 ybar = sum(d.sum() for d in data)/n
                 sumsqc = sum(np.sum((d-ybar)**2) for d in data)
             else:
-                ybar = None
-                sumsqc = None
+                ybar = data
+                sumsqc = 0
         else:
-            # must be a single unboxed scalar
-            n = 1.
-            ybar = data
-            sumsqc = 0
+            ybar = None
+            sumsqc = None
+
         return n, ybar, sumsqc
 
     ### Collapsed
@@ -483,6 +484,47 @@ class ScalarGaussianNIX(ScalarGaussian, GibbsSampling, Collapsed):
         # mostly for testing or speed
         mu_n, kappa_n, sigmasq_n, nu_n = self._posterior_hypparams(*self._get_statistics(olddata))
         return stats.t.logpdf(y,nu_n,loc=mu_n,scale=np.sqrt((1+kappa_n)*sigmasq_n/kappa_n))
+
+
+# TODO ScalarGaussianNIG
+
+
+class ScalarGaussianNonconjNIX(ScalarGaussian, GibbsSampling): # TODO test me
+    '''
+    Non-conjugate separate priors on mean and variance parameters, via
+    mu ~ Normal(mu_0,tausq_0)
+    sigmasq ~ (Scaled-)Inverse-ChiSquared(sigmasq_0,nu_0)
+    '''
+    def __init__(self,mu_0,tausq_0,sigmasq_0,nu_0,mubin=None,sigmasqbin=None):
+        self.mu_0, self.tausq_0 = mu_0, tausq_0
+        self.sigmasq_0, self.nu_0 = sigmasq_0, nu_0
+
+        self.mubin = mubin
+        self.sigmasqbin = sigmasqbin
+
+        self.resample()
+
+    def resample(self,data=[],niter=30):
+        n = getdatasize(data)
+        if n > 0:
+            data = flattendata(data)
+            datasum = data.sum()
+            nu_n = self.nu_0 + n
+            for itr in range(niter):
+                # resample mean
+                tausq_n = 1/(1/self.tausq_0 + n/self.sigmasq)
+                mu_n = tausq_n*(self.mu_0/self.tausq_0 + datasum/self.sigmasq)
+                self.mu = np.sqrt(tausq_n)*np.random.normal() + mu_n
+                # resample variance
+                sigmasq_n = (self.nu_0*self.sigmasq_0 + ((data-self.mu)**2).sum())/(nu_n)
+                self.sigmasq = sigmasq_n*nu_n/np.random.chisquare(nu_n)
+        else:
+            self.mu = np.sqrt(self.tausq_0) * np.random.normal() + self.mu_0
+            self.sigmasq = self.sigmasq_0*self.nu_0/np.random.chisquare(self.nu_0)
+
+        if self.mubin is not None and self.sigmasqbin is not None:
+            self.mubin[...] = self.mu
+            self.sigmasqbin[...] = self.sigmasq
 
 
 class ScalarGaussianFixedvar(ScalarGaussian, GibbsSampling):
@@ -539,6 +581,11 @@ class ScalarGaussianFixedvar(ScalarGaussian, GibbsSampling):
         else:
             xbar = None
         return n, xbar
+
+
+##############
+#  Discrete  #
+##############
 
 
 class Multinomial(GibbsSampling, MeanField):
@@ -869,7 +916,7 @@ class NegativeBinomial(GibbsSampling):
             cls.logF = logF
 
 
-# TODO maybe move these to pyhsmm
+# TODO maybe move duration versions to pyhsmm
 class PoissonDuration(Poisson, DurationDistribution):
     def __repr__(self):
         return 'PoissonDuration(lmbda=%0.2f,mean=%0.2f)' % (self.lmbda,self.lmbda+1)
@@ -914,13 +961,12 @@ class NegativeBinomialDuration(NegativeBinomial, DurationDistribution):
         return super(NegativeBinomialDuration,self).rvs(size=size) + 1
 
 
-
-
 ################################
 #  Special Case Distributions  #
 ################################
 
-# TODO maybe move these to another module?
+
+# TODO maybe move these to another module? priors with funny likelihoods
 
 class CRPGamma(GibbsSampling):
     '''
