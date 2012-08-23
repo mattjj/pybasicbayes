@@ -6,10 +6,10 @@ from matplotlib import cm
 import scipy.special as special
 import abc
 
-from .abstractions import ModelGibbsSampling, ModelMeanField, Distribution
-from .abstractions import GibbsSampling, MeanField, Collapsed
-from .distributions import Multinomial
-from .internals.labels import Labels, CRPLabels
+from abstractions import ModelGibbsSampling, ModelMeanField, Distribution
+from abstractions import GibbsSampling, MeanField, Collapsed
+from distributions import Multinomial
+from internals.labels import Labels, CRPLabels
 
 class Mixture(ModelGibbsSampling, ModelMeanField, Distribution):
     '''

@@ -3,7 +3,7 @@ import numpy as np
 na = np.newaxis
 import numpy.ma as ma
 
-from ..util.stats import sample_discrete_from_log, sample_discrete
+from util.stats import sample_discrete_from_log, sample_discrete
 
 class Labels(object):
     def __init__(self,components,weights,data=None,N=None,z=None):
