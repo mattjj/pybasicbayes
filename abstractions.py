@@ -6,9 +6,9 @@ from .util.stats import combinedata
 # NOTE: data is always a (possibly masked) np.ndarray or list of (possibly
 # masked) np.ndarrays.
 
-########################
-#  Distribution types  #
-########################
+################
+#  Base class  #
+################
 
 class Distribution(object):
     __metaclass__ = abc.ABCMeta
@@ -27,23 +27,6 @@ class Distribution(object):
         density function)
         '''
         pass
-
-class DurationDistribution(Distribution):
-    __metaclass__ = abc.ABCMeta
-
-    @abc.abstractmethod
-    def log_sf(self,x):
-        '''
-        log survival function, defined by log_sf(x) = log(1-cdf(x)) where
-        cdf(x) = P[X \leq x]
-        '''
-        pass
-
-    def pmf(self,x):
-        return np.exp(self.log_pmf(x))
-
-    def log_pmf(self,x):
-        return self.log_likelihood(x)
 
 #########################################################
 #  Algorithm interfaces for inference in distributions  #
