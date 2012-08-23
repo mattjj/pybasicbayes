@@ -917,7 +917,6 @@ class NegativeBinomial(GibbsSampling):
 #  Special Case Distributions  #
 ################################
 
-
 # TODO maybe move these to another module? priors with funny likelihoods
 
 class CRPGamma(GibbsSampling):
