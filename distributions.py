@@ -7,7 +7,7 @@ from matplotlib import pyplot as plt
 import abc
 
 from .abstractions import Distribution, GibbsSampling,\
-        MeanField, Collapsed, DurationDistribution
+        MeanField, Collapsed
 from .util.stats import sample_niw, invwishart_entropy,\
         invwishart_log_partitionfunction, sample_discrete,\
         sample_discrete_from_log, getdatasize, flattendata
@@ -756,8 +756,7 @@ class Poisson(GibbsSampling, Collapsed):
     '''
     Poisson distribution with a conjugate Gamma prior.
 
-    NOTE: the support is {0,1,2,...} so this is not a DurationDistribution!
-    See PoissonDuration.
+    NOTE: the support is {0,1,2,...}
 
     Hyperparameters (following Wikipedia's notation):
         alpha_0, beta_0
@@ -841,7 +840,7 @@ class NegativeBinomial(GibbsSampling):
 
     Uses the data augemntation sampling method from Zhou et al. ICML 2012
 
-    NOTE: the support is {0,1,2,...}. See NegativeBinomialDuration.
+    NOTE: the support is {0,1,2,...}.
 
     Hyperparameters:
         k_0, theta_0: r ~ Gamma(k, theta)
