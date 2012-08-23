@@ -6,11 +6,9 @@ import scipy.special as special
 from matplotlib import pyplot as plt
 import abc
 
-import pdb
-
-from pybasicbayes.abstractions import Distribution, GibbsSampling,\
+from .abstractions import Distribution, GibbsSampling,\
         MeanField, Collapsed, DurationDistribution
-from pybasicbayes.util.stats import sample_niw, invwishart_entropy,\
+from .util.stats import sample_niw, invwishart_entropy,\
         invwishart_log_partitionfunction, sample_discrete,\
         sample_discrete_from_log, getdatasize, flattendata
 

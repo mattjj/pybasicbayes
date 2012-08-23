@@ -1,7 +1,7 @@
 import abc
 import numpy as np
 
-from pybasicbayes.util.stats import combinedata
+from .util.stats import combinedata
 
 # NOTE: data is always a (possibly masked) np.ndarray or list of (possibly
 # masked) np.ndarrays.

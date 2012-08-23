@@ -4,7 +4,7 @@ np.seterr(invalid='raise')
 from matplotlib import pyplot as plt
 import copy
 
-import models, distributions
+from pybasicbayes import models, distributions
 
 alpha_0=0.5
 obs_hypparams=dict(mu_0=np.zeros(2),sigma_0=np.eye(2),kappa_0=0.05,nu_0=5)
