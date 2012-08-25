@@ -716,7 +716,7 @@ class Geometric(GibbsSampling, Collapsed):
         raw = np.empty(x.shape)
         raw[x>0] = (x[x>0]-1.)*np.log(1.-self.p) + np.log(self.p)
         raw[x<1] = -np.inf
-        return raw if raw.size > 1 else raw[0]
+        return raw if isinstance(x,np.ndarray) else raw[0]
 
     def pmf(self,x):
         return stats.geom.pmf(x,self.p)
@@ -788,13 +788,13 @@ class Poisson(GibbsSampling, Collapsed):
         raw = np.empty(x.shape)
         raw[x>=0] = -lmbda + x[x>=0]*np.log(lmbda) - special.gammaln(x[x>=0]+1)
         raw[x<0] = -np.inf
-        return raw if raw.size > 1 else raw[0]
+        return raw if isinstance(x,np.ndarray) else raw[0]
 
     ### Gibbs Sampling
 
     def resample(self,data=[]):
         alpha_n, beta_n = self._posterior_hypparams(*self._get_statistics(data))
-        self.lmbda = np.random.gamma(alpha_n,1./beta_n)
+        self.lmbda = np.random.gamma(alpha_n,1/beta_n)
 
     def _get_statistics(self,data):
         if isinstance(data,np.ndarray):
@@ -895,7 +895,7 @@ class NegativeBinomial(GibbsSampling):
         raw[x>=0] = special.gammaln(self.r + xnn) - special.gammaln(self.r) - special.gammaln(xnn+1)\
                 + self.r*np.log(1-self.p) + xnn*np.log(self.p)
         raw[x<0] = -np.inf
-        return raw if raw.size > 1 else raw[0]
+        return raw if isinstance(x,np.ndarray) else raw[0]
 
     @classmethod
     def _set_up_logF(cls):
