@@ -156,7 +156,6 @@ class Mixture(ModelGibbsSampling, ModelMeanField, Distribution):
 
 class CollapsedMixture(ModelGibbsSampling):
     __metaclass__ = abc.ABCMeta
-
     def _get_counts(self,k):
         return sum(l._get_counts(k) for l in self.labels_list)
 
