@@ -903,7 +903,7 @@ class NegativeBinomial(GibbsSampling):
             # actually indexes logF[0,0] to correspond to log(F(1,1)) in Zhou
             # paper, but keeps track of that alignment with the other code!
             # especially arange(1,...), only using nonzero data and shifting it
-            SIZE = 250
+            SIZE = 500
 
             logF = -np.inf * np.ones((SIZE,SIZE))
             logF[0,0] = 0.
