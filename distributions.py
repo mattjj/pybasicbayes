@@ -875,6 +875,23 @@ class NegativeBinomial(GibbsSampling):
             self.r = np.random.gamma(self.k_0,self.theta_0)
         else:
             data = flattendata(data)
+            N = len(data)
+            for itr in range(niter):
+                ### resample r
+                # TODO TODO put in low level routine CRT
+                msum = 0
+                for n in data:
+                    msum += (np.random.rand(size=n) < self.r/(np.arange(n)+self.r-1)).sum()
+                self.r = np.random.gamma(self.alpha_0 + msum, self.beta_0 - N*np.log(1-self.p))
+                ### resample p
+                self.p = np.random.beta(self.alpha_0 + data.sum(), self.beta_0 + N*self.r)
+
+    def resample_logseriesaug(self,data=[],niter=20):
+        if getdatasize(data) == 0:
+            self.p = np.random.beta(self.alpha_0,self.beta_0)
+            self.r = np.random.gamma(self.k_0,self.theta_0)
+        else:
+            data = flattendata(data)
             N = data.shape[0]
             logF = self.logF
             L_i = np.zeros(N)
