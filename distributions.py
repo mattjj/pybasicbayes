@@ -5,6 +5,7 @@ import scipy.stats as stats
 import scipy.special as special
 from matplotlib import pyplot as plt
 import abc
+from warnings import warn
 
 from abstractions import Distribution, GibbsSampling,\
         MeanField, Collapsed
@@ -608,7 +609,7 @@ class Multinomial(GibbsSampling, MeanField):
     def __repr__(self):
         return 'Multinomial(weights=%s)' % (self.weights,)
 
-    def __init__(self,alphav_0=None,weights=None,alpha_0=None,K=None):
+    def __init__(self,weights=None,alpha_0=None,alphav_0=None,K=None):
         assert (isinstance(alphav_0,np.ndarray) and alphav_0.ndim == 1) ^ \
                 (K is not None and alpha_0 is not None)
 
@@ -684,6 +685,38 @@ class Multinomial(GibbsSampling, MeanField):
         else:
             counts = sum(w.sum(0) for w in weights)
         return counts,
+
+
+class MultinomialConcentration(Multinomial):
+    '''
+    Multinomial with resampling of the symmetric Dirichlet concentration
+    parameter.
+
+        concentration ~ Gamma(alpha_0,beta_0)
+
+    The Dirichlet prior over pi is then
+
+        pi ~ Dir(concentration/K)
+    '''
+    def __init__(self,alpha_0,beta_0,K,concentration=None,weights=None):
+        self.concentration = DirGamma(alpha_0=alpha_0,beta_0=beta_0,
+                concentration=concentration)
+        super(MultinomialConcentration,self).__init__(alpha_0=self.concentration.concentration,
+                K=K,weights=weights)
+
+    def resample(self,data=[],niter=30):
+        # NOTE: data is a single set of labels
+        counts = np.bincount(data)
+        counts = counts[counts > 0]
+
+        for itr in range(niter):
+            self.concentration.resample(counts,niter=1)
+            self.alphav_0 = np.ones(self.K) * self.concentration.concentration
+            super(MultinomialConcentration,self).resample(data)
+
+    def meanfieldupdate(self,*args,**kwargs):
+        warn('MeanField not implemented for %s; concentration parameter will stay fixed')
+        super(MultinomialConcentration,self).meanfieldupdate(*args,**kwargs)
 
 
 class Geometric(GibbsSampling, Collapsed):
@@ -945,93 +978,122 @@ class CRPGamma(GibbsSampling):
     and appendix C of Emily Fox's PhD thesis
     the notation of w's and s's follows from the HDP paper
     '''
-    # NOTE: I tend to pass 1/scale into scipy and numpy functions, since we want
-    # the mean to be a/b (as on wikipedia) and not a*b as numpy/scipy do with
-    # their scale arg
+    def __repr__(self):
+        return 'CRPGamma(concentration=%0.2f)' % self.concentration
+
     def __init__(self,alpha_0,beta_0,concentration=None):
-        self.a = alpha_0
-        self.b = beta_0
+        self.alpha_0 = alpha_0
+        self.beta_0 = beta_0
 
         if concentration is not None:
             self.concentration = concentration
         else:
-            self.resample()
+            self.resample(niter=1)
 
     def log_likelihood(self,x):
         raise NotImplementedError, 'product of gammas' # TODO
 
-    def rvs(self,size=None):
-        raise NotImplementedError, 'set of CRPs' # TODO
+    def rvs(self,customer_counts):
+        '''
+        Number of distinct tables. Not complete CRPs. customer_counts is a list
+        of customer counts, and len(customer_counts) is the number of
+        restaurants.
+        '''
+        assert isinstance(customer_counts,list) or isinstance(customer_counts,int)
+        if isinstance(customer_counts,int):
+            customer_counts = [customer_counts]
 
-    def resample(self,data=[],niter=10):
+        restaurants = []
+        for num in customer_counts:
+            tables = []
+            for c in range(num):
+                newidx = sample_discrete(np.array(tables + [self.concentration]))
+                if newidx == len(tables):
+                    tables += [1]
+                else:
+                    tables[newidx] += 1
+            restaurants.append(tables)
+        return restaurants if len(restaurants) > 1 else restaurants[0]
+
+    def resample(self,data=[],niter=30):
         for itr in range(niter):
             alpha_n, beta_n = self._posterior_hypparams(*self._get_statistics(data))
             self.concentration = np.random.gamma(alpha_n,scale=1./beta_n)
 
     def _posterior_hypparams(self,sample_numbers,total_num_distinct):
-        if sample_numbers > 0:
+        # NOTE: this is a stochastic function
+        if total_num_distinct > 0:
             wvec = np.random.beta(self.concentration+1,sample_numbers)
             svec = np.array(stats.bernoulli.rvs(sample_numbers/(sample_numbers+self.concentration)))
             return self.alpha_0 + total_num_distinct-svec.sum(), (self.beta_0 - np.log(wvec).sum())
         else:
             return self.alpha_0, self.beta_0
 
-    def _get_statistics(data):
-        # data is a list of CRP samples, each of which is written as counts of
-        # customers at tables, i.e.
-        # [5 7 2 ... 3 0 0 0 0 0 ... ]
-        # each CRP sample in the list has to be referring to the same indices
-        # but order doesn't matter (it can be before or after the size-biased
-        # permutation...
-        assert isinstance(data,np.ndarray) or \
-                (isinstance(data,list) and all(isinstance(d,np.ndarray) for d in data))
-
-        if isinstance(data,np.ndarray):
-            sample_numbers = np.array(data.sum())
-            total_num_distinct = len(set(data))
+    def _get_statistics(self,data):
+        # data is a list of CRP samples, each of which is written as a list of
+        # counts of customers at tables, i.e.
+        # [5 7 2 ... 1 ]
+        assert isinstance(data,list)
+        if len(data) == 0:
+            sample_numbers = 0
+            total_num_distinct = 0
         else:
-            if len(data) > 0:
-                sample_numbers = np.array([d.sum() for d in data])
-                total_num_distinct = len(reduce(set.union,(set(d) for d in data)))
+            if isinstance(data[0],list):
+                sample_numbers = np.array(map(sum,data))
+                total_num_distinct = sum(map(len,data))
             else:
-                sample_numbers = 0
-                total_num_distinct = 0
+                sample_numbers = np.array(sum(data))
+                total_num_distinct = len(data)
         return sample_numbers, total_num_distinct
 
 
 class DirGamma(CRPGamma):
     '''
-    Implements a Gamma(a,b) prior over finite dirichlet concentration parameter,
-    which works by splitting the atoms back into infinite-restaurant table
-    counts and then doing CRP concentration parameter resampling. (Marginalizes
-    out the weights pi.)
+    Implements a Gamma(alpha_0,beta_0) prior over finite dirichlet concentration
+    parameter. The concentration is scaled according to the weak-limit according
+    to the number of dimensions K.
+
+    For each set of counts i, the model is
+        concentration ~ Gamma(alpha_0,beta_0)
+        pi_i ~ Dir(concentration/K)
+        data_i ~ Multinomial(pi_i)
     '''
-    def resample(self,data=[],niter=10):
+    def __repr__(self):
+        return 'DirGamma(concentration=%0.2f/%d)' % (self.concentration*self.K,self.K)
+
+    def __init__(self,K,alpha_0,beta_0,concentration=None):
+        self.K = K
+        super(DirGamma,self).__init__(alpha_0=alpha_0,beta_0=beta_0,
+                concentration=concentration)
+
+    def rvs(self,sample_counts):
+        if isinstance(sample_counts,int):
+            sample_counts = [sample_counts]
+        out = np.empty((len(sample_counts),self.K),dtype=int)
+        for idx,c in enumerate(sample_counts):
+            out[idx] = np.random.multinomial(c,
+                np.random.dirichlet(self.concentration * np.ones(self.K)))
+        return out if out.shape[0] > 1 else out[0]
+
+    def resample(self,data=[],niter=50):
+        # TODO don't run the loop if no data
         for itr in range(niter):
-            super(DirGamma,self).resample(data)
+            super(DirGamma,self).resample(data,niter=1)
+            self.concentration /= self.K
 
     def _get_statistics(self,data):
-        # data is an array of counts or a list of them
-        assert isinstance(data,np.ndarray) or \
-                isinstance(data,list) and all(isinstance(d,np.ndarray) for d in data)
-
-        if isinstance(data,np.ndarray):
-            counts = np.array(data,ndmin=2)
-        else:
-            counts = np.array(data)
+        counts = np.array(data,ndmin=2)
 
         # sample m's
-        if counts.size == 0:
+        if counts.sum() == 0:
             return 0, 0
         else:
-            m = np.zeros(counts.shape)
-            # splits tables by running CRP 'new table' process forwards
-            # TODO extend to HDP functionality by adding reweighted columns
+            m = np.zeros(counts.shape,dtype=int)
+            # TODO extend to HDP by allowing different column weights
             for (rowidx,colidx), val in np.ndenumerate(counts):
-                n = 0.
-                for i in range(val):
-                    m[rowidx,colidx] += np.random.random() < self.concentration / (n+self.concentration)
-                    n += 1
+                for n in range(val):
+                    m[rowidx,colidx] += np.random.random() < \
+                            self.concentration*self.K / (n+self.concentration*self.K)
             return counts.sum(1), m.sum()
 
 
