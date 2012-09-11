@@ -894,8 +894,6 @@ class NegativeBinomial(GibbsSampling):
         self.alpha_0 = alpha_0
         self.beta_0 = beta_0
 
-        self._set_up_logF()
-
         if r is None or p is None:
             self.resample()
         else:
@@ -947,20 +945,20 @@ class NegativeBinomial(GibbsSampling):
         raw[x<0] = -np.inf
         return raw if isinstance(x,np.ndarray) else raw[0]
 
-    @classmethod
-    def _set_up_logF(cls):
-        if not hasattr(cls,'logF'):
-            # actually indexes logF[0,0] to correspond to log(F(1,1)) in Zhou
-            # paper, but keeps track of that alignment with the other code!
-            # especially arange(1,...), only using nonzero data and shifting it
-            SIZE = 500
+    # @classmethod
+    # def _set_up_logF(cls):
+    #     if not hasattr(cls,'logF'):
+    #         # actually indexes logF[0,0] to correspond to log(F(1,1)) in Zhou
+    #         # paper, but keeps track of that alignment with the other code!
+    #         # especially arange(1,...), only using nonzero data and shifting it
+    #         SIZE = 500
 
-            logF = -np.inf * np.ones((SIZE,SIZE))
-            logF[0,0] = 0.
-            for m in range(1,logF.shape[0]):
-                prevrow = np.exp(logF[m-1] - logF[m-1].max())
-                logF[m] = np.log(np.convolve(prevrow,[0,m,1],'same')) + logF[m-1].max()
-            cls.logF = logF
+    #         logF = -np.inf * np.ones((SIZE,SIZE))
+    #         logF[0,0] = 0.
+    #         for m in range(1,logF.shape[0]):
+    #             prevrow = np.exp(logF[m-1] - logF[m-1].max())
+    #             logF[m] = np.log(np.convolve(prevrow,[0,m,1],'same')) + logF[m-1].max()
+    #         cls.logF = logF
 
 
 ################################
