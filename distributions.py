@@ -912,14 +912,14 @@ class NegativeBinomial(GibbsSampling):
             for itr in range(niter):
                 ### resample r
                 # TODO TODO put in low level routine CRT
-                msum = 0
+                msum = 0.
                 for n in data:
-                    msum += (np.random.rand(size=n) < self.r/(np.arange(n)+self.r-1)).sum()
-                self.r = np.random.gamma(self.alpha_0 + msum, self.beta_0 - N*np.log(1-self.p))
+                    msum += (np.random.rand(n) < self.r/(np.arange(n)+self.r)).sum()
+                self.r = np.random.gamma(self.k_0 + msum, 1/(1/self.theta_0 - N*np.log(1-self.p)))
                 ### resample p
                 self.p = np.random.beta(self.alpha_0 + data.sum(), self.beta_0 + N*self.r)
 
-    def resample_logseriesaug(self,data=[],niter=20):
+    def _resample_logseriesaug(self,data=[],niter=20):
         if getdatasize(data) == 0:
             self.p = np.random.beta(self.alpha_0,self.beta_0)
             self.r = np.random.gamma(self.k_0,self.theta_0)
