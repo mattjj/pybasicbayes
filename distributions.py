@@ -578,16 +578,19 @@ class ScalarGaussianFixedvar(ScalarGaussian, GibbsSampling):
             xbar = None
         return n, xbar
 
-    def max_likelihood(self,data):
-        raise NotImplementedError
-
 
 class ScalarGaussianMaxLikelihood(ScalarGaussian):
-    def max_likelihood(self,data):
-        assert getdatasize(data) > 0
+    def max_likelihood(self,data,weights=None):
         data = flattendata(data)
-        self.mu = data.mean()
-        self.sigmasq = data.var()
+
+        if weights is not None:
+            weights = flattendata(weights)
+        else:
+            weights = np.ones(data.shape)
+
+        weightsum = weights.sum()
+        self.mu = np.dot(weights,data) / weightsum
+        self.sigmasq = np.dot(weights,(data-self.mu)**2) / weightsum
 
 
 ##############
