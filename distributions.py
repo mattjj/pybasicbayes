@@ -488,7 +488,7 @@ class ScalarGaussianNIX(ScalarGaussian, GibbsSampling, Collapsed):
 # TODO ScalarGaussianNIG
 
 
-class ScalarGaussianNonconjNIX(ScalarGaussian, GibbsSampling): # TODO test me
+class ScalarGaussianNonconjNIX(ScalarGaussian, GibbsSampling):
     '''
     Non-conjugate separate priors on mean and variance parameters, via
     mu ~ Normal(mu_0,tausq_0)
