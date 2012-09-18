@@ -8,7 +8,7 @@ import abc
 from warnings import warn
 
 from abstractions import Distribution, GibbsSampling,\
-        MeanField, Collapsed
+        MeanField, Collapsed, MaxLikelihood
 from util.stats import sample_niw, invwishart_entropy,\
         invwishart_log_partitionfunction, sample_discrete,\
         sample_discrete_from_log, getdatasize, flattendata
@@ -485,10 +485,7 @@ class ScalarGaussianNIX(ScalarGaussian, GibbsSampling, Collapsed):
         return stats.t.logpdf(y,nu_n,loc=mu_n,scale=np.sqrt((1+kappa_n)*sigmasq_n/kappa_n))
 
 
-# TODO ScalarGaussianNIG
-
-
-class ScalarGaussianNonconjNIX(ScalarGaussian, GibbsSampling): # TODO test me
+class ScalarGaussianNonconjNIX(ScalarGaussian, GibbsSampling):
     '''
     Non-conjugate separate priors on mean and variance parameters, via
     mu ~ Normal(mu_0,tausq_0)
@@ -580,6 +577,17 @@ class ScalarGaussianFixedvar(ScalarGaussian, GibbsSampling):
         else:
             xbar = None
         return n, xbar
+
+    def max_likelihood(self,data):
+        raise NotImplementedError
+
+
+class ScalarGaussianMaxLikelihood(ScalarGaussian):
+    def max_likelihood(self,data):
+        assert getdatasize(data) > 0
+        data = flattendata(data)
+        self.mu = data.mean()
+        self.sigmasq = data.var()
 
 
 ##############
