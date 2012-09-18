@@ -909,11 +909,10 @@ class NegativeBinomial(GibbsSampling):
             N = len(data)
             for itr in range(niter):
                 ### resample r
-                # TODO TODO put in low level routine CRT
                 msum = 0.
                 for n in data:
                     msum += (np.random.rand(n) < self.r/(np.arange(n)+self.r)).sum()
-                self.r = np.random.gamma(self.k_0 + msum, 1/(1/self.theta_0 - N*np.log(1-self.p)))
+                self.r = np.random.gamma(self.k_0 + self.msum, 1/(1/self.theta_0 - N*np.log(1-self.p)))
                 ### resample p
                 self.p = np.random.beta(self.alpha_0 + data.sum(), self.beta_0 + N*self.r)
 
