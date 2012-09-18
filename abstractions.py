@@ -70,9 +70,8 @@ class Collapsed(Distribution):
 class MaxLikelihood(Distribution):
     __metaclass__ = abc.ABCMeta
 
-    # should be an abstract classmethod, but Python 2.7.3 doesn't have them!
     @abc.abstractmethod
-    def max_likelihood_fit(cls,data):
+    def max_likelihood(self,data):
         # returns an instance of the object with hyperparameter members set to
         # None
         pass
@@ -118,12 +117,16 @@ class ModelMeanField(Model):
     __metaclass__ = abc.ABCMeta
 
     @abc.abstractmethod
-    def meanfield_coordinate_descent_step(self): # TODO convergence tol?
+    def meanfield_coordinate_descent_step(self):
+        # returns variational lower bound after update
         pass
 
-    # TODO VLB?
 
-# TODO parallel gibbs sampling model algorithm interface... uses ipython and
-# (hopefully custom) pickling
+class ModelEM(Model):
+    __metaclass__ = abc.ABCMeta
+
+    @abc.abstractmethod
+    def EM_step(self):
+        pass
 
 # TODO hybrid model inference
