@@ -60,8 +60,10 @@ class Labels(object):
 
         logpitilde = self.weights.expected_log_likelihood(np.arange(len(self.components)))
 
-        q_entropy = -1*(prod).sum()
+        q_entropy = min(-1*(prod.sum()),0.) # numerical
         p_avgengy = (self.r*logpitilde).sum()
+
+        assert q_entropy <= 0 and p_avgengy <= 0
 
         return p_avgengy + q_entropy
 

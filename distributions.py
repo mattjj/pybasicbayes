@@ -8,7 +8,7 @@ import abc
 from warnings import warn
 
 from abstractions import Distribution, GibbsSampling,\
-        MeanField, Collapsed, MaxLikelihood
+        MeanField, Collapsed
 from util.stats import sample_niw, invwishart_entropy,\
         invwishart_log_partitionfunction, sample_discrete,\
         sample_discrete_from_log, getdatasize, flattendata

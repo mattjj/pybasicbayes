@@ -115,8 +115,8 @@ class Mixture(ModelGibbsSampling, ModelMeanField, Distribution):
 
         # finally, need the evidence term in the vlb
         for l in self.labels_list:
-            vlb += 0.5 * (l.r.sum(0) * np.array([c.expected_log_likelihood(l.data).sum()
-                for c in self.components])).sum()
+            vlb += 0.5 * np.sum([(r*c.expected_log_likelihood(l.data)).sum()
+                for c,r in zip(self.components,l.r.T)])
 
         # add in symmetry factor (if we're actually symmetric)
         if len(set(self.weights.weights)) == 1 and \
