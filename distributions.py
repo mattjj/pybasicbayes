@@ -597,7 +597,6 @@ class ScalarGaussianMaxLikelihood(ScalarGaussian):
 #  Discrete  #
 ##############
 
-
 class Multinomial(GibbsSampling, MeanField):
     '''
     This class represents a multinomial distribution over labels, where the
