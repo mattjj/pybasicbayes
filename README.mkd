@@ -1,0 +1,94 @@
+This library provides objects that model probability distributions and the
+related operations that are common in generative Bayesian modeling and Bayesian
+inference, including Gibbs sampling and variational mean field algorithms. The
+file `abstractions.py` describes the queries a distribution must support to be
+used in each algorithm, as well as an API for models, which compose the
+distribution objects.
+
+The file `models.py` shows how to construct mixture models building on the
+distribution objects in this library. For example, to generate data from a
+Gaussian mixture model, we might set some hyperparameters, construct a
+`Mixture` object, and then ask it to randomly generate some data from the
+prior:
+
+```python
+import numpy as np
+from pybasicbayes import models, distributions
+
+# hyperparameters
+alpha_0 = 2.
+obs_hypparams = dict(mu_0=np.zeros(2),sigma_0=np.eye(2),kappa_0=0.05,nu_0=5)
+
+priormodel = models.Mixture(alpha_0=alpha_0,
+        components=[distributions.Gaussian(**obs_hypparams) for itr in range(30)])
+
+data = priormodel.rvs(200)
+
+del priormodel
+```
+
+If we throw away the prior model at the end, we're left just with the data,
+which look like this:
+
+```python
+from matplotlib import pyplot as plt
+plt.figure()
+plt.plot(data[:,0],data[:,1],'kx')
+plt.title('data')
+plt.show()
+```
+
+![randomly generated mixture model data](http://www.mit.edu/~mattjj/github/pybasicbayes/data.png)
+
+Imagine we loaded these data from some measurements file and we wanted to fit a
+mixture model to it. We can create a new `Mixture` and run inference to get a
+representation of the posterior distribution over mixture models conditioned on
+observing these data:
+
+```python
+posteriormodel = models.Mixture(alpha_0=alpha_0,
+        components=[distributions.Gaussian(**obs_hypparams) for itr in range(30)])
+
+posteriormodel.add_data(data)
+
+# since pybasicbayes implements both Gibbs sampling and variational mean field,
+# we can use both in a hybrid algorithm!
+
+import copy
+from pybasicbayes.util import progprint_xrange
+
+allscores = [] # variational lower bounds on the margina data log likelihood
+allmodels = []
+for superitr in range(5):
+    # Gibbs sampling to wander around the posterior
+    print 'Gibbs Sampling'
+    for itr in progprint_xrange(50):
+        posteriormodel.resample_model()
+
+    # mean field to lock onto a mode
+    print 'Mean Field'
+    scores = [posteriormodel.meanfield_coordinate_descent_step()
+                for itr in progprint_xrange(100)]
+
+    allscores.append(scores)
+    allmodels.append(copy.deepcopy(posteriormodel))
+
+# now we can plot all the score trajectories
+plt.figure()
+for vals in allvals:
+    plt.plot(vals)
+plt.title('model vlb scores vs iteration')
+
+import operator
+models_and_scores = sorted([(m,s[-1]) for m,s
+    in zip(allmodels,allscores)],key=operator.itemgetter(1),reverse=True)
+
+models_and_scores[0][0].plot()
+plt.title('best model')
+```
+
+![best fit model and data](http://www.mit.edu/~mattjj/github/pybasicbayes/modelfit.png)
+
+![model vlb scores vs iteration](http://www.mit.edu/~mattjj/github/pybasicbayes/modelscore.png)
+
+See the file `test.py` for the code for this demo.

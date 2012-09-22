@@ -5,14 +5,14 @@ from matplotlib import pyplot as plt
 import copy
 import operator
 
-from pymattutil.text import progprint_xrange
 from pybasicbayes import models, distributions
+from util.text import progprint_xrange
 
 alpha_0=2.
-obs_hypparams=dict(mu_0=np.zeros(2),sigma_0=np.eye(2),kappa_0=0.1,nu_0=5)
+obs_hypparams=dict(mu_0=np.zeros(2),sigma_0=np.eye(2),kappa_0=0.05,nu_0=5)
 
 priormodel = models.Mixture(alpha_0=alpha_0,
-        components=[distributions.Gaussian(**obs_hypparams) for itr in range(50)])
+        components=[distributions.Gaussian(**obs_hypparams) for itr in range(30)])
 
 data = priormodel.rvs(200)
 
@@ -23,30 +23,36 @@ plt.plot(data[:,0],data[:,1],'kx')
 plt.title('data')
 
 posteriormodel = models.Mixture(alpha_0=alpha_0,
-        components=[distributions.Gaussian(**obs_hypparams) for itr in range(50)])
+        components=[distributions.Gaussian(**obs_hypparams) for itr in range(30)])
 
 posteriormodel.add_data(data)
 
-allvals = []
+allscores = []
 allmodels = []
 for superitr in range(5):
-    vals = []
-    for itr in progprint_xrange(100):
-        vals.append(posteriormodel.meanfield_coordinate_descent_step())
-    # print '%d iterations' % (itr+1)
-    allvals.append(vals)
-    allmodels.append(copy.deepcopy(posteriormodel))
-    for itr in range(50):
+    # Gibbs sampling to wander around the posterior
+    print 'Gibbs Sampling'
+    for itr in progprint_xrange(50):
         posteriormodel.resample_model()
+
+    # mean field to lock onto a mode
+    print 'Mean Field'
+    scores = [posteriormodel.meanfield_coordinate_descent_step()
+                for itr in progprint_xrange(100)]
+
+    allscores.append(scores)
+    allmodels.append(copy.deepcopy(posteriormodel))
 
 
 plt.figure()
-for vals in allvals:
-    plt.plot(vals)
+for scores in allscores:
+    plt.plot(scores)
+plt.title('model vlb scores vs iteration')
 
-models_and_scores = sorted([(i,m,v) for i,(m,v)
-    in enumerate(zip(allmodels,allvals))],key=operator.itemgetter(1),reverse=True)
+models_and_scores = sorted([(m,s[-1]) for m,s
+    in zip(allmodels,allscores)],key=operator.itemgetter(1),reverse=True)
 
-models_and_scores[0][1].plot()
+models_and_scores[0][0].plot()
+plt.title('best model')
 
 plt.show()
