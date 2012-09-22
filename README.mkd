@@ -61,7 +61,7 @@ inference algorithms, we can use both together in a hybrid algorithm.
 import copy
 from pybasicbayes.util import progprint_xrange
 
-allscores = [] # variational lower bounds on the margina data log likelihood
+allscores = [] # variational lower bounds on the marginal data log likelihood
 allmodels = []
 for superitr in range(5):
     # Gibbs sampling to wander around the posterior
