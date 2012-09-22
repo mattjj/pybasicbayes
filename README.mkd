@@ -19,11 +19,14 @@ from pybasicbayes import models, distributions
 alpha_0 = 2.
 obs_hypparams = dict(mu_0=np.zeros(2),sigma_0=np.eye(2),kappa_0=0.05,nu_0=5)
 
+# create the model
 priormodel = models.Mixture(alpha_0=alpha_0,
         components=[distributions.Gaussian(**obs_hypparams) for itr in range(30)])
 
+# generate some data
 data = priormodel.rvs(200)
 
+# delete the model
 del priormodel
 ```
 
@@ -50,10 +53,12 @@ posteriormodel = models.Mixture(alpha_0=alpha_0,
         components=[distributions.Gaussian(**obs_hypparams) for itr in range(30)])
 
 posteriormodel.add_data(data)
+```
 
-# since pybasicbayes implements both Gibbs sampling and variational mean field,
-# we can use both in a hybrid algorithm!
+Since pybasicbayes implements both Gibbs sampling and variational mean field
+inference algorithms, we can use both together in a hybrid algorithm.
 
+```python
 import copy
 from pybasicbayes.util import progprint_xrange
 
