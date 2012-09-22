@@ -73,22 +73,33 @@ for superitr in range(5):
     allscores.append(scores)
     allmodels.append(copy.deepcopy(posteriormodel))
 
-# now we can plot all the score trajectories
+import operator
+models_and_scores = sorted([(m,s[-1]) for m,s
+    in zip(allmodels,allscores)],key=operator.itemgetter(1),reverse=True)
+```
+
+Now we can plot the score trajectories:
+
+```python
 plt.figure()
 for vals in allvals:
     plt.plot(vals)
 plt.title('model vlb scores vs iteration')
+```
 
-import operator
-models_and_scores = sorted([(m,s[-1]) for m,s
-    in zip(allmodels,allscores)],key=operator.itemgetter(1),reverse=True)
+![model vlb scores vs iteration](http://www.mit.edu/~mattjj/github/pybasicbayes/modelscore.png)
 
+And show the point estimate of the best model by calling the convenient `Mixture.plot()`:
+
+```python
 models_and_scores[0][0].plot()
 plt.title('best model')
 ```
 
 ![best fit model and data](http://www.mit.edu/~mattjj/github/pybasicbayes/modelfit.png)
 
-![model vlb scores vs iteration](http://www.mit.edu/~mattjj/github/pybasicbayes/modelscore.png)
+Since these are Bayesian methods, we have much more than just a point estimate
+for plotting: we have fit entire distributions, so we can query any confidence
+or marginal that we need.
 
 See the file `demo.py` for the code for this demo.
