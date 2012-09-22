@@ -38,7 +38,6 @@ from matplotlib import pyplot as plt
 plt.figure()
 plt.plot(data[:,0],data[:,1],'kx')
 plt.title('data')
-plt.show()
 ```
 
 ![randomly generated mixture model data](http://www.mit.edu/~mattjj/github/pybasicbayes/data.png)
