@@ -139,7 +139,7 @@ class Gaussian(GibbsSampling, MeanField, Collapsed):
     def _loglmbdatilde(self):
         # see Eq. 10.65 in Bishop
         return special.digamma((self._nu_mf-np.arange(self.D))/2).sum() \
-                + self.D*np.log(2) - np.log(np.linalg.det(self._sigma_mf))
+                + self.D*np.log(2) - np.linalg.slogdet(self._sigma_mf)[1]
 
     def _get_weighted_statistics(self,data,weights):
         # NOTE: _get_statistics is special case with all weights being 1

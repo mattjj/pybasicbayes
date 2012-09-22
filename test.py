@@ -29,7 +29,7 @@ posteriormodel.add_data(data)
 
 allvals = []
 allmodels = []
-for superitr in range(10):
+for superitr in range(5):
     vals = []
     for itr in progprint_xrange(100):
         vals.append(posteriormodel.meanfield_coordinate_descent_step())
