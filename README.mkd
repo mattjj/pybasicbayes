@@ -91,4 +91,4 @@ plt.title('best model')
 
 ![model vlb scores vs iteration](http://www.mit.edu/~mattjj/github/pybasicbayes/modelscore.png)
 
-See the file `test.py` for the code for this demo.
+See the file `demo.py` for the code for this demo.
