@@ -648,7 +648,8 @@ class Multinomial(GibbsSampling, MeanField):
     ### Gibbs sampling
 
     def resample(self,data=[]):
-        self.weights = np.random.dirichlet(self._posterior_hypparams(*self._get_statistics(data)))
+        hypparams = self._posterior_hypparams(*self._get_statistics(data))
+        self.weights = np.random.dirichlet(np.where(hypparams>1e-2,hypparams,1e-2))
 
     def _get_statistics(self,data):
         assert isinstance(data,np.ndarray) or \
@@ -702,29 +703,30 @@ class MultinomialConcentration(Multinomial):
     Multinomial with resampling of the symmetric Dirichlet concentration
     parameter.
 
-        concentration ~ Gamma(alpha_0,beta_0)
+        concentration ~ Gamma(a_0,b_0)
 
     The Dirichlet prior over pi is then
 
         pi ~ Dir(concentration/K)
     '''
-    def __init__(self,alpha_0,beta_0,K,concentration=None,weights=None):
-        self.concentration = DirGamma(alpha_0=alpha_0,beta_0=beta_0,
+    def __init__(self,a_0,b_0,K,concentration=None,weights=None):
+        self.concentration = DirGamma(a_0=a_0,b_0=b_0,K=K,
                 concentration=concentration)
         super(MultinomialConcentration,self).__init__(alpha_0=self.concentration.concentration,
                 K=K,weights=weights)
 
-    def resample(self,data=[],niter=30):
-        # NOTE: data is a single set of labels
-        counts = np.bincount(data)
-        counts = counts[counts > 0]
+    def resample(self,data=[],niter=10):
+        if isinstance(data,list):
+            counts = map(np.bincount,data)
+        else:
+            counts = np.bincount(data)
 
         for itr in range(niter):
             self.concentration.resample(counts,niter=1)
             self.alphav_0 = np.ones(self.K) * self.concentration.concentration
             super(MultinomialConcentration,self).resample(data)
 
-    def meanfieldupdate(self,*args,**kwargs):
+    def meanfieldupdate(self,*args,**kwargs): # TODO
         warn('MeanField not implemented for %s; concentration parameter will stay fixed')
         super(MultinomialConcentration,self).meanfieldupdate(*args,**kwargs)
 
@@ -988,9 +990,9 @@ class CRPGamma(GibbsSampling):
     def __repr__(self):
         return 'CRPGamma(concentration=%0.2f)' % self.concentration
 
-    def __init__(self,alpha_0,beta_0,concentration=None):
-        self.alpha_0 = alpha_0
-        self.beta_0 = beta_0
+    def __init__(self,a_0,b_0,concentration=None):
+        self.a_0 = a_0
+        self.b_0 = b_0
 
         if concentration is not None:
             self.concentration = concentration
@@ -1024,17 +1026,17 @@ class CRPGamma(GibbsSampling):
 
     def resample(self,data=[],niter=30):
         for itr in range(niter):
-            alpha_n, beta_n = self._posterior_hypparams(*self._get_statistics(data))
-            self.concentration = np.random.gamma(alpha_n,scale=1./beta_n)
+            a_n, b_n = self._posterior_hypparams(*self._get_statistics(data))
+            self.concentration = np.random.gamma(a_n,scale=1./b_n)
 
     def _posterior_hypparams(self,sample_numbers,total_num_distinct):
         # NOTE: this is a stochastic function
         if total_num_distinct > 0:
             wvec = np.random.beta(self.concentration+1,sample_numbers)
             svec = np.array(stats.bernoulli.rvs(sample_numbers/(sample_numbers+self.concentration)))
-            return self.alpha_0 + total_num_distinct-svec.sum(), (self.beta_0 - np.log(wvec).sum())
+            return self.a_0 + total_num_distinct-svec.sum(), (self.b_0 - np.log(wvec).sum())
         else:
-            return self.alpha_0, self.beta_0
+            return self.a_0, self.b_0
 
     def _get_statistics(self,data):
         # data is a list of CRP samples, each of which is written as a list of
@@ -1056,21 +1058,21 @@ class CRPGamma(GibbsSampling):
 
 class DirGamma(CRPGamma):
     '''
-    Implements a Gamma(alpha_0,beta_0) prior over finite dirichlet concentration
+    Implements a Gamma(a_0,b_0) prior over finite dirichlet concentration
     parameter. The concentration is scaled according to the weak-limit according
     to the number of dimensions K.
 
     For each set of counts i, the model is
-        concentration ~ Gamma(alpha_0,beta_0)
+        concentration ~ Gamma(a_0,b_0)
         pi_i ~ Dir(concentration/K)
         data_i ~ Multinomial(pi_i)
     '''
     def __repr__(self):
         return 'DirGamma(concentration=%0.2f/%d)' % (self.concentration*self.K,self.K)
 
-    def __init__(self,K,alpha_0,beta_0,concentration=None):
+    def __init__(self,K,a_0,b_0,concentration=None):
         self.K = K
-        super(DirGamma,self).__init__(alpha_0=alpha_0,beta_0=beta_0,
+        super(DirGamma,self).__init__(a_0=a_0,b_0=b_0,
                 concentration=concentration)
 
     def rvs(self,sample_counts):
@@ -1095,11 +1097,10 @@ class DirGamma(CRPGamma):
         if counts.sum() == 0:
             return 0, 0
         else:
-            m = np.zeros(counts.shape,dtype=int)
             # TODO extend to HDP by allowing different column weights
-            for (rowidx,colidx), val in np.ndenumerate(counts):
-                for n in range(val):
-                    m[rowidx,colidx] += np.random.random() < \
-                            self.concentration*self.K / (n+self.concentration*self.K)
-            return counts.sum(1), m.sum()
+            m = 0
+            for (i,j), n in np.ndenumerate(counts):
+                m += (np.random.rand(n) < self.concentration*self.K \
+                        / (np.arange(n)+self.concentration*self.K)).sum()
+            return counts.sum(1), m
 

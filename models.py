@@ -8,17 +8,23 @@ import abc
 
 from abstractions import ModelGibbsSampling, ModelMeanField, Distribution
 from abstractions import GibbsSampling, MeanField, Collapsed
-from distributions import Multinomial
+from distributions import Multinomial, MultinomialConcentration
 from internals.labels import Labels, CRPLabels
 
 class Mixture(ModelGibbsSampling, ModelMeanField, Distribution):
     '''
     This class is for mixtures of other distributions.
     '''
-    def __init__(self,alpha_0,components,weights=None):
+    def __init__(self,components,alpha_0=None,a_0=None,b_0=None,weights=None):
         assert len(components) > 0
+        assert (alpha_0 is not None) ^ (a_0 is not None and b_0 is not None)
+
         self.components = components
-        self.weights = Multinomial(alpha_0=alpha_0,K=len(components),weights=weights)
+
+        if alpha_0 is not None:
+            self.weights = Multinomial(alpha_0=alpha_0,K=len(components),weights=weights)
+        else:
+            self.weights = MultinomialConcentration(a_0=a_0,b_0=b_0,K=len(components),weights=weights)
 
         self.labels_list = []
 
