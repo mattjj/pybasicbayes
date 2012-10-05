@@ -1031,6 +1031,8 @@ class CRPGamma(GibbsSampling):
 
     def _posterior_hypparams(self,sample_numbers,total_num_distinct):
         # NOTE: this is a stochastic function
+        sample_numbers = np.array(sample_numbers)
+        sample_numbers = sample_numbers[sample_numbers > 0]
         if total_num_distinct > 0:
             wvec = np.random.beta(self.concentration+1,sample_numbers)
             svec = np.array(stats.bernoulli.rvs(sample_numbers/(sample_numbers+self.concentration)))
