@@ -1084,11 +1084,20 @@ class DirGamma(CRPGamma):
                 np.random.dirichlet(self.concentration * np.ones(self.K)))
         return out if out.shape[0] > 1 else out[0]
 
-    def resample(self,data=[],niter=50):
-        # TODO don't run the loop if no data
-        for itr in range(niter):
+    def resample(self,data=[],niter=50,weighted_cols=None):
+        if weighted_cols is not None:
+            self.weighted_cols = weighted_cols
+        else:
+            self.weighted_cols = np.ones(self.K)
+
+        if getdatasize(data) > 0:
+            for itr in range(niter):
+                super(DirGamma,self).resample(data,niter=1)
+                self.concentration /= self.K
+        else:
             super(DirGamma,self).resample(data,niter=1)
             self.concentration /= self.K
+
 
     def _get_statistics(self,data):
         counts = np.array(data,ndmin=2)
@@ -1097,10 +1106,9 @@ class DirGamma(CRPGamma):
         if counts.sum() == 0:
             return 0, 0
         else:
-            # TODO extend to HDP by allowing different column weights
             m = 0
             for (i,j), n in np.ndenumerate(counts):
-                m += (np.random.rand(n) < self.concentration*self.K \
-                        / (np.arange(n)+self.concentration*self.K)).sum()
+                m += (np.random.rand(n) < self.concentration*self.K*self.weighted_cols[j] \
+                        / (np.arange(n)+self.concentration*self.K*self.weighted_cols[j])).sum()
             return counts.sum(1), m
 
