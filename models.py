@@ -11,7 +11,7 @@ from abstractions import GibbsSampling, MeanField, Collapsed
 from distributions import Multinomial, MultinomialConcentration
 from internals.labels import Labels, CRPLabels
 
-class Mixture(ModelGibbsSampling, ModelMeanField, Distribution):
+class Mixture(ModelGibbsSampling, ModelMeanField, GibbsSampling):
     '''
     This class is for mixtures of other distributions.
     '''
@@ -55,22 +55,12 @@ class Mixture(ModelGibbsSampling, ModelMeanField, Distribution):
         return self.weights.log_likelihood(np.arange(len(self.components))) + \
                 np.concatenate([c.log_likelihood(x) for c in self.components]).T
 
-    def resample(self,data):
+    def resample(self,data,niter=20):
         # acts like distribution resampling: doesn't remember data, but does
         # update instantiated parameters
-
-        # temporarily add the passed data
-        self.add_data(data) # this does one ``resampling'' step for labels
-        # we don't resample other labels that might be in labels_list
-
-        # now resample components
-        for idx, c in enumerate(self.components):
-            c.resample(data=[l.data[l.z == idx] for l in self.labels_list])
-
-        # and weights
-        self.weights.resample([l.z for l in self.labels_list])
-
-        # remove the passed data
+        self.add_data(data)
+        for itr in range(niter):
+            self.resample_model()
         self.labels_list.pop()
 
     ### Gibbs sampling

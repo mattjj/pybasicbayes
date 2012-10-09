@@ -6,7 +6,8 @@ import numpy.ma as ma
 from ..util.stats import sample_discrete_from_log, sample_discrete
 
 class Labels(object):
-    def __init__(self,components,weights,data=None,N=None,z=None):
+    def __init__(self,components,weights,data=None,N=None,z=None,
+            initialize_from_prior=True):
         assert data is not None or (N is not None and z is None)
 
         self.components = components
@@ -20,6 +21,8 @@ class Labels(object):
 
             if z is not None:
                 self.z = z
+            elif initialize_from_prior:
+                self._generate(len(data))
             else:
                 self.resample()
 
