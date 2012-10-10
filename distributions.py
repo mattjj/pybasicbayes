@@ -207,6 +207,7 @@ class Gaussian(GibbsSampling, MeanField, Collapsed):
 
     def plot(self,data=None,color='b',plot_params=True):
         from util.plot import project_data, plot_gaussian_projection, pca
+        data = flattendata(data)
         # if global projection vecs exist, use those
         # otherwise, when dim>2, do a pca on the data
         try:
@@ -405,9 +406,7 @@ class ScalarGaussian(Distribution):
         pass
 
     def plot(self,data=None,color='b',plot_params=True):
-        if data is not None:
-            pass
-        raise NotImplementedError
+        raise NotImplementedError # TODO
 
 
 class ScalarGaussianNIX(ScalarGaussian, GibbsSampling, Collapsed):
