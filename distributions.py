@@ -207,6 +207,7 @@ class Gaussian(GibbsSampling, MeanField, Collapsed):
 
     def plot(self,data=None,color='b',plot_params=True):
         from util.plot import project_data, plot_gaussian_projection, pca
+        data = flattendata(data)
         # if global projection vecs exist, use those
         # otherwise, when dim>2, do a pca on the data
         try:
@@ -242,15 +243,21 @@ class DiagonalGaussian(GibbsSampling):
     # hyperparameters on different components
 
     def __init__(self,mu_0,nus_0,alphas_0,betas_0,mu=None,sigmas=None):
-        D = mu_0.shape[0]
+        D = self.D = mu_0.shape[0]
         self.mu_0 = mu_0
+
         # all the s's refer to the fact that these are vectors of length
         # len(mu_0) OR scalars
+        if isinstance(nus_0,int) or isinstance(nus_0,float):
+            nus_0 = nus_0*np.ones(D)
+        if isinstance(alphas_0,int) or isinstance(alphas_0,float):
+            alphas_0 = alphas_0*np.ones(D)
+        if isinstance(betas_0,int) or isinstance(betas_0,float):
+            betas_0 = betas_0*np.ones(D)
+
         self.nus_0 = nus_0
         self.alphas_0 = alphas_0
         self.betas_0 = betas_0
-
-        self.D = D
 
         if mu is None or sigmas is None:
             self.resample()
@@ -297,10 +304,10 @@ class DiagonalGaussian(GibbsSampling):
                 data = np.reshape(data,(-1,D))
                 xbar = data.mean(0)
                 centered = data - xbar
-                sumsq = np.dot(centered.T,centered)
+                sumsq = np.diag(np.dot(centered.T,centered))
             else:
                 xbar = sum(np.reshape(d,(-1,D)).sum(0) for d in data) / n
-                sumsq = sum(((np.reshape(d,(-1,D)) - xbar)**2).sum(0) for d in data)
+                sumsq = np.diag(sum(((np.reshape(d,(-1,D)) - xbar)**2).sum(0) for d in data))
         else:
             xbar, sumsq = None, None
         return n, xbar, sumsq
@@ -399,9 +406,7 @@ class ScalarGaussian(Distribution):
         pass
 
     def plot(self,data=None,color='b',plot_params=True):
-        if data is not None:
-            pass
-        raise NotImplementedError
+        raise NotImplementedError # TODO
 
 
 class ScalarGaussianNIX(ScalarGaussian, GibbsSampling, Collapsed):
