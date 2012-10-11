@@ -228,6 +228,7 @@ class Gaussian(GibbsSampling, MeanField, Collapsed):
             plot_gaussian_projection(self.mu,self.sigma,vecs,color=color)
 
 
+# TODO collapsed, meanfield
 class DiagonalGaussian(GibbsSampling):
     '''
     Product of normal-inverse-gamma priors over mu (mean vector) and sigmas
@@ -313,6 +314,7 @@ class DiagonalGaussian(GibbsSampling):
         return n, xbar, sumsq
 
 
+# TODO collapsed, meanfield
 class IsotropicGaussian(GibbsSampling):
     '''
     Normal-Inverse-Gamma prior over mu (mean vector) and sigma (scalar

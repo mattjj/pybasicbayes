@@ -71,6 +71,7 @@ class Labels(object):
         return p_avgengy + q_entropy
 
 
+# TODO get counts/stats from model, as in pyhsmm direct assignment sampler
 class CRPLabels(object):
     def __init__(self,model,alpha_0,obs_distn,data=None,N=None):
         assert (data is not None) ^ (N is not None)

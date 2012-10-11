@@ -181,7 +181,6 @@ class CollapsedMixture(ModelGibbsSampling):
                             color=cmap(label_colors[label]),ls='None',marker='x')
 
 
-# TODO profile this
 class CRPMixture(CollapsedMixture):
     def __init__(self,alpha_0,obs_distn):
         assert isinstance(obs_distn,Collapsed)
@@ -191,6 +190,7 @@ class CRPMixture(CollapsedMixture):
         self.labels_list = []
 
     def add_data(self,data):
+        assert len(self.labels_list) == 0
         self.labels_list.append(CRPLabels(model=self,data=data,alpha_0=self.alpha_0,obs_distn=self.obs_distn))
 
     def resample_model(self):
