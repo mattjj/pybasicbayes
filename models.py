@@ -5,8 +5,9 @@ from matplotlib import pyplot as plt
 from matplotlib import cm
 import scipy.special as special
 import abc
+from warnings import warn
 
-from abstractions import ModelGibbsSampling, ModelMeanField, Distribution
+from abstractions import ModelGibbsSampling, ModelMeanField
 from abstractions import GibbsSampling, MeanField, Collapsed
 from distributions import Multinomial, MultinomialConcentration
 from internals.labels import Labels, CRPLabels
@@ -180,7 +181,6 @@ class CollapsedMixture(ModelGibbsSampling):
                             color=cmap(label_colors[label]),ls='None',marker='x')
 
 
-# TODO profile this
 class CRPMixture(CollapsedMixture):
     def __init__(self,alpha_0,obs_distn):
         assert isinstance(obs_distn,Collapsed)
@@ -190,6 +190,7 @@ class CRPMixture(CollapsedMixture):
         self.labels_list = []
 
     def add_data(self,data):
+        assert len(self.labels_list) == 0
         self.labels_list.append(CRPLabels(model=self,data=data,alpha_0=self.alpha_0,obs_distn=self.obs_distn))
 
     def resample_model(self):
@@ -197,6 +198,7 @@ class CRPMixture(CollapsedMixture):
             l.resample()
 
     def generate(self,N,keep=True):
+        warn('not fully implemented')
         # TODO only works if there's no other data in the model; o/w need to add
         # existing data to obs resample. should be an easy update.
         # templabels needs to pay attention to its own counts as well as model
