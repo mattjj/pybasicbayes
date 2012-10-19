@@ -187,6 +187,7 @@ class Gaussian(GibbsSampling, MeanField, Collapsed):
 
     ### Misc
 
+    # TODO get rid of this; just make it happen the first time plot is called
     @classmethod
     def _plot_setup(cls,instance_list):
         # must set cls.vecs to be a reasonable 2D space to project onto
@@ -207,18 +208,20 @@ class Gaussian(GibbsSampling, MeanField, Collapsed):
 
     def plot(self,data=None,color='b',plot_params=True):
         from util.plot import project_data, plot_gaussian_projection, pca
-        data = flattendata(data)
-        # if global projection vecs exist, use those
-        # otherwise, when dim>2, do a pca on the data
+        if data is not None:
+            data = flattendata(data)
+
         try:
             vecs = self.global_vecs
         except AttributeError:
             dim = len(self.mu)
             if dim == 2:
                 vecs = np.eye(2)
-            else:
+            elif data is not None:
                 assert dim > 2
                 vecs = pca(data,num_components=2)
+            else:
+                vecs = np.random.randn(2,2)
 
         if data is not None:
             projected_data = project_data(data,vecs)
