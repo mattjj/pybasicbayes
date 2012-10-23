@@ -125,30 +125,40 @@ class Mixture(ModelGibbsSampling, ModelMeanField, GibbsSampling):
     ### Misc.
 
     def plot(self,color=None):
-        # TODO reduce repeated code between this and hsmm.plot
         plt.figure()
-        # for plotting purposes, make sure each l has a z
-        # in the mean field case, it will make hard assignments to z, but still
-        # use the parameters from the mean field updates
-        for l in self.labels_list:
-            l.resample()
         cmap = cm.get_cmap()
-        label_colors = {}
-        used_labels = reduce(set.union,[set(l.z) for l in self.labels_list],set([]))
-        num_labels = len(used_labels)
-        num_subfig_rows = len(self.labels_list)
 
-        for idx,label in enumerate(used_labels):
-            label_colors[label] = idx/(num_labels-1 if num_labels > 1 else 1) if color is None else color
+        if len(self.labels_list) > 0:
+            label_colors = {}
 
-        for subfigidx,l in enumerate(self.labels_list):
-            # plot the current observation distributions (and obs. if given)
-            plt.subplot(num_subfig_rows,1,1+subfigidx)
-            self.components[0]._plot_setup(self.components)
-            for label, o in enumerate(self.components):
-                if label in l.z:
-                    o.plot(color=cmap(label_colors[label]),
-                            data=l.data[l.z == label] if l.data is not None else None)
+            # in mean field, there will only be soft assignments, so makethem hard
+            # by running a sampling step
+            for l in self.labels_list:
+                if not hasattr(l,'z'):
+                    l.resample()
+
+            used_labels = reduce(set.union,[set(l.z) for l in self.labels_list],set([]))
+            num_labels = len(used_labels)
+            num_subfig_rows = len(self.labels_list)
+
+            for idx,label in enumerate(used_labels):
+                label_colors[label] = idx/(num_labels-1 if num_labels > 1 else 1) if color is None else color
+
+            for subfigidx,l in enumerate(self.labels_list):
+                # plot the current observation distributions (and obs. if given)
+                plt.subplot(num_subfig_rows,1,1+subfigidx)
+                self.components[0]._plot_setup(self.components)
+                for label, o in enumerate(self.components):
+                    if label in l.z:
+                        o.plot(color=cmap(label_colors[label]),
+                                data=l.data[l.z == label] if l.data is not None else None)
+
+        else:
+            top10 = np.array(self.components)[np.argsort(self.weights.weights)][-1:-11:-1]
+            colors = [cmap(x) for x in np.linspace(0,1,len(top10))] if color is None \
+                    else [color]*len(top10)
+            for o,c in zip(top10,colors):
+                o.plot(color=c)
 
 
 class CollapsedMixture(ModelGibbsSampling):
