@@ -1103,7 +1103,13 @@ class DirGamma(CRPGamma):
         else:
             self.weighted_cols = np.ones(self.K)
 
-        if getdatasize(data) > 0:
+        if isinstance(data,np.ndarray):
+            size = data.sum()
+        else:
+            assert isinstance(data,list)
+            size = sum(d.sum() for d in data)
+
+        if size > 0:
             for itr in range(niter):
                 super(DirGamma,self).resample(data,niter=1)
                 self.concentration /= self.K
