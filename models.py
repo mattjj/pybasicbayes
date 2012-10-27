@@ -160,6 +160,17 @@ class Mixture(ModelGibbsSampling, ModelMeanField, GibbsSampling):
             for o,c in zip(top10,colors):
                 o.plot(color=c)
 
+    def to_json_dict(self):
+        assert len(self.labels_list) == 1
+        data = self.labels_list[0].data
+        z = self.labels_list[0].z
+        assert data.ndim == 2 and data.shape[1] == 2
+
+        return  {
+                    'points':[{'x':x,'y':y,'label':int(label)} for x,y,label in zip(data[:,0],data[:,1],z)],
+                    'ellipses':[dict(c.to_json_dict().items() + [('label',i)])
+                        for i,c in enumerate(self.components) if i in z]
+                }
 
 class CollapsedMixture(ModelGibbsSampling):
     __metaclass__ = abc.ABCMeta
