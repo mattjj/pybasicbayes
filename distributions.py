@@ -79,6 +79,8 @@ class Gaussian(GibbsSampling, MeanField, Collapsed):
         self._mu_mf, self._sigma_mf = self.mu, self.sigma = \
                 sample_niw(*self._posterior_hypparams(*self._get_statistics(data)))
 
+    # TODO i wonder if caling sum() is creating unnecessary intermediate ararys
+    # or if it uses __iadd__
     def _get_statistics(self,data):
         assert isinstance(data,np.ndarray) or \
                 (isinstance(data,list) and all(isinstance(d,np.ndarray) for d in data))
@@ -401,7 +403,7 @@ class ScalarGaussian(Distribution):
 
     def log_likelihood(self,x):
         x = np.reshape(x,(-1,1))
-        return (-0.5*(x-self.mu)**2/self.sigmasq - np.log(np.sqrt(2*np.pi*self.sigmasq))).flatten()
+        return (-0.5*(x-self.mu)**2/self.sigmasq - np.log(np.sqrt(2*np.pi*self.sigmasq))).ravel()
 
     def __repr__(self):
         return self.__class__.__name__ + '(mu=%f,sigmasq=%f)' % (self.mu,self.sigmasq)
@@ -934,7 +936,7 @@ class NegativeBinomial(GibbsSampling):
                 msum = 0.
                 for n in data:
                     msum += (np.random.rand(n) < self.r/(np.arange(n)+self.r)).sum()
-                self.r = np.random.gamma(self.k_0 + self.msum, 1/(1/self.theta_0 - N*np.log(1-self.p)))
+                self.r = np.random.gamma(self.k_0 + msum, 1/(1/self.theta_0 - N*np.log(1-self.p)))
                 ### resample p
                 self.p = np.random.beta(self.alpha_0 + data.sum(), self.beta_0 + N*self.r)
 
