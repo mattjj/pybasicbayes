@@ -232,6 +232,13 @@ class Gaussian(GibbsSampling, MeanField, Collapsed):
         if plot_params:
             plot_gaussian_projection(self.mu,self.sigma,vecs,color=color)
 
+    def to_json_dict(self):
+        assert self.D == 2
+        U,s,_ = np.linalg.svd(self.sigma)
+        U /= np.linalg.det(U)
+        theta = np.arctan2(U[0,0],U[0,1])*180/np.pi
+        return {'x':self.mu[0],'y':self.mu[1],'rx':np.sqrt(s[0]),'ry':np.sqrt(s[1]),'theta':theta}
+
 
 # TODO collapsed, meanfield
 class DiagonalGaussian(GibbsSampling):

@@ -1,7 +1,7 @@
 import abc
 import numpy as np
 
-from util.stats import combinedata
+from pyhsmm.util.stats import combinedata
 
 # NOTE: data is always a (possibly masked) np.ndarray or list of (possibly
 # masked) np.ndarrays.
