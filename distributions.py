@@ -79,7 +79,7 @@ class Gaussian(GibbsSampling, MeanField, Collapsed):
         self._mu_mf, self._sigma_mf = self.mu, self.sigma = \
                 sample_niw(*self._posterior_hypparams(*self._get_statistics(data)))
 
-    # TODO i wonder if caling sum() is creating unnecessary intermediate ararys
+    # TODO i wonder if calling sum(...) is creating unnecessary intermediate ararys
     # or if it uses __iadd__
     def _get_statistics(self,data):
         assert isinstance(data,np.ndarray) or \
@@ -510,14 +510,21 @@ class ScalarGaussianNonconjNIX(ScalarGaussian, GibbsSampling):
     mu ~ Normal(mu_0,tausq_0)
     sigmasq ~ (Scaled-)Inverse-ChiSquared(sigmasq_0,nu_0)
     '''
-    def __init__(self,mu_0,tausq_0,sigmasq_0,nu_0,mubin=None,sigmasqbin=None):
+    def __init__(self,mu_0,tausq_0,sigmasq_0,nu_0,mu=None,sigmasq=None,mubin=None,sigmasqbin=None):
         self.mu_0, self.tausq_0 = mu_0, tausq_0
         self.sigmasq_0, self.nu_0 = sigmasq_0, nu_0
 
         self.mubin = mubin
         self.sigmasqbin = sigmasqbin
 
-        self.resample()
+        if mu is None or sigmasq is None:
+            self.resample()
+        else:
+            self.mu = mu
+            self.sigmasq = sigmasq
+            if mubin is not None and sigmasqbin is not None:
+                self.mubin[...] = mu
+                self.sigmasqbin[...] = sigmasq
 
     def resample(self,data=[],niter=30):
         n = getdatasize(data)
@@ -948,6 +955,7 @@ class NegativeBinomial(GibbsSampling):
                 self.p = np.random.beta(self.alpha_0 + data.sum(), self.beta_0 + N*self.r)
 
     def _resample_logseriesaug(self,data=[],niter=20):
+        # an alternative algorithm, kind of opaque and no advantages...
         if getdatasize(data) == 0:
             self.p = np.random.beta(self.alpha_0,self.beta_0)
             self.r = np.random.gamma(self.k_0,self.theta_0)
