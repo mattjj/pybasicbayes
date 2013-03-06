@@ -8,11 +8,11 @@ import abc
 from warnings import warn
 
 from abstractions import ModelGibbsSampling, ModelMeanField
-from abstractions import GibbsSampling, MeanField, Collapsed
+from abstractions import Distribution, GibbsSampling, MeanField, Collapsed
 from distributions import Multinomial, MultinomialConcentration
 from internals.labels import Labels, CRPLabels
 
-class Mixture(ModelGibbsSampling, ModelMeanField, GibbsSampling):
+class Mixture(ModelGibbsSampling, ModelMeanField):
     '''
     This class is for mixtures of other distributions.
     '''
@@ -50,20 +50,6 @@ class Mixture(ModelGibbsSampling, ModelMeanField, GibbsSampling):
 
         return out, templabels.z
 
-    ### Distribution (so this class can be used as a component in other models)
-
-    def log_likelihood(self,x):
-        return self.weights.log_likelihood(np.arange(len(self.components))) + \
-                np.concatenate([c.log_likelihood(x) for c in self.components]).T
-
-    def resample(self,data,niter=20):
-        # acts like distribution resampling: doesn't remember data, but does
-        # update instantiated parameters
-        self.add_data(data)
-        for itr in range(niter):
-            self.resample_model()
-        self.labels_list.pop()
-
     ### Gibbs sampling
 
     def resample_model(self):
@@ -74,7 +60,8 @@ class Mixture(ModelGibbsSampling, ModelMeanField, GibbsSampling):
             l.resample()
 
         for idx, c in enumerate(self.components):
-            c.resample(data=[l.data[l.z == idx] for l in self.labels_list])
+            c.resample(data=[l.data[l.z == idx] for l in self.labels_list]
+                            if len(l.z) > 0 else []) # numpy issue #2587, np.array([]).reshape((0,2))[[]]
 
         self.weights.resample([l.z for l in self.labels_list])
 
@@ -131,7 +118,7 @@ class Mixture(ModelGibbsSampling, ModelMeanField, GibbsSampling):
         if len(self.labels_list) > 0:
             label_colors = {}
 
-            # in mean field, there will only be soft assignments, so makethem hard
+            # in mean field, there will only be soft assignments, so make them hard
             # by running a sampling step
             for l in self.labels_list:
                 if not hasattr(l,'z'):
@@ -147,7 +134,8 @@ class Mixture(ModelGibbsSampling, ModelMeanField, GibbsSampling):
             for subfigidx,l in enumerate(self.labels_list):
                 # plot the current observation distributions (and obs. if given)
                 plt.subplot(num_subfig_rows,1,1+subfigidx)
-                self.components[0]._plot_setup(self.components)
+                if hasattr(self.components[0],'_plot_setup'):
+                    self.components[0]._plot_setup(self.components)
                 for label, o in enumerate(self.components):
                     if label in l.z:
                         o.plot(color=cmap(label_colors[label]),
@@ -160,6 +148,9 @@ class Mixture(ModelGibbsSampling, ModelMeanField, GibbsSampling):
             for o,c in zip(top10,colors):
                 o.plot(color=c)
 
+        for d in data:
+            self.labels_list.pop()
+
     def to_json_dict(self):
         assert len(self.labels_list) == 1
         data = self.labels_list[0].data
@@ -171,6 +162,49 @@ class Mixture(ModelGibbsSampling, ModelMeanField, GibbsSampling):
                     'ellipses':[dict(c.to_json_dict().items() + [('label',i)])
                         for i,c in enumerate(self.components) if i in z]
                 }
+
+
+class MixtureDistribution(Mixture, GibbsSampling, Distribution):
+    '''
+    This makes a Mixture act like a Distribution for use in other compound models
+    '''
+
+    def log_likelihood(self,x):
+        return np.logaddexp.reduce(self.weights.log_likelihood(np.arange(len(self.components))) +
+                np.concatenate([c.log_likelihood(x)[:,na] for c in self.components],axis=1),axis=1)
+
+    def resample(self,data,niter):
+        # doesn't keep a reference to the data like a model would
+        assert isinstance(data,list) or isinstance(data,np.ndarray)
+        if isinstance(data,np.ndarray):
+            data = [data]
+
+        for d in data:
+            self.add_data(d)
+
+        for itr in range(niter):
+            self.resample_model()
+
+        for d in data:
+            self.labels_list.pop()
+
+    def plot(self,color='b',data=[],plot_params=True):
+        # add data and make sure it has labels
+        if not isinstance(data,list):
+            data = [data]
+        for d in data:
+            self.add_data(d)
+        self.resample_model()
+
+        for l in self.labels_list:
+            for label, o in enumerate(self.components):
+                if label in l.z:
+                    o.plot(color=color,data=l.data[l.z == label] if l.data is not None else None)
+
+        for d in data:
+            self.labels_list.pop()
+
+
 
 class CollapsedMixture(ModelGibbsSampling):
     __metaclass__ = abc.ABCMeta
