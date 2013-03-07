@@ -510,9 +510,12 @@ class ScalarGaussianNonconjNIX(ScalarGaussian, GibbsSampling):
     mu ~ Normal(mu_0,tausq_0)
     sigmasq ~ (Scaled-)Inverse-ChiSquared(sigmasq_0,nu_0)
     '''
-    def __init__(self,mu_0,tausq_0,sigmasq_0,nu_0,mu=None,sigmasq=None,mubin=None,sigmasqbin=None):
+    def __init__(self,mu_0,tausq_0,sigmasq_0,nu_0,niter=20,
+            mu=None,sigmasq=None,mubin=None,sigmasqbin=None):
         self.mu_0, self.tausq_0 = mu_0, tausq_0
         self.sigmasq_0, self.nu_0 = sigmasq_0, nu_0
+
+        self.niter = niter
 
         self.mubin = mubin
         self.sigmasqbin = sigmasqbin
@@ -526,8 +529,9 @@ class ScalarGaussianNonconjNIX(ScalarGaussian, GibbsSampling):
                 self.mubin[...] = mu
                 self.sigmasqbin[...] = sigmasq
 
-    def resample(self,data=[],niter=30):
+    def resample(self,data=[],niter=None):
         n = getdatasize(data)
+        niter = self.niter if niter is None else niter
         if n > 0:
             data = flattendata(data)
             datasum = data.sum()
@@ -1051,7 +1055,7 @@ class CRPGamma(GibbsSampling):
             restaurants.append(tables)
         return restaurants if len(restaurants) > 1 else restaurants[0]
 
-    def resample(self,data=[],niter=30):
+    def resample(self,data=[],niter=20):
         for itr in range(niter):
             a_n, b_n = self._posterior_hypparams(*self._get_statistics(data))
             self.concentration = np.random.gamma(a_n,scale=1./b_n)
