@@ -51,8 +51,12 @@ class Mixture(ModelGibbsSampling, ModelMeanField, ModelEM):
         return out, templabels.z
 
     def log_likelihood(self,x):
-        return np.logaddexp.reduce(self.weights.log_likelihood(np.arange(len(self.components))) +
-                np.concatenate([c.log_likelihood(x)[:,na] for c in self.components],axis=1),axis=1)
+        K = len(self.components)
+        vals = np.empty((x.shape[0],K))
+        for idx, c in enumerate(self.components):
+            vals[:,idx] = c.log_likelihood(x)
+        vals += self.weights.log_likelihood(np.arange(K))
+        return np.logaddexp.reduce(vals,axis=1)
 
     ### Gibbs sampling
 
@@ -141,7 +145,8 @@ class Mixture(ModelGibbsSampling, ModelMeanField, ModelEM):
         # difference anyway.
         assert len(self.labels_list) > 0, 'Must have data to get BIC'
         return -2*sum(self.log_likelihood(l.data).sum() for l in self.labels_list) + \
-                sum(c.num_parameters() for c in self.components)*self.labels_list[0].data.shape[1]
+                (sum(c.num_parameters() for c in self.components) + self.weights.num_parameters()) \
+                    * np.log(sum(l.data.shape[0] for l in self.labels_list))
 
     ### Misc.
 

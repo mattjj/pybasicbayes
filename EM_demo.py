@@ -2,39 +2,67 @@ from __future__ import division
 import numpy as np
 np.seterr(invalid='raise')
 from matplotlib import pyplot as plt
+import copy
 
 from pybasicbayes import models, distributions
 from util.text import progprint_xrange
 
-alpha_0=0.5
+# EM is really terrible! Here's a demo of how to do it on really easy data
+
+alpha_0=100.
 obs_hypparams=dict(mu_0=np.zeros(2),sigma_0=np.eye(2),kappa_0=0.05,nu_0=5)
 
 priormodel = models.Mixture(alpha_0=alpha_0,
-        components=[distributions.Gaussian(**obs_hypparams) for itr in range(30)])
+        components=[distributions.Gaussian(**obs_hypparams) for itr in range(6)])
 
-data = priormodel.rvs(100)
+data = priormodel.rvs(200)
 
 del priormodel
+
 
 plt.figure()
 plt.plot(data[:,0],data[:,1],'kx')
 plt.title('data')
 
-fitmodel = models.Mixture(alpha_0=alpha_0,
-        components=[distributions.Gaussian(**obs_hypparams) for itr in range(30)])
 
-fitmodel.add_data(data)
+min_num_components, max_num_components = (1,12)
+num_tries_each = 5
 
-print 'Gibbs Sampling'
-for itr in progprint_xrange(50):
-    fitmodel.resample_model()
+BICs = []
+examplemodels = []
+for idx, num_components in enumerate(progprint_xrange(min_num_components,max_num_components+1)):
+    theseBICs = []
+    for i in xrange(num_tries_each):
+        fitmodel = models.Mixture(
+                alpha_0=10000, # used for random initialization Gibbs sampling, big means use all components
+                components=[distributions.Gaussian(**obs_hypparams) for itr in range(num_components)])
 
-print 'EM'
-for itr in progprint_xrange(100):
-    fitmodel.EM_step()
+        fitmodel.add_data(data)
 
-print 'BIC: %0.3f' % fitmodel.BIC()
+        # use Gibbs sampling for initialization
+        for itr in xrange(100):
+            fitmodel.resample_model()
 
-fitmodel.plot()
+        # use EM to fit a model
+        for itr in xrange(50):
+            fitmodel.EM_step()
+
+        theseBICs.append(fitmodel.BIC())
+
+    examplemodels.append(copy.deepcopy(fitmodel))
+    BICs.append(theseBICs)
+
+plt.figure()
+plt.errorbar(
+        x=np.arange(min_num_components,max_num_components+1),
+        y=[np.mean(x) for x in BICs],
+        yerr=[np.std(x) for x in BICs]
+        )
+plt.xlabel('num components')
+plt.ylabel('BIC')
+
+plt.title('a decent model')
+examplemodels[np.argmin([np.mean(x) for x in BICs])].plot()
+
 plt.show()
 

@@ -203,12 +203,15 @@ class Gaussian(GibbsSampling, MeanField, Collapsed, MaxLikelihood):
         else:
             n, muhat, sumsq = self._get_weighted_statistics(data,weights,D)
 
-        if n >= D:
-            self.mu = muhat
-            self.sigma = sumsq/n
-        else:
+        # this SVD is necessary to check if the max likelihood solution is
+        # degenerate, which can happen in the EM algorithm
+        if n < D or (np.linalg.svd(sumsq,compute_uv=False) > 1e-6).sum() < D:
+            # broken!
             self.mu = 99999999*np.ones(D)
             self.sigma = np.eye(D)
+        else:
+            self.mu = muhat
+            self.sigma = sumsq/n
 
     @classmethod
     def max_likelihood_constructor(cls,data,weights=None):
