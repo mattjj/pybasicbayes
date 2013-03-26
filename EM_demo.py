@@ -9,6 +9,8 @@ from util.text import progprint_xrange
 
 # EM is really terrible! Here's a demo of how to do it on really easy data
 
+### generate and plot the data
+
 alpha_0=100.
 obs_hypparams=dict(mu_0=np.zeros(2),sigma_0=np.eye(2),kappa_0=0.05,nu_0=5)
 
@@ -27,6 +29,8 @@ plt.title('data')
 
 min_num_components, max_num_components = (1,12)
 num_tries_each = 5
+
+### search over models using BIC as a model selection criterion
 
 BICs = []
 examplemodels = []
