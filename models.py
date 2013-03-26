@@ -139,14 +139,25 @@ class Mixture(ModelGibbsSampling, ModelMeanField, ModelEM):
             c.max_likelihood([l.data for l in self.labels_list],
                     [l.expectations[:,idx] for l in self.labels_list])
 
-    def BIC(self):
+    def num_parameters(self):
         # NOTE: scikit.learn's gmm.py doesn't count the weights in the number of
-        # parameters, but I don't know why they wouldn't. It won't make a
-        # difference anyway.
+        # parameters, but I don't know why they wouldn't. Some convention?
+        return sum(c.num_parameters() for c in self.components) + self.weights.num_parameters()
+
+    def BIC(self):
+        # NOTE: in principle this method computes the BIC only after finding the
+        # maximum likelihood parameters (or, of course, an EM fixed-point as an
+        # approximation!)
         assert len(self.labels_list) > 0, 'Must have data to get BIC'
         return -2*sum(self.log_likelihood(l.data).sum() for l in self.labels_list) + \
-                (sum(c.num_parameters() for c in self.components) + self.weights.num_parameters()) \
-                    * np.log(sum(l.data.shape[0] for l in self.labels_list))
+                    self.num_parameters() * np.log(sum(l.data.shape[0] for l in self.labels_list))
+
+    def AIC(self):
+        # NOTE: in principle this method computes the AIC only after finding the
+        # maximum likelihood parameters (or, of course, an EM fixed-point as an
+        # approximation!)
+        assert len(self.labels_list) > 0, 'Must have data to get AIC'
+        return 2*self.num_parameters() - 2*sum(self.log_likelihood(l.data).sum() for l in self.labels_list)
 
     ### Misc.
 
