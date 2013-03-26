@@ -8,7 +8,7 @@ import operator
 from pybasicbayes import models, distributions
 from util.text import progprint_xrange
 
-alpha_0=2.
+alpha_0=2.0
 obs_hypparams=dict(mu_0=np.zeros(2),sigma_0=np.eye(2),kappa_0=0.05,nu_0=5)
 
 priormodel = models.Mixture(alpha_0=alpha_0,
@@ -32,7 +32,7 @@ allmodels = []
 for superitr in range(5):
     # Gibbs sampling to wander around the posterior
     print 'Gibbs Sampling'
-    for itr in progprint_xrange(50):
+    for itr in progprint_xrange(100):
         posteriormodel.resample_model()
 
     # mean field to lock onto a mode
@@ -42,7 +42,6 @@ for superitr in range(5):
 
     allscores.append(scores)
     allmodels.append(copy.deepcopy(posteriormodel))
-
 
 plt.figure()
 for scores in allscores:

@@ -37,6 +37,8 @@ class Labels(object):
 
         self.z = sample_discrete_from_log(scores,axis=1)
 
+    ### Mean Field
+
     def meanfieldupdate(self):
         data, N, K = self.data, self.data.shape[0], len(self.components)
 
@@ -69,6 +71,19 @@ class Labels(object):
         assert q_entropy <= 0 and p_avgengy <= 0
 
         return p_avgengy + q_entropy
+
+    ### EM
+
+    def E_step(self):
+        data, N, K = self.data, self.data.shape[0], len(self.components)
+        self.expectations = np.empty((N,K))
+
+        for idx, c in enumerate(self.components):
+            self.expectations[:,idx] = c.log_likelihood(data)
+
+        self.expectations -= self.expectations.max(1)[:,na]
+        np.exp(self.expectations,out=self.expectations)
+        self.expectations /= self.expectations.sum(1)[:,na]
 
 
 # TODO get counts/stats from model, as in pyhsmm direct assignment sampler

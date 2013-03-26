@@ -1,7 +1,7 @@
 import abc
 import numpy as np
 
-from pyhsmm.util.stats import combinedata
+from util.stats import combinedata
 
 # NOTE: data is always a (possibly masked) np.ndarray or list of (possibly
 # masked) np.ndarrays.
@@ -71,10 +71,26 @@ class MaxLikelihood(Distribution):
     __metaclass__ = abc.ABCMeta
 
     @abc.abstractmethod
-    def max_likelihood(self,data):
-        # returns an instance of the object with hyperparameter members set to
-        # None
+    def max_likelihood(self,data,weights=None):
+        '''
+        sets the parameters set to their maximum likelihood values given the
+        (weighted) data
+        '''
         pass
+
+    def max_likelihood_constructor(cls,data,weights=None):
+        '''
+        creates a new instance with the parameters set to their maximum
+        likelihood values and the hyperparameters set to something reasonable
+        along the lines of empirical Bayes
+        '''
+        raise NotImplementedError
+
+    def max_likelihood_withprior(self,data,weights=None):
+        '''
+        max_likelihood including prior statistics, for use with MAP EM
+        '''
+        raise NotImplementedError
 
 ############
 #  Models  #
@@ -95,7 +111,7 @@ class Model(object):
     def generate(self,keep=True,**kwargs):
         '''
         Like a distribution's rvs, but this also fills in latent state over
-        data, and keeps references to the data.
+        data and keeps references to the data.
         '''
         pass
 
@@ -121,7 +137,6 @@ class ModelMeanField(Model):
         # returns variational lower bound after update
         pass
 
-
 class ModelEM(Model):
     __metaclass__ = abc.ABCMeta
 
@@ -129,4 +144,3 @@ class ModelEM(Model):
     def EM_step(self):
         pass
 
-# TODO hybrid model inference

@@ -7,12 +7,12 @@ import scipy.special as special
 import abc
 from warnings import warn
 
-from abstractions import ModelGibbsSampling, ModelMeanField
-from abstractions import Distribution, GibbsSampling, MeanField, Collapsed
+from abstractions import ModelGibbsSampling, ModelMeanField, ModelEM
+from abstractions import Distribution, GibbsSampling, MeanField, Collapsed, MaxLikelihood
 from distributions import Multinomial, MultinomialConcentration
 from internals.labels import Labels, CRPLabels
 
-class Mixture(ModelGibbsSampling, ModelMeanField):
+class Mixture(ModelGibbsSampling, ModelMeanField, ModelEM):
     '''
     This class is for mixtures of other distributions.
     '''
@@ -78,7 +78,8 @@ class Mixture(ModelGibbsSampling, ModelMeanField):
             l.meanfieldupdate()
 
         # pass the weights to pi
-        self.weights.meanfieldupdate(None,[l.r for l in self.labels_list]) # None is a placeholder
+        K = len(self.components)
+        self.weights.meanfieldupdate(np.arange(K),[l.r for l in self.labels_list])
 
         # pass the weights to the components
         for idx, c in enumerate(self.components):
@@ -109,6 +110,27 @@ class Mixture(ModelGibbsSampling, ModelMeanField):
 
         return vlb
 
+    ### EM
+
+    def EM_step(self):
+        assert all(isinstance(c,MaxLikelihood) for c in self.components), \
+                'Components must implement MaxLikelihood'
+        assert len(self.labels_list) > 0, 'Must have data to run EM'
+
+        ### E step
+        for l in self.labels_list:
+            l.E_step()
+
+        ### M step
+        # max likelihood for weights
+        K = len(self.components)
+        self.weights.max_likelihood(np.arange(K),[l.expectations for l in self.labels_list])
+
+        # max likelihood for component parameters
+        for idx, c in enumerate(self.components):
+            c.max_likelihood([l.data for l in self.labels_list],
+                    [l.expectations[:,idx] for l in self.labels_list])
+
     ### Misc.
 
     def plot(self,color=None):
@@ -118,24 +140,23 @@ class Mixture(ModelGibbsSampling, ModelMeanField):
         if len(self.labels_list) > 0:
             label_colors = {}
 
-            # in mean field, there will only be soft assignments, so make them hard
-            # by running a sampling step
+            # throw out any previous labeling and use a new one
             for l in self.labels_list:
-                if not hasattr(l,'z'):
-                    l.resample()
+                l.resample()
 
             used_labels = reduce(set.union,[set(l.z) for l in self.labels_list],set([]))
             num_labels = len(used_labels)
             num_subfig_rows = len(self.labels_list)
 
             for idx,label in enumerate(used_labels):
-                label_colors[label] = idx/(num_labels-1 if num_labels > 1 else 1) if color is None else color
+                label_colors[label] = idx/(num_labels-1 if num_labels > 1 else 1) \
+                        if color is None else color
 
             for subfigidx,l in enumerate(self.labels_list):
                 # plot the current observation distributions (and obs. if given)
                 plt.subplot(num_subfig_rows,1,1+subfigidx)
-                if hasattr(self.components[0],'_plot_setup'):
-                    self.components[0]._plot_setup(self.components)
+                # if hasattr(self.components[0],'_plot_setup'):
+                #     self.components[0]._plot_setup(self.components)
                 for label, o in enumerate(self.components):
                     if label in l.z:
                         o.plot(color=cmap(label_colors[label]),
@@ -147,9 +168,6 @@ class Mixture(ModelGibbsSampling, ModelMeanField):
                     else [color]*len(top10)
             for o,c in zip(top10,colors):
                 o.plot(color=c)
-
-        for d in data:
-            self.labels_list.pop()
 
     def to_json_dict(self):
         assert len(self.labels_list) == 1

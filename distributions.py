@@ -1,27 +1,30 @@
 from __future__ import division
 import numpy as np
+np.seterr(divide='ignore')
 from numpy import newaxis as na
 import scipy.stats as stats
 import scipy.special as special
-from matplotlib import pyplot as plt
+import matplotlib.pyplot as plt
 import abc
 from warnings import warn
 
 from abstractions import Distribution, GibbsSampling,\
-        MeanField, Collapsed
+        MeanField, Collapsed, MaxLikelihood
 from util.stats import sample_niw, invwishart_entropy,\
         invwishart_log_partitionfunction, sample_discrete,\
-        sample_discrete_from_log, getdatasize, flattendata
+        sample_discrete_from_log, getdatasize, flattendata,\
+        getdatadimension
 
 ################
 #  Continuous  #
 ################
 
-class Gaussian(GibbsSampling, MeanField, Collapsed):
+class Gaussian(GibbsSampling, MeanField, Collapsed, MaxLikelihood):
     '''
-    Multivariate Gaussian observation distribution class. NOTE: Only works for 2
-    or more dimensions. For a scalar Gaussian, use one of the scalar classes.
-    Uses a conjugate Normal/Inverse-Wishart prior.
+    Multivariate Gaussian distribution class.
+
+    NOTE: Only works for 2 or more dimensions. For a scalar Gaussian, use one of
+    the scalar classes.  Uses a conjugate Normal/Inverse-Wishart prior.
 
     Hyperparameters mostly follow Gelman et al.'s notation in Bayesian Data
     Analysis, except sigma_0 is proportional to expected covariance matrix:
@@ -77,15 +80,13 @@ class Gaussian(GibbsSampling, MeanField, Collapsed):
 
     def resample(self,data=[]):
         self._mu_mf, self._sigma_mf = self.mu, self.sigma = \
-                sample_niw(*self._posterior_hypparams(*self._get_statistics(data)))
+                sample_niw(*self._posterior_hypparams(*self._get_statistics(data,self.D)))
 
-    # TODO i wonder if calling sum(...) is creating unnecessary intermediate ararys
-    # or if it uses __iadd__
-    def _get_statistics(self,data):
+    @staticmethod
+    def _get_statistics(data,D):
         assert isinstance(data,np.ndarray) or \
                 (isinstance(data,list) and all(isinstance(d,np.ndarray) for d in data))
 
-        D = self.D
         n = getdatasize(data)
         if n > 0:
             if isinstance(data,np.ndarray):
@@ -102,13 +103,13 @@ class Gaussian(GibbsSampling, MeanField, Collapsed):
 
     ### Mean Field
 
-    # NOTE my sumsq is Nk*Sk
+    # NOTE my sumsq is Bishop's Nk*Sk
 
     def meanfieldupdate(self,data,weights):
         assert getdatasize(data) > 0
         # update
         self._mu_mf, self._sigma_mf, self._kappa_mf, self._nu_mf = \
-                self._posterior_hypparams(*self._get_weighted_statistics(data,weights))
+                self._posterior_hypparams(*self._get_weighted_statistics(data,weights,self.D))
         self.mu, self.sigma = self._mu_mf, self._sigma_mf/(self._nu_mf - self.D - 1) # for plotting
 
     def get_vlb(self):
@@ -143,11 +144,10 @@ class Gaussian(GibbsSampling, MeanField, Collapsed):
         return special.digamma((self._nu_mf-np.arange(self.D))/2).sum() \
                 + self.D*np.log(2) - np.linalg.slogdet(self._sigma_mf)[1]
 
-    def _get_weighted_statistics(self,data,weights):
+    @staticmethod
+    def _get_weighted_statistics(data,weights,D):
         # NOTE: _get_statistics is special case with all weights being 1
         # this is kept as a separate method for speed and modularity
-        D = self.D
-
         assert (isinstance(data,np.ndarray) and isinstance(weights,np.ndarray)
                 and weights.ndim == 1 and np.reshape(data,(-1,D)).shape[0] == weights.shape[0]) \
                         or \
@@ -178,7 +178,7 @@ class Gaussian(GibbsSampling, MeanField, Collapsed):
 
     def log_marginal_likelihood(self,data):
         n, D = getdatasize(data), self.D
-        return self._log_partition_function(*self._posterior_hypparams(*self._get_statistics(data))) \
+        return self._log_partition_function(*self._posterior_hypparams(*self._get_statistics(data,self.D))) \
                 - self._log_partition_function(self.mu_0,self.sigma_0,self.kappa_0,self.nu_0) \
                 - n*D/2 * np.log(2*np.pi)
 
@@ -186,6 +186,46 @@ class Gaussian(GibbsSampling, MeanField, Collapsed):
         D = self.D
         return nu*D/2*np.log(2) + special.multigammaln(nu/2,D) + D/2*np.log(2*np.pi/kappa) \
                 - nu/2*np.log(np.linalg.det(sigma))
+
+    ### Max likelihood
+
+    # NOTE: could also use sumsq/(n-1) as the covariance estimate, which would
+    # be unbiased but not max likelihood, but if we're in the regime where that
+    # matters we've got bigger problems!
+
+    def max_likelihood(self,data,weights=None):
+        D = self.D
+        if weights is None:
+            n, muhat, sumsq = self._get_statistics(data,D)
+        else:
+            n, muhat, sumsq = self._get_weighted_statistics(data,weights,D)
+
+        if n >= D:
+            self.mu = muhat
+            self.sigma = sumsq/n
+        else:
+            self.mu = 99999999*np.ones(D)
+            self.sigma = np.eye(D)
+
+    @classmethod
+    def max_likelihood_constructor(cls,data,weights=None):
+        D = getdatadimension(data)
+        if weights is None:
+            n, muhat, sumsq = cls._get_statistics(data,D)
+        else:
+            n, muhat, sumsq = cls._get_weighted_statistics(data,weights,D)
+        assert n >= D
+
+        return cls(muhat,sumsq/n,n,n,mu=muhat,sigma=sumsq/n)
+
+    def max_likelihood_withprior(self,data,weights=None):
+        D = self.D
+        if weights is None:
+            n, muhat, sumsq = self._get_statistics(data,D)
+        else:
+            n, muhat, sumsq = self._get_weighted_statistics(data,weights,D)
+
+        self.mu, self.sigma, _, _ = self._posterior_hypparams(n,muhat,sumsq)
 
     ### Misc
 
@@ -240,7 +280,7 @@ class Gaussian(GibbsSampling, MeanField, Collapsed):
         return {'x':self.mu[0],'y':self.mu[1],'rx':np.sqrt(s[0]),'ry':np.sqrt(s[1]),'theta':theta}
 
 
-# TODO collapsed, meanfield
+# TODO collapsed, meanfield, max_likelihood
 class DiagonalGaussian(GibbsSampling):
     '''
     Product of normal-inverse-gamma priors over mu (mean vector) and sigmas
@@ -326,7 +366,7 @@ class DiagonalGaussian(GibbsSampling):
         return n, xbar, sumsq
 
 
-# TODO collapsed, meanfield
+# TODO collapsed, meanfield, max_likelihood
 class IsotropicGaussian(GibbsSampling):
     '''
     Normal-Inverse-Gamma prior over mu (mean vector) and sigma (scalar
@@ -423,6 +463,7 @@ class ScalarGaussian(Distribution):
         raise NotImplementedError # TODO
 
 
+# TODO collapsed, meanfield, max_likelihood
 class ScalarGaussianNIX(ScalarGaussian, GibbsSampling, Collapsed):
     '''
     Conjugate Normal-(Scaled-)Inverse-ChiSquared prior. (Another parameterization is the
@@ -553,6 +594,7 @@ class ScalarGaussianNonconjNIX(ScalarGaussian, GibbsSampling):
             self.sigmasqbin[...] = self.sigmasq
 
 
+# TODO collapsed, meanfield, max_likelihood
 class ScalarGaussianFixedvar(ScalarGaussian, GibbsSampling):
     '''
     Conjugate normal prior on mean.
@@ -608,32 +650,20 @@ class ScalarGaussianFixedvar(ScalarGaussian, GibbsSampling):
             xbar = None
         return n, xbar
 
-
-class ScalarGaussianMaxLikelihood(ScalarGaussian):
-    def max_likelihood(self,data,weights=None):
-        data = flattendata(data)
-
-        if weights is not None:
-            weights = flattendata(weights)
-        else:
-            weights = np.ones(data.shape)
-
-        weightsum = weights.sum()
-        self.mu = np.dot(weights,data) / weightsum
-        self.sigmasq = np.dot(weights,(data-self.mu)**2) / weightsum
-
-
 ##############
 #  Discrete  #
 ##############
 
-class Multinomial(GibbsSampling, MeanField):
+# TODO this should be called categorical!
+class Multinomial(GibbsSampling, MeanField, MaxLikelihood):
     '''
-    This class represents a multinomial distribution over labels, where the
+    This class represents a categorical distribution over labels, where the
     parameter is weights and the prior is a Dirichlet distribution.
     For example, if len(alphav_0) == 3, then five samples may look like
-    [0,1,0,2,1]
-    Each entry is the label of a sample, like the outcome of die rolls.
+        [0,1,0,2,1]
+    Each entry is the label of a sample, like the outcome of die rolls. In other
+    words, data are not indicator variables! (Except when they need to be, like
+    in the mean field update or the weighted max likelihood (EM) update.)
 
     This can be used as a weak limit approximation for a DP, particularly by
     calling __init__ with alpha_0 and K arguments, in which case the prior will be
@@ -678,14 +708,14 @@ class Multinomial(GibbsSampling, MeanField):
     ### Gibbs sampling
 
     def resample(self,data=[]):
-        hypparams = self._posterior_hypparams(*self._get_statistics(data))
+        hypparams = self._posterior_hypparams(*self._get_statistics(data,self.K))
         self.weights = np.random.dirichlet(np.where(hypparams>1e-2,hypparams,1e-2))
 
-    def _get_statistics(self,data):
+    @staticmethod
+    def _get_statistics(data,K):
         assert isinstance(data,np.ndarray) or \
                 (isinstance(data,list) and all(isinstance(d,np.ndarray) for d in data))
 
-        K = self.K
         if isinstance(data,np.ndarray):
             counts = np.bincount(data,minlength=K)
         else:
@@ -714,18 +744,39 @@ class Multinomial(GibbsSampling, MeanField):
         # this may only make sense if np.all(x == np.arange(self.K))...
         return special.digamma(self._alpha_mf[x]) - special.digamma(self._alpha_mf.sum())
 
-    def _get_weighted_statistics(self,data,weights):
+    @staticmethod
+    def _get_weighted_statistics(data,weights):
         # data is just a placeholder; technically it should be
-        # np.arange(self.K)[na,:].repeat(N,axis=0)
+        # np.arange(K)[na,:].repeat(N,axis=0)
         assert isinstance(weights,np.ndarray) or \
                 (isinstance(weights,list) and
                         all(isinstance(w,np.ndarray) for w in weights))
 
-        if isinstance(data,np.ndarray):
+        if isinstance(weights,np.ndarray):
             counts = weights.sum(0)
         else:
             counts = sum(w.sum(0) for w in weights)
         return counts,
+
+    ### Max likelihood
+
+    def max_likelihood(self,data,weights=None):
+        K = self.K
+        if weights is None:
+            counts, = self._get_statistics(data,K)
+        else:
+            counts, = self._get_weighted_statistics(data,weights)
+
+        self.weights = counts/counts.sum()
+
+    def max_likelihood_withprior(self,data,weights=None):
+        K = self.K
+        if weights is None:
+            counts, = self._get_statistics(data,K)
+        else:
+            counts, = self._get_weighted_statistics(data,weights)
+
+        self.weights = counts/counts.sum()
 
 
 class MultinomialConcentration(Multinomial):
@@ -1031,7 +1082,7 @@ class CRPGamma(GibbsSampling):
             self.resample(niter=1)
 
     def log_likelihood(self,x):
-        raise NotImplementedError, 'product of gammas' # TODO
+        raise NotImplementedError # TODO product of gammas
 
     def rvs(self,customer_counts):
         '''
