@@ -65,8 +65,8 @@ plt.errorbar(
 plt.xlabel('num components')
 plt.ylabel('BIC')
 
-plt.title('a decent model')
 examplemodels[np.argmin([np.mean(x) for x in BICs])].plot()
+plt.title('a decent model')
 
 plt.show()
 
