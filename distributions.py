@@ -2,6 +2,7 @@ from __future__ import division
 import numpy as np
 np.seterr(divide='ignore')
 from numpy import newaxis as na
+from numpy.core.umath_tests import inner1d
 import scipy.stats as stats
 import scipy.special as special
 import matplotlib.pyplot as plt
@@ -14,6 +15,7 @@ from util.stats import sample_niw, invwishart_entropy,\
         invwishart_log_partitionfunction, sample_discrete,\
         sample_discrete_from_log, getdatasize, flattendata,\
         getdatadimension
+import util.general
 
 ################
 #  Continuous  #
@@ -63,8 +65,8 @@ class Gaussian(GibbsSampling, MeanField, Collapsed, MaxLikelihood):
     def log_likelihood(self,x):
         mu, sigma, D = self.mu, self.sigma, self.D
         x = np.reshape(x,(-1,D)) - mu
-        return -1./2. * (x * np.linalg.solve(sigma,x.T).T).sum(1) \
-                - D/2*np.log((2*np.pi) * np.sqrt(np.linalg.det(sigma)))
+        xs,LT = util.general.solve_chofactor_system(sigma,x.T,overwrite_b=True)
+        return -1./2. * inner1d(xs.T,xs.T) - D/2*(np.log(2*np.pi) + np.log(np.diag(LT)).sum())
 
     def _posterior_hypparams(self,n,xbar,sumsq):
         mu_0, sigma_0, kappa_0, nu_0 = self.mu_0, self.sigma_0, self.kappa_0, self.nu_0
@@ -124,6 +126,7 @@ class Gaussian(GibbsSampling, MeanField, Collapsed, MaxLikelihood):
         q_entropy = -1 * (0.5 * (loglmbdatilde + self.D * (np.log(self._kappa_mf/(2*np.pi))-1)) \
                 - invwishart_entropy(self._sigma_mf,self._nu_mf))
         # see Eq. 10.74 in Bishop, we aren't summing over K
+        # TODO speed this up with a chol
         p_avgengy = 0.5 * (D * np.log(self.kappa_0/(2*np.pi)) + loglmbdatilde \
                 - D*self.kappa_0/self._kappa_mf - self.kappa_0*self._nu_mf*\
                 np.dot(self._mu_mf - self.mu_0,np.linalg.solve(self._sigma_mf,self._mu_mf - self.mu_0))) \
@@ -139,6 +142,7 @@ class Gaussian(GibbsSampling, MeanField, Collapsed, MaxLikelihood):
         x = np.reshape(x,(-1,D)) - mu_n # x is now centered
 
         # see Eq. 10.67 in Bishop
+        # TODO speed this up with a chol
         return self._loglmbdatilde()/2 - D/(2*kappa_n) - nu_n/2 * \
                 (np.linalg.solve(sigma_n,x.T).T * x).sum(1)
 
