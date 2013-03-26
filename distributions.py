@@ -54,6 +54,9 @@ class Gaussian(GibbsSampling, MeanField, Collapsed, MaxLikelihood):
         self._kappa_mf = kappa_0
         self._nu_mf = nu_0
 
+    def num_parameters(self):
+        return self.D*(self.D+1)/2
+
     def rvs(self,size=None):
         return np.random.multivariate_normal(mean=self.mu,cov=self.sigma,size=size)
 
@@ -695,6 +698,9 @@ class Multinomial(GibbsSampling, MeanField, MaxLikelihood):
         else:
             self.resample()
         self._alpha_mf = self.weights * self.alphav_0.sum()
+
+    def num_parameters(self):
+        return self.K
 
     def rvs(self,size=None):
         return sample_discrete(self.weights,size)

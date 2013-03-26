@@ -50,6 +50,10 @@ class Mixture(ModelGibbsSampling, ModelMeanField, ModelEM):
 
         return out, templabels.z
 
+    def log_likelihood(self,x):
+        return np.logaddexp.reduce(self.weights.log_likelihood(np.arange(len(self.components))) +
+                np.concatenate([c.log_likelihood(x)[:,na] for c in self.components],axis=1),axis=1)
+
     ### Gibbs sampling
 
     def resample_model(self):
@@ -131,6 +135,14 @@ class Mixture(ModelGibbsSampling, ModelMeanField, ModelEM):
             c.max_likelihood([l.data for l in self.labels_list],
                     [l.expectations[:,idx] for l in self.labels_list])
 
+    def BIC(self):
+        # NOTE: scikit.learn's gmm.py doesn't count the weights in the number of
+        # parameters, but I don't know why they wouldn't. It won't make a
+        # difference anyway.
+        assert len(self.labels_list) > 0, 'Must have data to get BIC'
+        return -2*sum(self.log_likelihood(l.data).sum() for l in self.labels_list) + \
+                sum(c.num_parameters() for c in self.components)*self.labels_list[0].data.shape[1]
+
     ### Misc.
 
     def plot(self,color=None):
@@ -186,10 +198,6 @@ class MixtureDistribution(Mixture, GibbsSampling, Distribution):
     '''
     This makes a Mixture act like a Distribution for use in other compound models
     '''
-
-    def log_likelihood(self,x):
-        return np.logaddexp.reduce(self.weights.log_likelihood(np.arange(len(self.components))) +
-                np.concatenate([c.log_likelihood(x)[:,na] for c in self.components],axis=1),axis=1)
 
     def resample(self,data,niter):
         # doesn't keep a reference to the data like a model would

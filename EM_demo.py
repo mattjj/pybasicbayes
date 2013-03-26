@@ -20,18 +20,21 @@ plt.figure()
 plt.plot(data[:,0],data[:,1],'kx')
 plt.title('data')
 
-posteriormodel = models.Mixture(alpha_0=alpha_0,
+fitmodel = models.Mixture(alpha_0=alpha_0,
         components=[distributions.Gaussian(**obs_hypparams) for itr in range(30)])
 
-posteriormodel.add_data(data)
+fitmodel.add_data(data)
 
 print 'Gibbs Sampling'
 for itr in progprint_xrange(50):
-    posteriormodel.resample_model()
+    fitmodel.resample_model()
 
 print 'EM'
 for itr in progprint_xrange(100):
-    posteriormodel.EM_step()
+    fitmodel.EM_step()
 
-posteriormodel.plot()
+print 'BIC: %0.3f' % fitmodel.BIC()
+
+fitmodel.plot()
 plt.show()
+
