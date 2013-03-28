@@ -258,7 +258,7 @@ class Gaussian(GibbsSampling, MeanField, Collapsed, MaxLikelihood):
         for o in instance_list:
             o.global_vecs = vecs
 
-    def plot(self,data=None,color='b',plot_params=True):
+    def plot(self,data=None,color='b',plot_params=True,label=''):
         from util.plot import project_data, plot_gaussian_projection, pca
         if data is not None:
             data = flattendata(data)
@@ -280,7 +280,7 @@ class Gaussian(GibbsSampling, MeanField, Collapsed, MaxLikelihood):
             plt.plot(projected_data[:,0],projected_data[:,1],marker='.',linestyle=' ',color=color)
 
         if plot_params:
-            plot_gaussian_projection(self.mu,self.sigma,vecs,color=color)
+            plot_gaussian_projection(self.mu,self.sigma,vecs,color=color,label=label)
 
     def to_json_dict(self):
         assert self.D == 2
