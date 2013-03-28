@@ -161,7 +161,7 @@ class Mixture(ModelGibbsSampling, ModelMeanField, ModelEM):
 
     ### Misc.
 
-    def plot(self,color=None):
+    def plot(self,color=None,legend=True):
         plt.figure()
         cmap = cm.get_cmap()
 
@@ -188,14 +188,23 @@ class Mixture(ModelGibbsSampling, ModelMeanField, ModelEM):
                 for label, o in enumerate(self.components):
                     if label in l.z:
                         o.plot(color=cmap(label_colors[label]),
-                                data=l.data[l.z == label] if l.data is not None else None)
+                                data=l.data[l.z == label] if l.data is not None else None,
+                                label='%d' % label)
+
+            if legend:
+                plt.legend(
+                        [plt.Rectangle((0,0),1,1,fc=cmap(c))
+                            for i,c in label_colors.iteritems() if i in used_labels],
+                        [i for i in label_colors if i in used_labels],
+                        loc='best'
+                        )
 
         else:
             top10 = np.array(self.components)[np.argsort(self.weights.weights)][-1:-11:-1]
             colors = [cmap(x) for x in np.linspace(0,1,len(top10))] if color is None \
                     else [color]*len(top10)
-            for o,c in zip(top10,colors):
-                o.plot(color=c)
+            for i,(o,c) in enumerate(zip(top10,colors)):
+                o.plot(color=c,label='%d' % i)
 
     def to_json_dict(self):
         assert len(self.labels_list) == 1
