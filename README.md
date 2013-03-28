@@ -5,6 +5,9 @@ file `abstractions.py` describes the queries a distribution must support to be
 used in each algorithm, as well as an API for models, which compose the
 distribution objects.
 
+*NOTE:* There's a bug in the variational lower bound calculation right now. The
+updates look fine though.
+
 The file `models.py` shows how to construct mixture models building on the
 distribution objects in this library. For example, to generate data from a
 Gaussian mixture model, we might set some hyperparameters, construct a
