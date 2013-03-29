@@ -123,14 +123,14 @@ class Gaussian(GibbsSampling, MeanField, Collapsed, MaxLikelihood):
         D = self.D
         loglmbdatilde = self._loglmbdatilde()
         # see Eq. 10.77 in Bishop
-        q_entropy = -1 * (0.5 * (loglmbdatilde + self.D * (np.log(self._kappa_mf/(2*np.pi))-1)) \
-                - invwishart_entropy(self._sigma_mf,self._nu_mf))
+        q_entropy = -0.5 * (loglmbdatilde + self.D * (np.log(self._kappa_mf/(2*np.pi))-1)) \
+                + invwishart_entropy(self._sigma_mf,self._nu_mf)
         # see Eq. 10.74 in Bishop, we aren't summing over K
         # TODO speed this up with a chol
         p_avgengy = 0.5 * (D * np.log(self.kappa_0/(2*np.pi)) + loglmbdatilde \
                 - D*self.kappa_0/self._kappa_mf - self.kappa_0*self._nu_mf*\
                 np.dot(self._mu_mf - self.mu_0,np.linalg.solve(self._sigma_mf,self._mu_mf - self.mu_0))) \
-                - invwishart_log_partitionfunction(self.sigma_0,self.nu_0) \
+                + invwishart_log_partitionfunction(self.sigma_0,self.nu_0) \
                 + (self.nu_0 - D - 1)/2*loglmbdatilde - 1/2*self._nu_mf*\
                 np.linalg.solve(self._sigma_mf,self.sigma_0).trace()
 
@@ -141,10 +141,10 @@ class Gaussian(GibbsSampling, MeanField, Collapsed, MaxLikelihood):
         D = self.D
         x = np.reshape(x,(-1,D)) - mu_n # x is now centered
 
-        # see Eq. 10.67 in Bishop
+        # see Eqs. 10.64, 10.67, and 10.71 in Bishop
         # TODO speed this up with a chol
         return self._loglmbdatilde()/2 - D/(2*kappa_n) - nu_n/2 * \
-                (np.linalg.solve(sigma_n,x.T).T * x).sum(1)
+                (np.linalg.solve(sigma_n,x.T).T * x).sum(1) - D/2*np.log(2*np.pi)
 
     def _loglmbdatilde(self):
         # see Eq. 10.65 in Bishop
@@ -179,6 +179,7 @@ class Gaussian(GibbsSampling, MeanField, Collapsed, MaxLikelihood):
                         for w,d in zip(weights,data))
             else:
                 xbar, sumsq = None, None
+
         return neff, xbar, sumsq
 
     ### Collapsed

@@ -95,7 +95,7 @@ class Mixture(ModelGibbsSampling, ModelMeanField, ModelEM):
                     [l.r[:,idx] for l in self.labels_list])
 
         ### get vlb!
-        vlb = 0
+        vlb = 0.
 
         # get labels terms
         vlb += sum(l.get_vlb() for l in self.labels_list)
@@ -108,13 +108,13 @@ class Mixture(ModelGibbsSampling, ModelMeanField, ModelEM):
 
         # finally, need the evidence term in the vlb
         for l in self.labels_list:
-            vlb += 0.5 * np.sum([r.dot(c.expected_log_likelihood(l.data))
-                for c,r in zip(self.components,l.r.T)])
+            vlb += np.sum([r.dot(c.expected_log_likelihood(l.data))
+                                for c,r in zip(self.components, l.r.T)])
 
-        # add in symmetry factor (if we're actually symmetric)
-        if len(set(self.weights.weights)) == 1 and \
-                len(set(type(c) for c in self.components)) == 1:
-            vlb += special.gammaln(len(self.components)+1)
+        # # add in symmetry factor (if we're actually symmetric)
+        # if len(set(self.weights.weights)) == 1 and \
+        #         len(set(type(c) for c in self.components)) == 1:
+        #     vlb += special.gammaln(len(self.components)+1)
 
         return vlb
 

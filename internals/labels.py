@@ -58,17 +58,14 @@ class Labels(object):
         # return avg energy plus entropy, our contribution to the mean field
         # variational lower bound
         errs = np.seterr(invalid='ignore',divide='ignore')
-        logr = np.log(self.r)
-        prod = self.r*logr
+        prod = self.r*np.log(self.r)
         prod[np.isnan(prod)] = 0. # 0 * -inf = 0.
         np.seterr(**errs)
 
         logpitilde = self.weights.expected_log_likelihood(np.arange(len(self.components)))
 
-        q_entropy = min(-1*(prod.sum()),0.) # numerical
+        q_entropy = -prod.sum()
         p_avgengy = (self.r*logpitilde).sum()
-
-        assert q_entropy <= 0 and p_avgengy <= 0
 
         return p_avgengy + q_entropy
 
