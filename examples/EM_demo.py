@@ -5,7 +5,7 @@ from matplotlib import pyplot as plt
 import copy
 
 from pybasicbayes import models, distributions
-from util.text import progprint_xrange
+from pybasicbayes.util.text import progprint_xrange
 
 # EM is really terrible! Here's a demo of how to do it on really easy data
 

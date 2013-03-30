@@ -6,7 +6,7 @@ import copy
 import operator
 
 from pybasicbayes import models, distributions
-from util.text import progprint_xrange
+from pybasicbayes.util.text import progprint_xrange
 
 alpha_0=2.0
 obs_hypparams=dict(mu_0=np.zeros(2),sigma_0=np.eye(2),kappa_0=0.05,nu_0=5)

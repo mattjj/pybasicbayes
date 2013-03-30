@@ -666,7 +666,7 @@ class Multinomial(GibbsSampling, MeanField, MaxLikelihood):
     '''
     This class represents a categorical distribution over labels, where the
     parameter is weights and the prior is a Dirichlet distribution.
-    For example, if len(alphav_0) == 3, then five samples may look like
+    For example, if K == 3, then five samples may look like
         [0,1,0,2,1]
     Each entry is the label of a sample, like the outcome of die rolls. In other
     words, data are not indicator variables! (Except when they need to be, like
@@ -695,7 +695,7 @@ class Multinomial(GibbsSampling, MeanField, MaxLikelihood):
             self.K = alphav_0.shape[0]
         else:
             self.K = K
-            self.alphav_0 = np.ones(K)*alpha_0/K
+            self.alphav_0 = np.repeat(alpha_0/K,K)
 
         if weights is not None:
             self.weights = weights
