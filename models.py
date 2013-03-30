@@ -60,12 +60,12 @@ class Mixture(ModelGibbsSampling, ModelMeanField, ModelEM):
 
     ### Gibbs sampling
 
-    def resample_model(self):
+    def resample_model(self,temp=None):
         assert all(isinstance(c,GibbsSampling) for c in self.components), \
                 'Components must implement GibbsSampling'
 
         for l in self.labels_list:
-            l.resample()
+            l.resample(temp=temp)
 
         for idx, c in enumerate(self.components):
             c.resample(data=[l.data[l.z == idx] for l in self.labels_list]

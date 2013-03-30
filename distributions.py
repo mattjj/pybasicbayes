@@ -66,7 +66,7 @@ class Gaussian(GibbsSampling, MeanField, Collapsed, MaxLikelihood):
         mu, sigma, D = self.mu, self.sigma, self.D
         x = np.reshape(x,(-1,D)) - mu
         xs,LT = util.general.solve_chofactor_system(sigma,x.T,overwrite_b=True)
-        return -1./2. * inner1d(xs.T,xs.T) - D/2*(np.log(2*np.pi) + np.log(np.diag(LT)).sum())
+        return -1./2. * inner1d(xs.T,xs.T) - D/2*np.log(2*np.pi) - np.log(LT.diagonal()).sum()
 
     def _posterior_hypparams(self,n,xbar,sumsq):
         mu_0, sigma_0, kappa_0, nu_0 = self.mu_0, self.sigma_0, self.kappa_0, self.nu_0
@@ -89,9 +89,6 @@ class Gaussian(GibbsSampling, MeanField, Collapsed, MaxLikelihood):
 
     @staticmethod
     def _get_statistics(data,D):
-        assert isinstance(data,np.ndarray) or \
-                (isinstance(data,list) and all(isinstance(d,np.ndarray) for d in data))
-
         n = getdatasize(data)
         if n > 0:
             if isinstance(data,np.ndarray):
@@ -111,7 +108,6 @@ class Gaussian(GibbsSampling, MeanField, Collapsed, MaxLikelihood):
     # NOTE my sumsq is Bishop's Nk*Sk
 
     def meanfieldupdate(self,data,weights):
-        assert getdatasize(data) > 0
         # update
         self._mu_mf, self._sigma_mf, self._kappa_mf, self._nu_mf = \
                 self._posterior_hypparams(*self._get_weighted_statistics(data,weights,self.D))
@@ -165,14 +161,6 @@ class Gaussian(GibbsSampling, MeanField, Collapsed, MaxLikelihood):
     def _get_weighted_statistics(data,weights,D):
         # NOTE: _get_statistics is special case with all weights being 1
         # this is kept as a separate method for speed and modularity
-        assert (isinstance(data,np.ndarray) and isinstance(weights,np.ndarray)
-                and weights.ndim == 1 and np.reshape(data,(-1,D)).shape[0] == weights.shape[0]) \
-                        or \
-                        (isinstance(data,list) and isinstance(weights,list) and
-                                all(isinstance(d,np.ndarray) and isinstance(w,np.ndarray)
-                                    and w.ndim == 1 and np.reshape(d,(-1,D)).shape[0] == w.shape[0])
-                                for w,d in zip(weights,data))
-
         if isinstance(data,np.ndarray):
             neff = weights.sum()
             if neff > 0:
@@ -369,9 +357,6 @@ class DiagonalGaussian(GibbsSampling):
         self.mu = np.sqrt(self.sigmas/nus_n)*np.random.randn(self.D) + mu_n
 
     def _get_statistics(self,data):
-        assert isinstance(data,np.ndarray) or \
-                (isinstance(data,list) and all(isinstance(d,np.ndarray) for d in data))
-
         D = self.D
         n = getdatasize(data)
         if n > 0:

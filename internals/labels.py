@@ -29,11 +29,14 @@ class Labels(object):
     def _generate(self,N):
         self.z = self.weights.rvs(size=N)
 
-    def resample(self):
+    def resample(self,temp=None):
         data = self.data
 
         scores = np.hstack([c.log_likelihood(data)[:,na] for c in self.components]) \
                 + self.weights.log_likelihood(np.arange(len(self.components)))
+
+        if temp is not None:
+            scores /= temp
 
         self.z = sample_discrete_from_log(scores,axis=1)
 
@@ -43,7 +46,7 @@ class Labels(object):
         data, N, K = self.data, self.data.shape[0], len(self.components)
 
         # update, see Eq. 10.67 in Bishop
-        component_scores = np.zeros((N,K))
+        component_scores = np.empty((N,K))
 
         for idx, c in enumerate(self.components):
             component_scores[:,idx] = c.expected_log_likelihood(data)
