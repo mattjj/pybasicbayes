@@ -115,24 +115,32 @@ class Gaussian(GibbsSampling, MeanField, Collapsed, MaxLikelihood):
         # update
         self._mu_mf, self._sigma_mf, self._kappa_mf, self._nu_mf = \
                 self._posterior_hypparams(*self._get_weighted_statistics(data,weights,self.D))
+        self._sigma_mf_chol = None
         self.mu, self.sigma = self._mu_mf, self._sigma_mf/(self._nu_mf - self.D - 1) # for plotting
+
+    def _get_sigma_mf_chol(self):
+        if not hasattr(self,'_sigma_mf_chol') or self._sigma_mf_chol is None:
+            self._sigma_mf_chol = util.general.cholesky(self._sigma_mf)
+        return self._sigma_mf_chol
 
     def get_vlb(self):
         # return avg energy plus entropy, our contribution to the mean field
         # variational lower bound
         D = self.D
         loglmbdatilde = self._loglmbdatilde()
+        chol = self._get_sigma_mf_chol()
+
         # see Eq. 10.77 in Bishop
         q_entropy = -0.5 * (loglmbdatilde + self.D * (np.log(self._kappa_mf/(2*np.pi))-1)) \
-                + invwishart_entropy(self._sigma_mf,self._nu_mf)
+                + invwishart_entropy(self._sigma_mf,self._nu_mf,chol)
         # see Eq. 10.74 in Bishop, we aren't summing over K
-        # TODO speed this up with a chol
         p_avgengy = 0.5 * (D * np.log(self.kappa_0/(2*np.pi)) + loglmbdatilde \
                 - D*self.kappa_0/self._kappa_mf - self.kappa_0*self._nu_mf*\
-                np.dot(self._mu_mf - self.mu_0,np.linalg.solve(self._sigma_mf,self._mu_mf - self.mu_0))) \
+                np.dot(self._mu_mf -
+                    self.mu_0,util.general.solve_psd(self._sigma_mf,self._mu_mf - self.mu_0,chol=chol))) \
                 + invwishart_log_partitionfunction(self.sigma_0,self.nu_0) \
                 + (self.nu_0 - D - 1)/2*loglmbdatilde - 1/2*self._nu_mf*\
-                np.linalg.solve(self._sigma_mf,self.sigma_0).trace()
+                util.general.solve_psd(self._sigma_mf,self.sigma_0,chol=chol).trace()
 
         return p_avgengy + q_entropy
 
@@ -140,16 +148,18 @@ class Gaussian(GibbsSampling, MeanField, Collapsed, MaxLikelihood):
         mu_n, sigma_n, kappa_n, nu_n = self._mu_mf, self._sigma_mf, self._kappa_mf, self._nu_mf
         D = self.D
         x = np.reshape(x,(-1,D)) - mu_n # x is now centered
+        chol = self._get_sigma_mf_chol()
+        xs = util.general.solve_triangular(chol,x.T,overwrite_b=True)
 
         # see Eqs. 10.64, 10.67, and 10.71 in Bishop
-        # TODO speed this up with a chol
         return self._loglmbdatilde()/2 - D/(2*kappa_n) - nu_n/2 * \
-                (np.linalg.solve(sigma_n,x.T).T * x).sum(1) - D/2*np.log(2*np.pi)
+                inner1d(xs.T,xs.T) - D/2*np.log(2*np.pi)
 
     def _loglmbdatilde(self):
         # see Eq. 10.65 in Bishop
+        chol = self._get_sigma_mf_chol()
         return special.digamma((self._nu_mf-np.arange(self.D))/2).sum() \
-                + self.D*np.log(2) - np.linalg.slogdet(self._sigma_mf)[1]
+                + self.D*np.log(2) - 2*np.log(chol.diagonal()).sum()
 
     @staticmethod
     def _get_weighted_statistics(data,weights,D):
@@ -192,8 +202,9 @@ class Gaussian(GibbsSampling, MeanField, Collapsed, MaxLikelihood):
 
     def _log_partition_function(self,mu,sigma,kappa,nu):
         D = self.D
+        chol = util.general.cholesky(sigma)
         return nu*D/2*np.log(2) + special.multigammaln(nu/2,D) + D/2*np.log(2*np.pi/kappa) \
-                - nu/2*np.log(np.linalg.det(sigma))
+                - nu*np.log(chol.diagonal()).sum()
 
     ### Max likelihood
 
