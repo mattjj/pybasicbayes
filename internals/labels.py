@@ -29,11 +29,14 @@ class Labels(object):
     def _generate(self,N):
         self.z = self.weights.rvs(size=N)
 
-    def resample(self):
+    def resample(self,temp=None):
         data = self.data
 
         scores = np.hstack([c.log_likelihood(data)[:,na] for c in self.components]) \
                 + self.weights.log_likelihood(np.arange(len(self.components)))
+
+        if temp is not None:
+            scores /= temp
 
         self.z = sample_discrete_from_log(scores,axis=1)
 
@@ -43,7 +46,7 @@ class Labels(object):
         data, N, K = self.data, self.data.shape[0], len(self.components)
 
         # update, see Eq. 10.67 in Bishop
-        component_scores = np.zeros((N,K))
+        component_scores = np.empty((N,K))
 
         for idx, c in enumerate(self.components):
             component_scores[:,idx] = c.expected_log_likelihood(data)
@@ -58,17 +61,14 @@ class Labels(object):
         # return avg energy plus entropy, our contribution to the mean field
         # variational lower bound
         errs = np.seterr(invalid='ignore',divide='ignore')
-        logr = np.log(self.r)
-        prod = self.r*logr
+        prod = self.r*np.log(self.r)
         prod[np.isnan(prod)] = 0. # 0 * -inf = 0.
         np.seterr(**errs)
 
         logpitilde = self.weights.expected_log_likelihood(np.arange(len(self.components)))
 
-        q_entropy = min(-1*(prod.sum()),0.) # numerical
+        q_entropy = -prod.sum()
         p_avgengy = (self.r*logpitilde).sum()
-
-        assert q_entropy <= 0 and p_avgengy <= 0
 
         return p_avgengy + q_entropy
 

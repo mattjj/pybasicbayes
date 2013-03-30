@@ -66,7 +66,7 @@ class Gaussian(GibbsSampling, MeanField, Collapsed, MaxLikelihood):
         mu, sigma, D = self.mu, self.sigma, self.D
         x = np.reshape(x,(-1,D)) - mu
         xs,LT = util.general.solve_chofactor_system(sigma,x.T,overwrite_b=True)
-        return -1./2. * inner1d(xs.T,xs.T) - D/2*(np.log(2*np.pi) + np.log(np.diag(LT)).sum())
+        return -1./2. * inner1d(xs.T,xs.T) - D/2*np.log(2*np.pi) - np.log(LT.diagonal()).sum()
 
     def _posterior_hypparams(self,n,xbar,sumsq):
         mu_0, sigma_0, kappa_0, nu_0 = self.mu_0, self.sigma_0, self.kappa_0, self.nu_0
@@ -89,9 +89,6 @@ class Gaussian(GibbsSampling, MeanField, Collapsed, MaxLikelihood):
 
     @staticmethod
     def _get_statistics(data,D):
-        assert isinstance(data,np.ndarray) or \
-                (isinstance(data,list) and all(isinstance(d,np.ndarray) for d in data))
-
         n = getdatasize(data)
         if n > 0:
             if isinstance(data,np.ndarray):
@@ -111,28 +108,35 @@ class Gaussian(GibbsSampling, MeanField, Collapsed, MaxLikelihood):
     # NOTE my sumsq is Bishop's Nk*Sk
 
     def meanfieldupdate(self,data,weights):
-        assert getdatasize(data) > 0
         # update
         self._mu_mf, self._sigma_mf, self._kappa_mf, self._nu_mf = \
                 self._posterior_hypparams(*self._get_weighted_statistics(data,weights,self.D))
+        self._sigma_mf_chol = None
         self.mu, self.sigma = self._mu_mf, self._sigma_mf/(self._nu_mf - self.D - 1) # for plotting
+
+    def _get_sigma_mf_chol(self):
+        if not hasattr(self,'_sigma_mf_chol') or self._sigma_mf_chol is None:
+            self._sigma_mf_chol = util.general.cholesky(self._sigma_mf)
+        return self._sigma_mf_chol
 
     def get_vlb(self):
         # return avg energy plus entropy, our contribution to the mean field
         # variational lower bound
         D = self.D
         loglmbdatilde = self._loglmbdatilde()
+        chol = self._get_sigma_mf_chol()
+
         # see Eq. 10.77 in Bishop
-        q_entropy = -1 * (0.5 * (loglmbdatilde + self.D * (np.log(self._kappa_mf/(2*np.pi))-1)) \
-                - invwishart_entropy(self._sigma_mf,self._nu_mf))
+        q_entropy = -0.5 * (loglmbdatilde + self.D * (np.log(self._kappa_mf/(2*np.pi))-1)) \
+                + invwishart_entropy(self._sigma_mf,self._nu_mf,chol)
         # see Eq. 10.74 in Bishop, we aren't summing over K
-        # TODO speed this up with a chol
         p_avgengy = 0.5 * (D * np.log(self.kappa_0/(2*np.pi)) + loglmbdatilde \
                 - D*self.kappa_0/self._kappa_mf - self.kappa_0*self._nu_mf*\
-                np.dot(self._mu_mf - self.mu_0,np.linalg.solve(self._sigma_mf,self._mu_mf - self.mu_0))) \
-                - invwishart_log_partitionfunction(self.sigma_0,self.nu_0) \
+                np.dot(self._mu_mf -
+                    self.mu_0,util.general.solve_psd(self._sigma_mf,self._mu_mf - self.mu_0,chol=chol))) \
+                + invwishart_log_partitionfunction(self.sigma_0,self.nu_0) \
                 + (self.nu_0 - D - 1)/2*loglmbdatilde - 1/2*self._nu_mf*\
-                np.linalg.solve(self._sigma_mf,self.sigma_0).trace()
+                util.general.solve_psd(self._sigma_mf,self.sigma_0,chol=chol).trace()
 
         return p_avgengy + q_entropy
 
@@ -140,29 +144,23 @@ class Gaussian(GibbsSampling, MeanField, Collapsed, MaxLikelihood):
         mu_n, sigma_n, kappa_n, nu_n = self._mu_mf, self._sigma_mf, self._kappa_mf, self._nu_mf
         D = self.D
         x = np.reshape(x,(-1,D)) - mu_n # x is now centered
+        chol = self._get_sigma_mf_chol()
+        xs = util.general.solve_triangular(chol,x.T,overwrite_b=True)
 
-        # see Eq. 10.67 in Bishop
-        # TODO speed this up with a chol
+        # see Eqs. 10.64, 10.67, and 10.71 in Bishop
         return self._loglmbdatilde()/2 - D/(2*kappa_n) - nu_n/2 * \
-                (np.linalg.solve(sigma_n,x.T).T * x).sum(1)
+                inner1d(xs.T,xs.T) - D/2*np.log(2*np.pi)
 
     def _loglmbdatilde(self):
         # see Eq. 10.65 in Bishop
+        chol = self._get_sigma_mf_chol()
         return special.digamma((self._nu_mf-np.arange(self.D))/2).sum() \
-                + self.D*np.log(2) - np.linalg.slogdet(self._sigma_mf)[1]
+                + self.D*np.log(2) - 2*np.log(chol.diagonal()).sum()
 
     @staticmethod
     def _get_weighted_statistics(data,weights,D):
         # NOTE: _get_statistics is special case with all weights being 1
         # this is kept as a separate method for speed and modularity
-        assert (isinstance(data,np.ndarray) and isinstance(weights,np.ndarray)
-                and weights.ndim == 1 and np.reshape(data,(-1,D)).shape[0] == weights.shape[0]) \
-                        or \
-                        (isinstance(data,list) and isinstance(weights,list) and
-                                all(isinstance(d,np.ndarray) and isinstance(w,np.ndarray)
-                                    and w.ndim == 1 and np.reshape(d,(-1,D)).shape[0] == w.shape[0])
-                                for w,d in zip(weights,data))
-
         if isinstance(data,np.ndarray):
             neff = weights.sum()
             if neff > 0:
@@ -179,6 +177,7 @@ class Gaussian(GibbsSampling, MeanField, Collapsed, MaxLikelihood):
                         for w,d in zip(weights,data))
             else:
                 xbar, sumsq = None, None
+
         return neff, xbar, sumsq
 
     ### Collapsed
@@ -191,8 +190,9 @@ class Gaussian(GibbsSampling, MeanField, Collapsed, MaxLikelihood):
 
     def _log_partition_function(self,mu,sigma,kappa,nu):
         D = self.D
+        chol = util.general.cholesky(sigma)
         return nu*D/2*np.log(2) + special.multigammaln(nu/2,D) + D/2*np.log(2*np.pi/kappa) \
-                - nu/2*np.log(np.linalg.det(sigma))
+                - nu*np.log(chol.diagonal()).sum()
 
     ### Max likelihood
 
@@ -357,9 +357,6 @@ class DiagonalGaussian(GibbsSampling):
         self.mu = np.sqrt(self.sigmas/nus_n)*np.random.randn(self.D) + mu_n
 
     def _get_statistics(self,data):
-        assert isinstance(data,np.ndarray) or \
-                (isinstance(data,list) and all(isinstance(d,np.ndarray) for d in data))
-
         D = self.D
         n = getdatasize(data)
         if n > 0:
