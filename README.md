@@ -16,7 +16,7 @@ import numpy as np
 from pybasicbayes import models, distributions
 
 # hyperparameters
-alpha_0 = 2.
+alpha_0=5.0
 obs_hypparams = dict(mu_0=np.zeros(2),sigma_0=np.eye(2),kappa_0=0.05,nu_0=5)
 
 # create the model
@@ -24,7 +24,7 @@ priormodel = models.Mixture(alpha_0=alpha_0,
         components=[distributions.Gaussian(**obs_hypparams) for itr in range(30)])
 
 # generate some data
-data = priormodel.rvs(200)
+data = priormodel.rvs(400)
 
 # delete the model
 del priormodel
