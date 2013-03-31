@@ -686,7 +686,7 @@ class Multinomial(GibbsSampling, MeanField, MaxLikelihood):
     def __repr__(self):
         return 'Multinomial(weights=%s)' % (self.weights,)
 
-    def __init__(self,weights=None,alpha_0=None,alphav_0=None,K=None):
+    def __init__(self,weights=None,alpha_0=None,K=None,alphav_0=None):
         assert (isinstance(alphav_0,np.ndarray) and alphav_0.ndim == 1) ^ \
                 (K is not None and alpha_0 is not None)
 
@@ -788,6 +788,7 @@ class Multinomial(GibbsSampling, MeanField, MaxLikelihood):
 
         self.weights = counts/counts.sum()
 
+    # TODO weighted max likelihood!
 
 class MultinomialConcentration(Multinomial):
     '''
@@ -820,7 +821,6 @@ class MultinomialConcentration(Multinomial):
     def meanfieldupdate(self,*args,**kwargs): # TODO
         warn('MeanField not implemented for %s; concentration parameter will stay fixed')
         super(MultinomialConcentration,self).meanfieldupdate(*args,**kwargs)
-
 
 class Geometric(GibbsSampling, Collapsed):
     '''
