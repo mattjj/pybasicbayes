@@ -66,7 +66,7 @@ allmodels = []
 for superitr in range(5):
     # Gibbs sampling to wander around the posterior
     print 'Gibbs Sampling'
-    for itr in progprint_xrange(50):
+    for itr in progprint_xrange(100):
         posteriormodel.resample_model()
 
     # mean field to lock onto a mode
