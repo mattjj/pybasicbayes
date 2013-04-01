@@ -717,8 +717,11 @@ class Multinomial(GibbsSampling, MeanField, MaxLikelihood):
 
     ### Gibbs sampling
 
-    def resample(self,data=[]):
-        hypparams = self._posterior_hypparams(*self._get_statistics(data,self.K))
+    def resample(self,data=[],count_data=None):
+        if count_data is None:
+            hypparams = self._posterior_hypparams(*self._get_statistics(data,self.K))
+        else:
+            hypparams = self._posterior_hypparams(count_data)
         self.weights = np.random.dirichlet(np.where(hypparams>1e-2,hypparams,1e-2))
 
     @staticmethod
@@ -779,6 +782,9 @@ class Multinomial(GibbsSampling, MeanField, MaxLikelihood):
 
         self.weights = counts/counts.sum()
 
+    def max_likelihood_countdata(self,counts):
+        self.weights = counts /counts.sum()
+
     def max_likelihood_withprior(self,data,weights=None):
         K = self.K
         if weights is None:
@@ -806,11 +812,14 @@ class MultinomialConcentration(Multinomial):
         super(MultinomialConcentration,self).__init__(alpha_0=self.concentration.concentration,
                 K=K,weights=weights)
 
-    def resample(self,data=[],niter=10):
-        if isinstance(data,list):
-            counts = map(np.bincount,data)
+    def resample(self,data=[],count_data=None,niter=20):
+        if count_data is None:
+            if isinstance(data,list):
+                counts = map(np.bincount,data)
+            else:
+                counts = np.bincount(data)
         else:
-            counts = np.bincount(data)
+            counts = count_data
 
         for itr in range(niter):
             self.concentration.resample(counts,niter=1)
@@ -820,6 +829,9 @@ class MultinomialConcentration(Multinomial):
     def meanfieldupdate(self,*args,**kwargs): # TODO
         warn('MeanField not implemented for %s; concentration parameter will stay fixed')
         super(MultinomialConcentration,self).meanfieldupdate(*args,**kwargs)
+
+    def max_likelihood(self,*args,**kwargs):
+        raise NotImplementedError, "max_likelihood doesn't make sense on this object"
 
 
 class Geometric(GibbsSampling, Collapsed):
