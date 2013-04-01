@@ -3,18 +3,17 @@ import numpy as np
 np.seterr(invalid='raise')
 from matplotlib import pyplot as plt
 import copy
-import operator
 
 from pybasicbayes import models, distributions
-from util.text import progprint_xrange
+from pybasicbayes.util.text import progprint_xrange
 
-alpha_0=2.0
+alpha_0=5.0
 obs_hypparams=dict(mu_0=np.zeros(2),sigma_0=np.eye(2),kappa_0=0.05,nu_0=5)
 
 priormodel = models.Mixture(alpha_0=alpha_0,
         components=[distributions.Gaussian(**obs_hypparams) for itr in range(30)])
 
-data = priormodel.rvs(200)
+data = priormodel.rvs(400)
 
 del priormodel
 
@@ -48,6 +47,7 @@ for scores in allscores:
     plt.plot(scores)
 plt.title('model vlb scores vs iteration')
 
+import operator
 models_and_scores = sorted([(m,s[-1]) for m,s
     in zip(allmodels,allscores)],key=operator.itemgetter(1),reverse=True)
 

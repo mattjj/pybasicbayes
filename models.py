@@ -125,19 +125,20 @@ class Mixture(ModelGibbsSampling, ModelMeanField, ModelEM):
                 'Components must implement MaxLikelihood'
         assert len(self.labels_list) > 0, 'Must have data to run EM'
 
-        ### E step
+        ## E step
         for l in self.labels_list:
             l.E_step()
 
-        ### M step
-        # max likelihood for weights
-        K = len(self.components)
-        self.weights.max_likelihood(np.arange(K),[l.expectations for l in self.labels_list])
-
-        # max likelihood for component parameters
+        ## M step
+        # component parameters
         for idx, c in enumerate(self.components):
             c.max_likelihood([l.data for l in self.labels_list],
                     [l.expectations[:,idx] for l in self.labels_list])
+
+        # mixture weights
+        self.weights.max_likelihood(np.arange(len(self.components)),
+                [l.expectations for l in self.labels_list])
+
 
     def num_parameters(self):
         # NOTE: scikit.learn's gmm.py doesn't count the weights in the number of
