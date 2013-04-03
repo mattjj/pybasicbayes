@@ -3,6 +3,7 @@ import numpy as np
 np.seterr(divide='ignore')
 from numpy import newaxis as na
 from numpy.core.umath_tests import inner1d
+import scipy.weave
 import scipy.stats as stats
 import scipy.special as special
 import matplotlib.pyplot as plt
@@ -1018,6 +1019,31 @@ class NegativeBinomial(GibbsSampling):
             self.p = p
 
     def resample(self,data=[],niter=20):
+        if getdatasize(data) == 0:
+            self.p = np.random.beta(self.alpha_0,self.beta_0)
+            self.r = np.random.gamma(self.k_0,self.theta_0)
+        else:
+            data = flattendata(data)
+            N = len(data)
+            r = self.r
+            for itr in range(niter):
+                ### resample r
+                msum = np.array(0.)
+                scipy.weave.inline(
+                        '''
+                        for (int i=0; i < N; i++) {
+                            for (int j=0; j < data[i]; j++) {
+                                *msum += ((float) rand()) / RAND_MAX < ((float) r)/(j+r);
+                            }
+                        }
+                        ''',
+                        ['N','data','r','msum'],
+                        extra_compile_args=['-O3'])
+                self.r = np.random.gamma(self.k_0 + msum, 1/(1/self.theta_0 - N*np.log(1-self.p)))
+                ### resample p
+                self.p = np.random.beta(self.alpha_0 + data.sum(), self.beta_0 + N*self.r)
+
+    def resample_python(self,data=[],niter=20):
         if getdatasize(data) == 0:
             self.p = np.random.beta(self.alpha_0,self.beta_0)
             self.r = np.random.gamma(self.k_0,self.theta_0)
