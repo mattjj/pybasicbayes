@@ -238,50 +238,30 @@ class Gaussian(GibbsSampling, MeanField, Collapsed, MaxLikelihood):
 
         self.mu, self.sigma, _, _ = self._posterior_hypparams(n,muhat,sumsq)
 
-    ### Misc
-
-    # TODO get rid of this; just make it happen the first time plot is called
-    @classmethod
-    def _plot_setup(cls,instance_list):
-        # must set cls.vecs to be a reasonable 2D space to project onto
-        # so that the projection is consistent across instances
-        # for now, i'll just make it random if there are more than 2 dimensions
-        assert len(instance_list) > 0
-        assert len(set([len(o.mu) for o in instance_list])) == 1, \
-                'must have consistent dimensions across instances'
-        dim = len(instance_list[0].mu)
-        if dim > 2:
-            vecs = np.random.randn((dim,2))
-            vecs /= np.sqrt((vecs**2).sum())
-        else:
-            vecs = np.eye(2)
-
-        for o in instance_list:
-            o.global_vecs = vecs
+    ### plotting
 
     def plot(self,data=None,color='b',plot_params=True,label=''):
-        from util.plot import project_data, plot_gaussian_projection, pca
+        from util.plot import project_data, plot_gaussian_projection, plot_gaussian_2D
         if data is not None:
             data = flattendata(data)
 
-        try:
-            vecs = self.global_vecs
-        except AttributeError:
-            dim = len(self.mu)
-            if dim == 2:
-                vecs = np.eye(2)
-            elif data is not None:
-                assert dim > 2
-                vecs = pca(data,num_components=2)
-            else:
-                vecs = np.random.randn(2,2)
+        if self.D > 2 and (not hasattr(self,'plotting_subspace_basis') > 2
+                or self.plotting_subspace_basis.shape[0] != self.D):
+            warn('No appropriate plotting subspace basis set; using a uniformly random subspace')
+            subspace = np.random.randn(self.D,2)
+            self.__class__.plotting_subspace_basis = np.linalg.qr(subspace)[0]
 
         if data is not None:
-            projected_data = project_data(data,vecs)
-            plt.plot(projected_data[:,0],projected_data[:,1],marker='.',linestyle=' ',color=color)
+            if self.D > 2:
+                data = project_data(data,self.plotting_subspace_basis)
+            plt.plot(data[:,0],data[:,1],marker='.',linestyle=' ',color=color)
 
         if plot_params:
-            plot_gaussian_projection(self.mu,self.sigma,vecs,color=color,label=label)
+            if self.D > 2:
+                plot_gaussian_projection(self.mu,self.sigma,self.plotting_subspace_basis,
+                        color=color,label=label)
+            else:
+                plot_gaussian_2D(self.mu,self.sigma,color=color,label=label)
 
     def to_json_dict(self):
         assert self.D == 2
@@ -462,10 +442,6 @@ class ScalarGaussian(Distribution):
 
     def __repr__(self):
         return self.__class__.__name__ + '(mu=%f,sigmasq=%f)' % (self.mu,self.sigmasq)
-
-    @classmethod
-    def _plot_setup(cls,instance_list):
-        pass
 
     def plot(self,data=None,color='b',plot_params=True):
         raise NotImplementedError # TODO

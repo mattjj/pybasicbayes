@@ -184,8 +184,6 @@ class Mixture(ModelGibbsSampling, ModelMeanField, ModelEM):
             for subfigidx,l in enumerate(self.labels_list):
                 # plot the current observation distributions (and obs. if given)
                 plt.subplot(num_subfig_rows,1,1+subfigidx)
-                # if hasattr(self.components[0],'_plot_setup'):
-                #     self.components[0]._plot_setup(self.components)
                 for label, o in enumerate(self.components):
                     if label in l.z:
                         o.plot(color=cmap(label_colors[label]),
