@@ -1138,7 +1138,8 @@ class CRPGamma(GibbsSampling):
             self.concentration = np.random.gamma(a_n,scale=1./b_n)
 
     def _posterior_hypparams(self,sample_numbers,total_num_distinct):
-        # NOTE: this is a stochastic function
+        # NOTE: this is a stochastic function: it samples auxiliary variables
+        # and should be repeated
         if total_num_distinct > 0:
             sample_numbers = np.array(sample_numbers)
             sample_numbers = sample_numbers[sample_numbers > 0]
@@ -1192,7 +1193,7 @@ class DirGamma(CRPGamma):
         out = np.empty((len(sample_counts),self.K),dtype=int)
         for idx,c in enumerate(sample_counts):
             out[idx] = np.random.multinomial(c,
-                np.random.dirichlet(self.concentration * np.ones(self.K)))
+                np.random.dirichlet(np.repeat(self.concentration,self.K)))
         return out if out.shape[0] > 1 else out[0]
 
     def resample(self,data=[],niter=50,weighted_cols=None):
