@@ -776,6 +776,7 @@ class Multinomial(GibbsSampling, MeanField, MaxLikelihood):
     # TODO weighted max likelihood!
 
 
+# TODO TODO test this
 class MultinomialConcentration(Multinomial):
     '''
     Multinomial with resampling of the symmetric Dirichlet concentration
@@ -793,7 +794,7 @@ class MultinomialConcentration(Multinomial):
         super(MultinomialConcentration,self).__init__(alpha_0=self.concentration.concentration,
                 K=K,weights=weights)
 
-    def resample(self,data=[],count_data=None,niter=20):
+    def resample(self,data=[],count_data=None):
         if count_data is None:
             if isinstance(data,list):
                 counts = map(np.bincount,data)
@@ -802,10 +803,9 @@ class MultinomialConcentration(Multinomial):
         else:
             counts = count_data
 
-        for itr in range(niter):
-            self.concentration.resample(counts,niter=1)
-            self.alphav_0 = np.ones(self.K) * self.concentration.concentration
-            super(MultinomialConcentration,self).resample(data)
+        self.concentration.resample(counts)
+        self.alphav_0 = np.repeat(self.concentration.concentration/self.K,self.K)
+        super(MultinomialConcentration,self).resample(data)
 
     def meanfieldupdate(self,*args,**kwargs): # TODO
         warn('MeanField not implemented for %s; concentration parameter will stay fixed')
