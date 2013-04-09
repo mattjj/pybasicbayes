@@ -229,7 +229,8 @@ class Gaussian(GibbsSampling, MeanField, Collapsed, MaxLikelihood):
 
         return cls(muhat,sumsq/n,n,n,mu=muhat,sigma=sumsq/n)
 
-    def max_likelihood_withprior(self,data,weights=None):
+    def max_a_posteriori(self,data,weights=None):
+        # max likelihood with prior pseudocounts included in data
         D = self.D
         if weights is None:
             n, muhat, sumsq = self._get_statistics(data,D)
@@ -776,7 +777,6 @@ class Multinomial(GibbsSampling, MeanField, MaxLikelihood):
     # TODO weighted max likelihood!
 
 
-# TODO TODO test this
 class MultinomialConcentration(Multinomial):
     '''
     Multinomial with resampling of the symmetric Dirichlet concentration

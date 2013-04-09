@@ -92,6 +92,17 @@ class MaxLikelihood(Distribution):
         '''
         raise NotImplementedError
 
+class MAP(Distribution):
+    __metaclass__ = abc.ABCMeta
+
+    @abc.abstractmethod
+    def map(self,data,weights=None):
+        '''
+        sets the parameters to their MAP values given the (weighted) data
+        analogous to max_likelihood but includes pseudocounts
+        '''
+        pass
+
 ############
 #  Models  #
 ############
@@ -144,3 +155,9 @@ class ModelEM(Model):
     def EM_step(self):
         pass
 
+class ModelMAPEM(Model):
+    __metaclass__ = abc.ABCMeta
+
+    @abc.abstractmethod
+    def MAP_EM_step(self):
+        pass
