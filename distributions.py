@@ -1009,11 +1009,13 @@ class NegativeBinomial(GibbsSampling):
                 msum = np.array(0.)
                 scipy.weave.inline(
                         '''
+                        int tot = 0;
                         for (int i=0; i < N; i++) {
                             for (int j=0; j < data[i]; j++) {
-                                *msum += ((float) rand()) / RAND_MAX < ((float) r)/(j+r);
+                                tot += ((float) rand()) / RAND_MAX < ((float) r)/(j+r);
                             }
                         }
+                        *msum = tot;
                         ''',
                         ['N','data','r','msum'],
                         extra_compile_args=['-O3'])
