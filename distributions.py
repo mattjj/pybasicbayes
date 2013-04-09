@@ -638,7 +638,9 @@ class ScalarGaussianFixedvar(ScalarGaussian, GibbsSampling):
 #  Discrete  #
 ##############
 
-# TODO this should be called categorical!
+# TODO TODO this should be called categorical! the two names Categorical and
+# Multinomial can differentiate between the kind of data they expect (likelihood
+# functions), while most of the code can be the same
 class Multinomial(GibbsSampling, MeanField, MaxLikelihood):
     '''
     This class represents a categorical distribution over labels, where the
@@ -1132,7 +1134,7 @@ class CRPGamma(GibbsSampling):
             restaurants.append(tables)
         return restaurants if len(restaurants) > 1 else restaurants[0]
 
-    def resample(self,data=[],niter=20):
+    def resample(self,data=[],niter=25):
         for itr in range(niter):
             a_n, b_n = self._posterior_hypparams(*self._get_statistics(data))
             self.concentration = np.random.gamma(a_n,scale=1./b_n)
@@ -1165,14 +1167,33 @@ class CRPGamma(GibbsSampling):
             else:
                 sample_numbers = np.array(sum(data))
                 total_num_distinct = len(data)
+
         return sample_numbers, total_num_distinct
+
+    @classmethod
+    def test(cls,niter=50):
+        d1 = cls(a_0=1.,b_0=1./4)
+        data = d1.rvs([50 for i in range(50)])
+
+        d2 = cls(a_0=1.,b_0=1./4)
+        concs = []
+        for itr in range(50):
+            d2.resample(data,niter=niter)
+            concs.append(d2.concentration)
+
+        plt.hist(concs,normed=True)
+        ymin, ymax = plt.ylim()
+        plt.vlines([d1.concentration],ymin,ymax,linestyles='dashed')
+        plt.ylim(ymin,ymax)
+        plt.xlim(0,20)
 
 
 class DirGamma(CRPGamma):
     '''
     Implements a Gamma(a_0,b_0) prior over finite dirichlet concentration
     parameter. The concentration is scaled according to the weak-limit according
-    to the number of dimensions K.
+    to the number of dimensions K. It stochastically splits counts into CRP
+    counts and uses the CRPGamma class's methods.
 
     For each set of counts i, the model is
         concentration ~ Gamma(a_0,b_0)
@@ -1193,10 +1214,10 @@ class DirGamma(CRPGamma):
         out = np.empty((len(sample_counts),self.K),dtype=int)
         for idx,c in enumerate(sample_counts):
             out[idx] = np.random.multinomial(c,
-                np.random.dirichlet(np.repeat(self.concentration,self.K)))
+                np.random.dirichlet(np.repeat(self.concentration/self.K,self.K)))
         return out if out.shape[0] > 1 else out[0]
 
-    def resample(self,data=[],niter=50,weighted_cols=None):
+    def resample(self,data=[],niter=25,weighted_cols=None):
         if weighted_cols is not None:
             self.weighted_cols = weighted_cols
         else:
@@ -1209,15 +1230,40 @@ class DirGamma(CRPGamma):
             size = sum(d.sum() for d in data)
 
         if size > 0:
-            for itr in range(niter):
-                super(DirGamma,self).resample(data,niter=1)
-                self.concentration /= self.K
+            super(DirGamma,self).resample(data,niter=niter)
         else:
             super(DirGamma,self).resample(data,niter=1)
-            self.concentration /= self.K
-
 
     def _get_statistics(self,data):
+        counts = np.array(data,ndmin=2)
+
+        # sample m's
+        if counts.sum() == 0:
+            return 0, 0
+        else:
+            msum = np.array(0.)
+            weighted_cols = self.weighted_cols
+            concentration = self.concentration
+            N,K = counts.shape
+            scipy.weave.inline(
+                    '''
+                    int tot = 0;
+                    for (int i=0; i < N; i++) {
+                        for (int j=0; j < K; j++) {
+                            for (int c=0; c < counts[i*K + j]; c++) {
+                                tot += ((float) rand()) / RAND_MAX <
+                                    ((float) concentration/K*weighted_cols[j]) /
+                                            (c + concentration/K*weighted_cols[j]);
+                            }
+                        }
+                    }
+                    *msum = tot;
+                    ''',
+                    ['weighted_cols','concentration','N','K','msum','counts'],
+                    extra_compile_args=['-O3'])
+            return counts.sum(1), int(msum)
+
+    def _get_statistics_python(self,data):
         counts = np.array(data,ndmin=2)
 
         # sample m's
@@ -1229,4 +1275,21 @@ class DirGamma(CRPGamma):
                 m += (np.random.rand(n) < self.concentration*self.K*self.weighted_cols[j] \
                         / (np.arange(n)+self.concentration*self.K*self.weighted_cols[j])).sum()
             return counts.sum(1), m
+
+    @classmethod
+    def test(cls,niter=50):
+        d1 = cls(K=25,a_0=1.,b_0=1./4)
+        data = d1.rvs([50 for i in range(50)])
+
+        d2 = cls(K=25,a_0=1.,b_0=1./4)
+        concs = []
+        for itr in range(50):
+            d2.resample(data,niter=niter)
+            concs.append(d2.concentration)
+
+        plt.hist(concs,normed=True)
+        ymin, ymax = plt.ylim()
+        plt.vlines([d1.concentration],ymin,ymax,linestyles='dashed')
+        plt.ylim(ymin,ymax)
+        plt.xlim(0,20)
 
