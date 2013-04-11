@@ -784,7 +784,7 @@ class CategoricalAndConcentration(Categorical):
                 K=K,weights=weights)
 
     def resample(self,data=[]):
-        counts, = self._get_statistics(data)
+        counts, = self._get_statistics(data,self.K)
         self.concentration.resample(counts)
         self.alphav_0 = np.repeat(self.concentration.concentration/self.K,self.K)
         super(self.__class__,self).resample(data)
@@ -844,7 +844,7 @@ class MultinomialAndConcentration(Multinomial):
         super(self.__class__,self).__init__(alpha_0=self.concentration.concentration,K=K,weights=weights)
 
     def resample(self,data=[]):
-        counts, = self._get_statistics(data)
+        counts, = self._get_statistics(data,self.K)
         self.concentration.resample(counts)
         self.alphav_0 = np.repeat(self.concentration.concentration/self.K,self.K)
         super(self.__class__,self).resample(data)
