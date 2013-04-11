@@ -779,16 +779,12 @@ class CategoricalAndConcentration(Categorical):
         pi ~ Dir(concentration/K)
     '''
     def __init__(self,a_0,b_0,K,concentration=None,weights=None):
-        self.concentration = DirGamma(a_0=a_0,b_0=b_0,K=K, concentration=concentration)
+        self.concentration = DirGamma(a_0=a_0,b_0=b_0,K=K,concentration=concentration)
         super(self.__class__,self).__init__(alpha_0=self.concentration.concentration,
                 K=K,weights=weights)
 
     def resample(self,data=[]):
-        if isinstance(data,list):
-            counts = map(np.bincount,data)
-        else:
-            counts = np.bincount(data)
-
+        counts, = self._get_statistics(data)
         self.concentration.resample(counts)
         self.alphav_0 = np.repeat(self.concentration.concentration/self.K,self.K)
         super(self.__class__,self).resample(data)
@@ -820,9 +816,12 @@ class Multinomial(Categorical):
     @staticmethod
     def _get_statistics(data,K):
         if isinstance(data,np.ndarray):
-            return data
+            return data,
         else:
-            return np.array(data).sum(0)
+            data = np.array(data)
+            if data.size == 0:
+                return np.zeros(K,dtype=int),
+            return np.array(data).sum(0),
 
     @staticmethod
     def _get_weighted_statistics(data,weights):
@@ -834,7 +833,28 @@ class Multinomial(Categorical):
         else:
             raise NotImplementedError # TODO
 
-# TODO MultinomialAndConcentration
+# TODO this is all repeated code from CategoricalAndConcentration! what's the
+# pythonic way to extend two classes in the same way (making two new classes)?
+class MultinomialAndConcentration(Multinomial):
+    '''
+    Similar to CategoricalAndConcentration, but data are counts.
+    '''
+    def __init__(self,a_0,b_0,K,concentration=None,weights=None):
+        self.concentration = DirGamma(a_0=a_0,b_0=b_0,K=K,concentration=concentration)
+        super(self.__class__,self).__init__(alpha_0=self.concentration.concentration,K=K,weights=weights)
+
+    def resample(self,data=[]):
+        counts, = self._get_statistics(data)
+        self.concentration.resample(counts)
+        self.alphav_0 = np.repeat(self.concentration.concentration/self.K,self.K)
+        super(self.__class__,self).resample(data)
+
+    def meanfieldupdate(self,*args,**kwargs): # TODO
+        warn('MeanField not implemented for %s; concentration parameter will stay fixed')
+        super(self.__class__,self).meanfieldupdate(*args,**kwargs)
+
+    def max_likelihood(self,*args,**kwargs):
+        raise NotImplementedError, "max_likelihood doesn't make sense on this object"
 
 
 class Geometric(GibbsSampling, Collapsed):
