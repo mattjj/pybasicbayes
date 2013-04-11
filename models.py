@@ -9,7 +9,7 @@ from warnings import warn
 
 from abstractions import ModelGibbsSampling, ModelMeanField, ModelEM
 from abstractions import Distribution, GibbsSampling, MeanField, Collapsed, MaxLikelihood
-from distributions import Multinomial, MultinomialConcentration
+from distributions import Categorical, CategoricalAndConcentration
 from internals.labels import Labels, CRPLabels
 
 class Mixture(ModelGibbsSampling, ModelMeanField, ModelEM):
@@ -23,9 +23,9 @@ class Mixture(ModelGibbsSampling, ModelMeanField, ModelEM):
         self.components = components
 
         if alpha_0 is not None:
-            self.weights = Multinomial(alpha_0=alpha_0,K=len(components),weights=weights)
+            self.weights = Categorical(alpha_0=alpha_0,K=len(components),weights=weights)
         else:
-            self.weights = MultinomialConcentration(a_0=a_0,b_0=b_0,K=len(components),weights=weights)
+            self.weights = CategoricalAndConcentration(a_0=a_0,b_0=b_0,K=len(components),weights=weights)
 
         self.labels_list = []
 

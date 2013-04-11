@@ -639,20 +639,19 @@ class ScalarGaussianFixedvar(ScalarGaussian, GibbsSampling):
 #  Discrete  #
 ##############
 
-# TODO TODO this should be called categorical! the two names Categorical and
-# Multinomial can differentiate between the kind of data they expect (likelihood
-# functions), while most of the code can be the same
-class Multinomial(GibbsSampling, MeanField, MaxLikelihood):
+class Categorical(GibbsSampling, MeanField, MaxLikelihood):
     '''
     This class represents a categorical distribution over labels, where the
     parameter is weights and the prior is a Dirichlet distribution.
     For example, if K == 3, then five samples may look like
         [0,1,0,2,1]
     Each entry is the label of a sample, like the outcome of die rolls. In other
-    words, data are not indicator variables! (Except when they need to be, like
-    in the mean field update or the weighted max likelihood (EM) update.)
+    words, generated data or data passed to log_likelihood are indices, not
+    indicator variables!  (But when 'weighted data' is passed, like in mean
+    field or weighted max likelihood, the weights are over indicator
+    variables...)
 
-    This can be used as a weak limit approximation for a DP, particularly by
+    This class can be used as a weak limit approximation for a DP, particularly by
     calling __init__ with alpha_0 and K arguments, in which case the prior will be
     a symmetric Dirichlet with K components and parameter alpha_0/K; K is then the
     weak limit approximation parameter.
@@ -661,10 +660,10 @@ class Multinomial(GibbsSampling, MeanField, MaxLikelihood):
         alphav_0 (vector) OR alpha_0 (scalar) and K
 
     Parameters:
-        weights, a vector encoding a discrete pmf
+        weights, a vector encoding a finite pmf
     '''
     def __repr__(self):
-        return 'Multinomial(weights=%s)' % (self.weights,)
+        return '%s(weights=%s)' % (self.__class__.__name__,self.weights)
 
     def __init__(self,weights=None,alpha_0=None,K=None,alphav_0=None):
         assert (isinstance(alphav_0,np.ndarray) and alphav_0.ndim == 1) ^ \
@@ -697,11 +696,9 @@ class Multinomial(GibbsSampling, MeanField, MaxLikelihood):
 
     ### Gibbs sampling
 
-    def resample(self,data=[],count_data=None):
-        if count_data is None:
-            hypparams = self._posterior_hypparams(*self._get_statistics(data,self.K))
-        else:
-            hypparams = self._posterior_hypparams(count_data)
+    def resample(self,data=[]):
+        'data is an array of indices (i.e. labels) or a list of such arrays'
+        hypparams = self._posterior_hypparams(*self._get_statistics(data,self.K))
         self.weights = np.random.dirichlet(np.where(hypparams>1e-2,hypparams,1e-2))
 
     @staticmethod
@@ -739,11 +736,10 @@ class Multinomial(GibbsSampling, MeanField, MaxLikelihood):
 
     @staticmethod
     def _get_weighted_statistics(data,weights):
-        # data is just a placeholder; technically it should be
+        # data is just a placeholder; technically it should always be
         # np.arange(K)[na,:].repeat(N,axis=0)
         assert isinstance(weights,np.ndarray) or \
-                (isinstance(weights,list) and
-                        all(isinstance(w,np.ndarray) for w in weights))
+                (isinstance(weights,list) and all(isinstance(w,np.ndarray) for w in weights))
 
         if isinstance(weights,np.ndarray):
             counts = weights.sum(0)
@@ -762,9 +758,6 @@ class Multinomial(GibbsSampling, MeanField, MaxLikelihood):
 
         self.weights = counts/counts.sum()
 
-    def max_likelihood_countdata(self,counts):
-        self.weights = counts /counts.sum()
-
     def max_likelihood_withprior(self,data,weights=None):
         K = self.K
         if weights is None:
@@ -774,12 +767,9 @@ class Multinomial(GibbsSampling, MeanField, MaxLikelihood):
 
         self.weights = counts/counts.sum()
 
-    # TODO weighted max likelihood!
-
-
-class MultinomialConcentration(Multinomial):
+class CategoricalAndConcentration(Categorical):
     '''
-    Multinomial with resampling of the symmetric Dirichlet concentration
+    Categorical with resampling of the symmetric Dirichlet concentration
     parameter.
 
         concentration ~ Gamma(a_0,b_0)
@@ -789,30 +779,62 @@ class MultinomialConcentration(Multinomial):
         pi ~ Dir(concentration/K)
     '''
     def __init__(self,a_0,b_0,K,concentration=None,weights=None):
-        self.concentration = DirGamma(a_0=a_0,b_0=b_0,K=K,
-                concentration=concentration)
-        super(MultinomialConcentration,self).__init__(alpha_0=self.concentration.concentration,
+        self.concentration = DirGamma(a_0=a_0,b_0=b_0,K=K, concentration=concentration)
+        super(self.__class__,self).__init__(alpha_0=self.concentration.concentration,
                 K=K,weights=weights)
 
-    def resample(self,data=[],count_data=None):
-        if count_data is None:
-            if isinstance(data,list):
-                counts = map(np.bincount,data)
-            else:
-                counts = np.bincount(data)
+    def resample(self,data=[]):
+        if isinstance(data,list):
+            counts = map(np.bincount,data)
         else:
-            counts = count_data
+            counts = np.bincount(data)
 
         self.concentration.resample(counts)
         self.alphav_0 = np.repeat(self.concentration.concentration/self.K,self.K)
-        super(MultinomialConcentration,self).resample(data)
+        super(self.__class__,self).resample(data)
 
     def meanfieldupdate(self,*args,**kwargs): # TODO
         warn('MeanField not implemented for %s; concentration parameter will stay fixed')
-        super(MultinomialConcentration,self).meanfieldupdate(*args,**kwargs)
+        super(self.__class__,self).meanfieldupdate(*args,**kwargs)
 
     def max_likelihood(self,*args,**kwargs):
         raise NotImplementedError, "max_likelihood doesn't make sense on this object"
+
+
+class Multinomial(Categorical):
+    '''
+    Similar to Categorical, but data are counts.
+
+    For example, if K == 3, then a sample with n=5 might be
+        [2,2,1]
+
+    A Poisson process conditioned on the number of points emitted.
+    '''
+    def log_likelihood(self,x):
+        return np.bincount(x,minlength=self.K)*np.log(self.weights)
+
+    def resample(self,data=[]):
+        'data is an array of counts or a list of such arrays)'
+        super(self.__class__,self).resample(data)
+
+    @staticmethod
+    def _get_statistics(data,K):
+        if isinstance(data,np.ndarray):
+            return data
+        else:
+            return np.array(data).sum(0)
+
+    @staticmethod
+    def _get_weighted_statistics(data,weights):
+        raise NotImplementedError # TODO
+
+    def max_likelihood(self,counts,weights=None):
+        if weights is None:
+            self.weights = counts /counts.sum()
+        else:
+            raise NotImplementedError # TODO
+
+# TODO MultinomialAndConcentration
 
 
 class Geometric(GibbsSampling, Collapsed):
