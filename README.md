@@ -86,8 +86,8 @@ Now we can plot the score trajectories:
 
 ```python
 plt.figure()
-for vals in allvals:
-    plt.plot(vals)
+for scores in allscores:
+    plt.plot(scores)
 plt.title('model vlb scores vs iteration')
 ```
 
