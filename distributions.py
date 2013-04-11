@@ -780,18 +780,18 @@ class CategoricalAndConcentration(Categorical):
     '''
     def __init__(self,a_0,b_0,K,concentration=None,weights=None):
         self.concentration = DirGamma(a_0=a_0,b_0=b_0,K=K,concentration=concentration)
-        super(self.__class__,self).__init__(alpha_0=self.concentration.concentration,
+        super(CategoricalAndConcentration,self).__init__(alpha_0=self.concentration.concentration,
                 K=K,weights=weights)
 
     def resample(self,data=[]):
         counts, = self._get_statistics(data,self.K)
         self.concentration.resample(counts)
         self.alphav_0 = np.repeat(self.concentration.concentration/self.K,self.K)
-        super(self.__class__,self).resample(data)
+        super(CategoricalAndConcentration,self).resample(data)
 
     def meanfieldupdate(self,*args,**kwargs): # TODO
         warn('MeanField not implemented for %s; concentration parameter will stay fixed')
-        super(self.__class__,self).meanfieldupdate(*args,**kwargs)
+        super(CategoricalAndConcentration,self).meanfieldupdate(*args,**kwargs)
 
     def max_likelihood(self,*args,**kwargs):
         raise NotImplementedError, "max_likelihood doesn't make sense on this object"
@@ -811,7 +811,7 @@ class Multinomial(Categorical):
 
     def resample(self,data=[]):
         'data is an array of counts or a list of such arrays)'
-        super(self.__class__,self).resample(data)
+        super(Multinomial,self).resample(data)
 
     @staticmethod
     def _get_statistics(data,K):
@@ -841,17 +841,17 @@ class MultinomialAndConcentration(Multinomial):
     '''
     def __init__(self,a_0,b_0,K,concentration=None,weights=None):
         self.concentration = DirGamma(a_0=a_0,b_0=b_0,K=K,concentration=concentration)
-        super(self.__class__,self).__init__(alpha_0=self.concentration.concentration,K=K,weights=weights)
+        super(MultinomialAndConcentration,self).__init__(alpha_0=self.concentration.concentration,K=K,weights=weights)
 
     def resample(self,data=[]):
         counts, = self._get_statistics(data,self.K)
         self.concentration.resample(counts)
         self.alphav_0 = np.repeat(self.concentration.concentration/self.K,self.K)
-        super(self.__class__,self).resample(data)
+        super(MultinomialAndConcentration,self).resample(data)
 
     def meanfieldupdate(self,*args,**kwargs): # TODO
         warn('MeanField not implemented for %s; concentration parameter will stay fixed')
-        super(self.__class__,self).meanfieldupdate(*args,**kwargs)
+        super(MultinomialAndConcentration,self).meanfieldupdate(*args,**kwargs)
 
     def max_likelihood(self,*args,**kwargs):
         raise NotImplementedError, "max_likelihood doesn't make sense on this object"
