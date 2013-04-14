@@ -1067,7 +1067,7 @@ class NegativeBinomial(GibbsSampling):
                         int tot = 0;
                         for (int i=0; i < N; i++) {
                             for (int j=0; j < data[i]; j++) {
-                                tot += ((float) rand()) / RAND_MAX < ((float) r)/(j+r);
+                                tot += (((float) rand()) / RAND_MAX) < (((float) r)/(j+r));
                             }
                         }
                         *msum = tot;

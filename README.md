@@ -1,5 +1,3 @@
-*NOTE* NegativeBinomial class is currently broken!
-
 This library provides objects that model probability distributions and the
 related operations that are common in generative Bayesian modeling and Bayesian
 inference, including Gibbs sampling and variational mean field algorithms. The
