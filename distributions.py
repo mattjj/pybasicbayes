@@ -980,6 +980,9 @@ class Poisson(GibbsSampling, Collapsed):
             tot = data
         return n, tot
 
+    def _get_weighted_statistics(self,data,weights):
+        pass # TODO
+
     ### Collapsed
 
     def log_marginal_likelihood(self,data):
@@ -998,6 +1001,16 @@ class Poisson(GibbsSampling, Collapsed):
         else:
             assert isinstance(data,int)
             return special.gammaln(data+1)
+
+    ### Max likelihood
+
+    def max_likelihood(self,data,weights=None):
+        if weights is None:
+            n, tot = self._get_statistics(data)
+        else:
+            n, tot = self._get_weighted_statistics(data,weights)
+
+        self.lmbda = tot/n
 
 
 class NegativeBinomial(GibbsSampling):
