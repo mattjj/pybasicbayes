@@ -1058,10 +1058,10 @@ class NegativeBinomial(GibbsSampling):
         else:
             data = flattendata(data)
             N = len(data)
-            r = self.r
             for itr in range(niter):
                 ### resample r
                 msum = np.array(0.)
+                r = self.r
                 scipy.weave.inline(
                         '''
                         int tot = 0;
