@@ -1209,6 +1209,32 @@ class NegativeBinomialIntegerR(NegativeBinomial):
                     current_log_prior_value = proposal_log_prior_value
                     current_log_likelihood_value = proposal_log_likelihood_value
 
+# class surgery, do you concur?
+def _start_at_r(cls):
+    class Wrapper(cls):
+        def log_sf(self,x):
+            return super(Wrapper,self).log_sf(x-self.r)
+
+        def log_likelihood(self,x):
+            return super(Wrapper,self).log_likelihood(x-self.r)
+
+        def rvs(self,size=None):
+            return super(Wrapper,self).rvs(size)+self.r
+
+        def resample(self,data=[],*args,**kwargs):
+            if isinstance(data,np.ndarray):
+                return super(Wrapper,self).resample(data-self.r,*args,**kwargs)
+            else:
+                return super(Wrapper,self).resample([d-self.r for d in data],*args,**kwargs)
+
+        def max_likelihood(self,*args,**kwargs):
+            raise NotImplementedError
+
+    return Wrapper
+
+NegativeBinomialVariant = _start_at_r(NegativeBinomial)
+NegativeBinomialFixedRVariant = _start_at_r(NegativeBinomialFixedR)
+NegativeBinomialIntegerRVariant = _start_at_r(NegativeBinomialIntegerR)
 
 ################################
 #  Special Case Distributions  #
