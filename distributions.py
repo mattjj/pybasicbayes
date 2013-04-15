@@ -1231,6 +1231,8 @@ def _start_at_r(cls):
             raise NotImplementedError
 
     Wrapper.__name__ = cls.__name__ + 'Variant'
+    if cls.__doc__ is not None:
+        Wrapper.__doc__ = 'Variant!\n\n' + cls.__doc__
     return Wrapper
 
 NegativeBinomialVariant = _start_at_r(NegativeBinomial)
