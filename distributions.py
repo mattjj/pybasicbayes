@@ -1037,7 +1037,7 @@ class NegativeBinomial(GibbsSampling):
         p
     '''
     def __repr__(self):
-        return 'NegativeBinomial(r=%0.2f,p=%0.2f)' % (self.r,self.p)
+        return '%s(r=%0.2f,p=%0.2f)' % (self.__class__.__name__,self.r,self.p)
 
     def __init__(self,k_0,theta_0,alpha_0,beta_0,r=None,p=None):
         self.k_0 = k_0
@@ -1230,6 +1230,7 @@ def _start_at_r(cls):
         def max_likelihood(self,*args,**kwargs):
             raise NotImplementedError
 
+    Wrapper.__name__ = cls.__name__ + 'Variant'
     return Wrapper
 
 NegativeBinomialVariant = _start_at_r(NegativeBinomial)
