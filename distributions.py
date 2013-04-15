@@ -1143,7 +1143,7 @@ class NegativeBinomial(GibbsSampling):
                 logF[m] = np.log(np.convolve(prevrow,[0,m,1],'same')) + logF[m-1].max()
             cls.logF = logF
 
-class NegativeBinomialFixedr(NegativeBinomial):
+class NegativeBinomialFixedR(NegativeBinomial):
     def __init__(self,r,alpha_0,beta_0,p=None):
         self.r = r
         self.alpha_0 = alpha_0
@@ -1162,7 +1162,7 @@ class NegativeBinomialFixedr(NegativeBinomial):
             N = len(data)
             self.p = np.random.beta(self.alpha_0 + data.sum(), self.beta_0 + N*self.r)
 
-class NegativeBinomialIntegerr(NegativeBinomial):
+class NegativeBinomialIntegerR(NegativeBinomial):
     '''
     Nonconjugate Discrete+Beta prior
     r_discrete_distribution is an array where index i is p(r=i+1)
