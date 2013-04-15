@@ -1051,6 +1051,21 @@ class NegativeBinomial(GibbsSampling):
             self.r = r
             self.p = p
 
+    def log_likelihood(self,x,r=None,p=None):
+        if r is None or p is None:
+            r,p = self.r, self.p
+
+        x = np.array(x,ndmin=1)
+        xnn = x[x >= 0]
+        raw = np.empty(x.shape)
+        raw[x>=0] = special.gammaln(r + xnn) - special.gammaln(r) - special.gammaln(xnn+1)\
+                + r*np.log(1-p) + xnn*np.log(p)
+        raw[x<0] = -np.inf
+        return raw if isinstance(x,np.ndarray) else raw[0]
+
+    def rvs(self,size=None):
+        return np.random.poisson(np.random.gamma(self.r,self.p/(1-self.p),size=size))
+
     def resample(self,data=[],niter=20):
         if getdatasize(data) == 0:
             self.p = np.random.beta(self.alpha_0,self.beta_0)
@@ -1094,7 +1109,9 @@ class NegativeBinomial(GibbsSampling):
                 ### resample p
                 self.p = np.random.beta(self.alpha_0 + data.sum(), self.beta_0 + N*self.r)
 
-    def _resample_logseriesaug(self,data=[],niter=20):
+    ### unused alternatives
+
+    def resample_logseriesaug(self,data=[],niter=20):
         # an alternative algorithm, kind of opaque and no advantages...
         if getdatasize(data) == 0:
             self.p = np.random.beta(self.alpha_0,self.beta_0)
@@ -1111,32 +1128,86 @@ class NegativeBinomial(GibbsSampling):
                 self.r = np.random.gamma(self.k_0 + L_i.sum(), 1/(1/self.theta_0 - np.log(1-self.p)*N))
                 self.p = np.random.beta(self.alpha_0 + data.sum(), self.beta_0 + N*self.r)
 
-    def rvs(self,size=None):
-        return np.random.poisson(np.random.gamma(self.r,self.p/(1-self.p),size=size))
+    @classmethod
+    def _set_up_logF(cls):
+        if not hasattr(cls,'logF'):
+            # actually indexes logF[0,0] to correspond to log(F(1,1)) in Zhou
+            # paper, but keeps track of that alignment with the other code!
+            # especially arange(1,...), only using nonzero data and shifting it
+            SIZE = 500
 
-    def log_likelihood(self,x):
-        x = np.array(x,ndmin=1)
-        xnn = x[x >= 0]
-        raw = np.empty(x.shape)
-        raw[x>=0] = special.gammaln(self.r + xnn) - special.gammaln(self.r) - special.gammaln(xnn+1)\
-                + self.r*np.log(1-self.p) + xnn*np.log(self.p)
-        raw[x<0] = -np.inf
-        return raw if isinstance(x,np.ndarray) else raw[0]
+            logF = -np.inf * np.ones((SIZE,SIZE))
+            logF[0,0] = 0.
+            for m in range(1,logF.shape[0]):
+                prevrow = np.exp(logF[m-1] - logF[m-1].max())
+                logF[m] = np.log(np.convolve(prevrow,[0,m,1],'same')) + logF[m-1].max()
+            cls.logF = logF
 
-    # @classmethod
-    # def _set_up_logF(cls):
-    #     if not hasattr(cls,'logF'):
-    #         # actually indexes logF[0,0] to correspond to log(F(1,1)) in Zhou
-    #         # paper, but keeps track of that alignment with the other code!
-    #         # especially arange(1,...), only using nonzero data and shifting it
-    #         SIZE = 500
+class NegativeBinomialFixedr(NegativeBinomial):
+    def __init__(self,r,alpha_0,beta_0,p=None):
+        self.r = r
+        self.alpha_0 = alpha_0
+        self.beta_0 = beta_0
 
-    #         logF = -np.inf * np.ones((SIZE,SIZE))
-    #         logF[0,0] = 0.
-    #         for m in range(1,logF.shape[0]):
-    #             prevrow = np.exp(logF[m-1] - logF[m-1].max())
-    #             logF[m] = np.log(np.convolve(prevrow,[0,m,1],'same')) + logF[m-1].max()
-    #         cls.logF = logF
+        if p is None:
+            self.resample()
+        else:
+            self.p = p
+
+    def resample(self,data=[]):
+        if getdatasize(data) == 0:
+            self.p = np.random.beta(self.alpha_0,self.beta_0)
+        else:
+            data = flattendata(data)
+            N = len(data)
+            self.p = np.random.beta(self.alpha_0 + data.sum(), self.beta_0 + N*self.r)
+
+class NegativeBinomialIntegerr(NegativeBinomial):
+    '''
+    Nonconjugate Discrete+Beta prior
+    r_discrete_distribution is an array where index i is p(r=i+1)
+    '''
+    def __init__(self,r_discrete_distn,alpha_0,beta_0,r=None,p=None):
+        self.r_discrete_distn = r_discrete_distn
+        self.alpha_0 = alpha_0
+        self.beta_0 = beta_0
+
+        if r is None or p is None:
+            self.resample()
+        else:
+            self.r = r
+            self.p = p
+
+    def resample(self,data=[],nsteps=20):
+        # MH / simulated annealing
+        # see web.mit.edu/~wingated/www/introductions/mcmc-gibbs-intro.pdf
+        if getdatasize(data) == 0:
+            self.p = np.random.beta(self.alpha_0,self.beta_0)
+            self.r = sample_discrete(self.r_discrete_distn)+1
+        else:
+            data = flattendata(data)
+            N = len(data)
+
+            current_log_prior_value = stats.beta.logpdf(self.p,self.alpha_0,self.beta_0) \
+                    + np.log(self.r_discrete_distn[self.r-1])
+            current_log_likelihood_value = np.sum(self.log_likelihood(data))
+
+            for itr in xrange(nsteps):
+                proposal_r = sample_discrete(self.r_discrete_distn)+1
+                proposal_p = np.random.beta(self.alpha_0 + data.sum(), self.beta_0 + N*proposal_r)
+
+                proposal_log_prior_value =  stats.beta.logpdf(proposal_p,self.alpha_0,self.beta_0) \
+                        + np.log(self.r_discrete_distn[self.r-1])
+                proposal_log_likelihood_value = np.sum(self.log_likelihood(x=data,r=proposal_r,p=proposal_p))
+
+                accept_probability = np.exp(min(0.,
+                    proposal_log_prior_value - current_log_prior_value \
+                            + proposal_log_likelihood_value - current_log_likelihood_value))
+
+                if np.random.rand() < accept_probability:
+                    self.r, self.p = proposal_r, proposal_p
+                    current_log_prior_value = proposal_log_prior_value
+                    current_log_likelihood_value = proposal_log_likelihood_value
 
 
 ################################
