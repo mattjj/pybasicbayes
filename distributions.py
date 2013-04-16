@@ -869,7 +869,7 @@ class Geometric(GibbsSampling, Collapsed):
         p
     '''
     def __repr__(self):
-        return 'Geometric(p=%0.2f)' % (self.p,)
+        return '%s(p=%0.2f)' % (self.__class__.__name__,self.p,)
 
     def __init__(self,alpha_0,beta_0,p=None):
         self.alpha_0 = alpha_0
@@ -1212,9 +1212,6 @@ class NegativeBinomialIntegerR(NegativeBinomial):
 # class surgery, do you concur?
 def _start_at_r(cls):
     class Wrapper(cls):
-        def log_sf(self,x):
-            return super(Wrapper,self).log_sf(x-self.r)
-
         def log_likelihood(self,x):
             return super(Wrapper,self).log_likelihood(x-self.r)
 
