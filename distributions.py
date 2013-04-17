@@ -889,6 +889,9 @@ class Geometric(GibbsSampling, Collapsed):
         raw[x<1] = -np.inf
         return raw if isinstance(x,np.ndarray) else raw[0]
 
+    def log_sf(self,x):
+        return stats.geom.logsf(x,self.p)
+
     def pmf(self,x):
         return stats.geom.pmf(x,self.p)
 
@@ -937,6 +940,9 @@ class Poisson(GibbsSampling, Collapsed):
     '''
     def __repr__(self):
         return 'Poisson(lmbda=%0.2f)' % (self.lmbda,)
+
+    def log_sf(self,x):
+        return stats.poisson.logsf(x,self.lmbda)
 
     def __init__(self,alpha_0,beta_0,lmbda=None):
         self.alpha_0 = alpha_0
@@ -1062,6 +1068,16 @@ class NegativeBinomial(GibbsSampling):
                 + r*np.log(1-p) + xnn*np.log(p)
         raw[x<0] = -np.inf
         return raw if isinstance(x,np.ndarray) else raw[0]
+
+    def log_sf(self,x):
+        scalar = not isinstance(x,np.ndarray)
+        x = np.atleast_1d(x)
+        ret = np.log(special.betainc(x+1,self.r,self.p))
+        ret[x < 0] = np.log(1.)
+        if scalar:
+            return ret[0]
+        else:
+            return ret
 
     def rvs(self,size=None):
         return np.random.poisson(np.random.gamma(self.r,self.p/(1-self.p),size=size))
@@ -1214,6 +1230,9 @@ def _start_at_r(cls):
     class Wrapper(cls):
         def log_likelihood(self,x):
             return super(Wrapper,self).log_likelihood(x-self.r)
+
+        def log_sf(self,x):
+            return super(Wrapper,self).log_sf(x-self.r)
 
         def rvs(self,size=None):
             return super(Wrapper,self).rvs(size)+self.r
