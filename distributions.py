@@ -1184,7 +1184,8 @@ class NegativeBinomialIntegerR(NegativeBinomial):
     r_discrete_distribution is an array where index i is p(r=i+1)
     '''
     def __init__(self,r_discrete_distn,alpha_0,beta_0,r=None,p=None):
-        self.r_discrete_distn = r_discrete_distn
+        self.r_discrete_distn = np.asarray(r_discrete_distn)
+        self.r_discrete_distn /= self.r_discrete_distn.sum()
         self.alpha_0 = alpha_0
         self.beta_0 = beta_0
 
