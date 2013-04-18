@@ -1216,9 +1216,12 @@ class NegativeBinomialIntegerR(NegativeBinomial):
                         + np.log(self.r_discrete_distn[self.r-1])
                 proposal_log_likelihood_value = np.sum(self.log_likelihood(x=data,r=proposal_r,p=proposal_p))
 
-                accept_probability = np.exp(min(0.,
-                    proposal_log_prior_value - current_log_prior_value \
-                            + proposal_log_likelihood_value - current_log_likelihood_value))
+                if np.isinf(proposal_log_likelihood_value) and np.isinf(current_log_likelihood_value):
+                    accept_probability = 1.
+                else:
+                    accept_probability = np.exp(min(0.,
+                        proposal_log_prior_value - current_log_prior_value \
+                                + proposal_log_likelihood_value - current_log_likelihood_value))
 
                 if np.random.rand() < accept_probability:
                     self.r, self.p = proposal_r, proposal_p
@@ -1228,10 +1231,10 @@ class NegativeBinomialIntegerR(NegativeBinomial):
 # class surgery, do you concur?
 def _start_at_r(cls):
     class Wrapper(cls):
-        def log_likelihood(self,x):
-            return super(Wrapper,self).log_likelihood(x-self.r)
+        def log_likelihood(self,x,*args,**kwargs):
+            return super(Wrapper,self).log_likelihood(x-self.r,*args,**kwargs)
 
-        def log_sf(self,x):
+        def log_sf(self,x,*args,**kwargs):
             return super(Wrapper,self).log_sf(x-self.r)
 
         def rvs(self,size=None):
