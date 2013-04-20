@@ -68,8 +68,7 @@ class Mixture(ModelGibbsSampling, ModelMeanField, ModelEM):
             l.resample(temp=temp)
 
         for idx, c in enumerate(self.components):
-            c.resample(data=[l.data[l.z == idx] for l in self.labels_list]
-                            if len(l.z) > 0 else []) # numpy issue #2587, np.array([]).reshape((0,2))[[]]
+            c.resample(data=[(l.data[l.z == idx] if len(l.z) > 0 else []) for l in self.labels_list]) # numpy issue #2587, np.array([]).reshape((0,2))[[]]
 
         self.weights.resample([l.z for l in self.labels_list])
 
@@ -170,6 +169,7 @@ class Mixture(ModelGibbsSampling, ModelMeanField, ModelEM):
             label_colors = {}
 
             # throw out any previous labeling and use a new one
+            # TODO this is dumb
             for l in self.labels_list:
                 l.resample()
 

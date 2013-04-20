@@ -1382,9 +1382,11 @@ class DirGamma(CRPGamma):
 
         if isinstance(data,np.ndarray):
             size = data.sum()
-        else:
-            assert isinstance(data,list)
+        elif isinstance(data,list):
             size = sum(d.sum() for d in data)
+        else:
+            assert data == 0
+            size = 0
 
         if size > 0:
             super(DirGamma,self).resample(data,niter=niter)
