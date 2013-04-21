@@ -66,7 +66,7 @@ class Gaussian(GibbsSampling, MeanField, Collapsed, MaxLikelihood):
     def log_likelihood(self,x):
         mu, sigma, D = self.mu, self.sigma, self.D
         x = np.reshape(x,(-1,D)) - mu
-        xs,LT = util.general.solve_chofactor_system(sigma,x.T,overwrite_b=True)
+        xs,LT = util.general.solve_chofactor_system(sigma,x.T,overwrite_b=False) # TODO true
         return -1./2. * inner1d(xs.T,xs.T) - D/2*np.log(2*np.pi) - np.log(LT.diagonal()).sum()
 
     def _posterior_hypparams(self,n,xbar,sumsq):
@@ -246,11 +246,12 @@ class Gaussian(GibbsSampling, MeanField, Collapsed, MaxLikelihood):
         if data is not None:
             data = flattendata(data)
 
-        if self.D > 2 and (not hasattr(self,'plotting_subspace_basis') > 2
-                or self.plotting_subspace_basis.shape[0] != self.D):
-            warn('No appropriate plotting subspace basis set; using a uniformly random subspace')
+        if self.D > 2 and ((not hasattr(self,'plotting_subspace_basis'))
+                or (self.plotting_subspace_basis.shape[1] != self.D)):
+            # TODO improve this bookkeeping. need a notion of collection
+
             subspace = np.random.randn(self.D,2)
-            self.__class__.plotting_subspace_basis = np.linalg.qr(subspace)[0]
+            self.__class__.plotting_subspace_basis = np.linalg.qr(subspace)[0].T.copy()
 
         if data is not None:
             if self.D > 2:

@@ -68,7 +68,7 @@ class Mixture(ModelGibbsSampling, ModelMeanField, ModelEM):
             l.resample(temp=temp)
 
         for idx, c in enumerate(self.components):
-            c.resample(data=[(l.data[l.z == idx] if len(l.z) > 0 else []) for l in self.labels_list]) # numpy issue #2587, np.array([]).reshape((0,2))[[]]
+            c.resample(data=[(l.data[l.z == idx] if len(l.data[l.z == idx]) > 0 else []) for l in self.labels_list]) # numpy issue #2587, np.array([]).reshape((0,2))[[]]
 
         self.weights.resample([l.z for l in self.labels_list])
 
@@ -162,16 +162,14 @@ class Mixture(ModelGibbsSampling, ModelMeanField, ModelEM):
     ### Misc.
 
     def plot(self,color=None,legend=True):
-        plt.figure()
         cmap = cm.get_cmap()
 
         if len(self.labels_list) > 0:
             label_colors = {}
 
-            # throw out any previous labeling and use a new one
-            # TODO this is dumb
             for l in self.labels_list:
-                l.resample()
+                if (not hasattr(l,'z')) and hasattr(l,'expectations'):
+                    l.z = l.expectations.argmax(1)
 
             used_labels = reduce(set.union,[set(l.z) for l in self.labels_list],set([]))
             num_labels = len(used_labels)
@@ -187,7 +185,7 @@ class Mixture(ModelGibbsSampling, ModelMeanField, ModelEM):
                 for label, o in enumerate(self.components):
                     if label in l.z:
                         o.plot(color=cmap(label_colors[label]),
-                                data=l.data[l.z == label] if l.data is not None else None,
+                                data=(l.data[l.z == label] if l.data is not None else None),
                                 label='%d' % label)
 
             if legend:

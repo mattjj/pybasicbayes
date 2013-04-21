@@ -14,7 +14,6 @@ class Labels(object):
         self.weights = weights
 
         if data is None:
-            # generating
             self._generate(N)
         else:
             self.data = data
@@ -81,9 +80,14 @@ class Labels(object):
         for idx, c in enumerate(self.components):
             self.expectations[:,idx] = c.log_likelihood(data)
 
+        self.expectations += self.weights.log_likelihood(np.arange(K))
+
         self.expectations -= self.expectations.max(1)[:,na]
         np.exp(self.expectations,out=self.expectations)
         self.expectations /= self.expectations.sum(1)[:,na]
+
+        if hasattr(self,'z'):
+            del self.z
 
 
 # TODO get counts/stats from model, as in pyhsmm direct assignment sampler
