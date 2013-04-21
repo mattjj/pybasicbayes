@@ -22,7 +22,52 @@ import util.general
 #  Continuous  #
 ################
 
-class Gaussian(GibbsSampling, MeanField, Collapsed, MaxLikelihood):
+class _GaussianBase(Distribution):
+    __metaclass__ = abc.ABCMeta
+
+    def rvs(self,size=None):
+        return np.random.multivariate_normal(mean=self.mu,cov=self.sigma,size=size)
+
+    def log_likelihood(self,x):
+        mu, sigma, D = self.mu, self.sigma, self.D
+        x = np.reshape(x,(-1,D)) - mu
+        xs,LT = util.general.solve_chofactor_system(sigma,x.T,overwrite_b=True)
+        return -1./2. * inner1d(xs.T,xs.T) - D/2*np.log(2*np.pi) - np.log(LT.diagonal()).sum()
+
+    def plot(self,data=None,color='b',plot_params=True,label=''):
+        from util.plot import project_data, plot_gaussian_projection, plot_gaussian_2D
+        if data is not None:
+            data = flattendata(data)
+
+        if self.D > 2 and ((not hasattr(self,'plotting_subspace_basis'))
+                or (self.plotting_subspace_basis.shape[1] != self.D)):
+            # TODO improve this bookkeeping. need a notion of collection
+
+            subspace = np.random.randn(self.D,2)
+            self.__class__.plotting_subspace_basis = np.linalg.qr(subspace)[0].T.copy()
+
+        if data is not None:
+            if self.D > 2:
+                data = project_data(data,self.plotting_subspace_basis)
+            plt.plot(data[:,0],data[:,1],marker='.',linestyle=' ',color=color)
+
+        if plot_params:
+            if self.D > 2:
+                plot_gaussian_projection(self.mu,self.sigma,self.plotting_subspace_basis,
+                        color=color,label=label)
+            else:
+                plot_gaussian_2D(self.mu,self.sigma,color=color,label=label)
+
+    # TODO improve this
+    def to_json_dict(self):
+        assert self.D == 2
+        U,s,_ = np.linalg.svd(self.sigma)
+        U /= np.linalg.det(U)
+        theta = np.arctan2(U[0,0],U[0,1])*180/np.pi
+        return {'x':self.mu[0],'y':self.mu[1],'rx':np.sqrt(s[0]),'ry':np.sqrt(s[1]),'theta':theta}
+
+
+class Gaussian(_GaussianBase, GibbsSampling, MeanField, Collapsed, MaxLikelihood):
     '''
     Multivariate Gaussian distribution class.
 
@@ -59,15 +104,6 @@ class Gaussian(GibbsSampling, MeanField, Collapsed, MaxLikelihood):
 
     def num_parameters(self):
         return self.D*(self.D+1)/2
-
-    def rvs(self,size=None):
-        return np.random.multivariate_normal(mean=self.mu,cov=self.sigma,size=size)
-
-    def log_likelihood(self,x):
-        mu, sigma, D = self.mu, self.sigma, self.D
-        x = np.reshape(x,(-1,D)) - mu
-        xs,LT = util.general.solve_chofactor_system(sigma,x.T,overwrite_b=True)
-        return -1./2. * inner1d(xs.T,xs.T) - D/2*np.log(2*np.pi) - np.log(LT.diagonal()).sum()
 
     @staticmethod
     def _get_statistics(data,D):
@@ -240,44 +276,13 @@ class Gaussian(GibbsSampling, MeanField, Collapsed, MaxLikelihood):
 
         self.mu, self.sigma, _, _ = self._posterior_hypparams(n,muhat,sumsq)
 
-    ### plotting
 
-    def plot(self,data=None,color='b',plot_params=True,label=''):
-        from util.plot import project_data, plot_gaussian_projection, plot_gaussian_2D
-        if data is not None:
-            data = flattendata(data)
-
-        if self.D > 2 and ((not hasattr(self,'plotting_subspace_basis'))
-                or (self.plotting_subspace_basis.shape[1] != self.D)):
-            # TODO improve this bookkeeping. need a notion of collection
-
-            subspace = np.random.randn(self.D,2)
-            self.__class__.plotting_subspace_basis = np.linalg.qr(subspace)[0].T.copy()
-
-        if data is not None:
-            if self.D > 2:
-                data = project_data(data,self.plotting_subspace_basis)
-            plt.plot(data[:,0],data[:,1],marker='.',linestyle=' ',color=color)
-
-        if plot_params:
-            if self.D > 2:
-                plot_gaussian_projection(self.mu,self.sigma,self.plotting_subspace_basis,
-                        color=color,label=label)
-            else:
-                plot_gaussian_2D(self.mu,self.sigma,color=color,label=label)
-
-    def to_json_dict(self):
-        assert self.D == 2
-        U,s,_ = np.linalg.svd(self.sigma)
-        U /= np.linalg.det(U)
-        theta = np.arctan2(U[0,0],U[0,1])*180/np.pi
-        return {'x':self.mu[0],'y':self.mu[1],'rx':np.sqrt(s[0]),'ry':np.sqrt(s[1]),'theta':theta}
-
-class GaussianFixedMean(Gaussian, GibbsSampling, MaxLikelihood):
+class GaussianFixedMean(_GaussianBase, GibbsSampling, MaxLikelihood):
     def __init__(self,mu,kappa_0,sigma_0,sigma=None):
         self.mu = mu
         self.kappa_0 = kappa_0
         self.sigma_0 = sigma_0
+        self.D = mu.shape[0]
 
         if sigma is None:
             self.resample()
@@ -321,33 +326,14 @@ class GaussianFixedMean(Gaussian, GibbsSampling, MaxLikelihood):
         if n > 0:
             kappa_n = kappa_0 + n
             sigma_n = self.sigma_0 + sumsq
-            return kappa_n, sigma_n
+            return sigma_n, kappa_n
         else:
-            return kappa_0, sigma_0
+            return sigma_0, kappa_0
 
     ### Gibbs sampling
 
     def resample(self,data=[]):
         self.sigma = sample_invwishart(*self._posterior_hypparams(*self._get_statistics(data)))
-
-    ### Mean Field
-
-    def meanfieldupdate(self,data,weights):
-        raise NotImplementedError
-
-    def get_vlb(self):
-        raise NotImplementedError
-
-    def expected_log_likelihood(self,x):
-        raise NotImplementedError
-
-    ### Collapsed
-
-    def log_marginal_likelihood(self,data):
-        raise NotImplementedError
-
-    def _log_partition_function(self,*args,**kwargs):
-        raise NotImplementedError
 
     ### Max likelihood
 
@@ -366,11 +352,12 @@ class GaussianFixedMean(Gaussian, GibbsSampling, MaxLikelihood):
             self.sigma = sumsq/n
 
 
-class GaussianFixedCov(GibbsSampling, MaxLikelihood):
+class GaussianFixedCov(_GaussianBase, GibbsSampling, MaxLikelihood):
     # See Gelman's Bayesian Data Analysis notation around Eq. 3.18, p. 85 in 2nd
     # Edition
     def __init__(self,sigma,mu_0,lmbda_0,mu=None):
         self.mu_0 = mu_0
+        self.sigma = sigma
         self.sigma_inv = np.linalg.inv(sigma) # TODO bad form!
         self.lmbda_inv_0 = np.linalg.inv(lmbda_0) # TODO bad form!
         self.D = self.mu_0.shape[0]
@@ -426,25 +413,6 @@ class GaussianFixedCov(GibbsSampling, MaxLikelihood):
         mu_n, sigma_n_inv = self._posterior_hypparams(*self._get_statistics(data))
         self.mu = util.general.solve_chofactor_system(sigma_n_inv,np.random.normal(size=self.D))[0] + mu_n
 
-    ### Mean Field
-
-    def meanfieldupdate(self,data,weights):
-        raise NotImplementedError
-
-    def get_vlb(self):
-        raise NotImplementedError
-
-    def expected_log_likelihood(self,x):
-        raise NotImplementedError
-
-    ### Collapsed
-
-    def log_marginal_likelihood(self,data):
-        raise NotImplementedError
-
-    def _log_partition_function(self,*args,**kwargs):
-        raise NotImplementedError
-
     ### Max likelihood
 
     def max_likelihood(self,data,weights=None):
@@ -456,8 +424,9 @@ class GaussianFixedCov(GibbsSampling, MaxLikelihood):
         self.mu = xbar
 
 
-class GaussianNonConj(GibbsSampling, MaxLikelihood):
+class GaussianNonConj(_GaussianBase, GibbsSampling, MaxLikelihood):
     pass # TODO
+
 
 # TODO collapsed, meanfield, max_likelihood
 class DiagonalGaussian(GibbsSampling):
@@ -615,7 +584,7 @@ class IsotropicGaussian(GibbsSampling):
         return n, xbar, sumsq
 
 
-class ScalarGaussian(Distribution):
+class _ScalarGaussianBase(Distribution):
     '''
     Abstract class for all scalar Gaussians.
     '''
@@ -635,8 +604,8 @@ class ScalarGaussian(Distribution):
         raise NotImplementedError # TODO
 
 
-# TODO collapsed, meanfield, max_likelihood
-class ScalarGaussianNIX(ScalarGaussian, GibbsSampling, Collapsed):
+# TODO meanfield, max_likelihood
+class ScalarGaussianNIX(_ScalarGaussianBase, GibbsSampling, Collapsed):
     '''
     Conjugate Normal-(Scaled-)Inverse-ChiSquared prior. (Another parameterization is the
     Normal-Inverse-Gamma.)
@@ -717,7 +686,7 @@ class ScalarGaussianNIX(ScalarGaussian, GibbsSampling, Collapsed):
         return stats.t.logpdf(y,nu_n,loc=mu_n,scale=np.sqrt((1+kappa_n)*sigmasq_n/kappa_n))
 
 
-class ScalarGaussianNonconjNIX(ScalarGaussian, GibbsSampling):
+class ScalarGaussianNonconjNIX(_ScalarGaussianBase, GibbsSampling):
     '''
     Non-conjugate separate priors on mean and variance parameters, via
     mu ~ Normal(mu_0,tausq_0)
@@ -766,8 +735,7 @@ class ScalarGaussianNonconjNIX(ScalarGaussian, GibbsSampling):
             self.sigmasqbin[...] = self.sigmasq
 
 
-# TODO collapsed, meanfield, max_likelihood
-class ScalarGaussianFixedvar(ScalarGaussian, GibbsSampling):
+class ScalarGaussianFixedvar(_ScalarGaussianBase, GibbsSampling):
     '''
     Conjugate normal prior on mean.
     '''
@@ -954,6 +922,7 @@ class Categorical(GibbsSampling, MeanField, MaxLikelihood):
 
         self.weights = counts/counts.sum()
 
+
 class CategoricalAndConcentration(Categorical):
     '''
     Categorical with resampling of the symmetric Dirichlet concentration
@@ -1020,8 +989,9 @@ class Multinomial(Categorical):
         else:
             raise NotImplementedError # TODO
 
-# TODO this is all repeated code from CategoricalAndConcentration! what's the
-# pythonic way to extend two classes in the same way (making two new classes)?
+
+# TODO this is all repeated code from CategoricalAndConcentration!
+# metaprogramming, please!
 class MultinomialAndConcentration(Multinomial):
     '''
     Similar to CategoricalAndConcentration, but data are counts.
@@ -1330,6 +1300,7 @@ class NegativeBinomial(GibbsSampling):
                 logF[m] = np.log(np.convolve(prevrow,[0,m,1],'same')) + logF[m-1].max()
             cls.logF = logF
 
+
 class NegativeBinomialFixedR(NegativeBinomial):
     def __init__(self,r,alpha_0,beta_0,p=None):
         self.r = r
@@ -1348,6 +1319,7 @@ class NegativeBinomialFixedR(NegativeBinomial):
             data = flattendata(data)
             N = len(data)
             self.p = np.random.beta(self.alpha_0 + data.sum(), self.beta_0 + N*self.r)
+
 
 class NegativeBinomialIntegerR(NegativeBinomial):
     '''
@@ -1395,6 +1367,7 @@ class NegativeBinomialIntegerR(NegativeBinomial):
                     self.r, self.p = proposal_r, proposal_p
                     current_log_prior_value = proposal_log_prior_value
                     current_log_likelihood_value = proposal_log_likelihood_value
+
 
 # class surgery, do you concur?
 def _start_at_r(cls):
