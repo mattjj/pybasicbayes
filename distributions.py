@@ -430,6 +430,7 @@ class GaussianNonConj(_GaussianBase, GibbsSampling):
     def __init__(self,mu_0,mu_sigma_0,kappa_0,sigma_sigma_0,mu=None,sigma=None):
         self._sigma_distn = GaussianFixedMean(mu_0,kappa_0,sigma_sigma_0,sigma)
         self._mu_distn = GaussianFixedCov(self._sigma_distn.sigma,mu_0,mu_sigma_0)
+        self.D = mu_0.shape[0]
 
     @property
     def mu(self):
