@@ -12,7 +12,7 @@ from warnings import warn
 
 from abstractions import Distribution, GibbsSampling,\
         MeanField, Collapsed, MaxLikelihood
-from util.stats import sample_niw, invwishart_entropy,\
+from util.stats import sample_niw, sample_invwishart, invwishart_entropy,\
         invwishart_log_partitionfunction, sample_discrete,\
         sample_discrete_from_log, getdatasize, flattendata,\
         getdatadimension
@@ -66,8 +66,47 @@ class Gaussian(GibbsSampling, MeanField, Collapsed, MaxLikelihood):
     def log_likelihood(self,x):
         mu, sigma, D = self.mu, self.sigma, self.D
         x = np.reshape(x,(-1,D)) - mu
-        xs,LT = util.general.solve_chofactor_system(sigma,x.T,overwrite_b=False) # TODO true
+        xs,LT = util.general.solve_chofactor_system(sigma,x.T,overwrite_b=True)
         return -1./2. * inner1d(xs.T,xs.T) - D/2*np.log(2*np.pi) - np.log(LT.diagonal()).sum()
+
+    @staticmethod
+    def _get_statistics(data,D):
+        n = getdatasize(data)
+        if n > 0:
+            if isinstance(data,np.ndarray):
+                xbar = np.reshape(data,(-1,D)).mean(0)
+                centered = data - xbar
+                sumsq = np.dot(centered.T,centered)
+            else:
+                xbar = sum(np.reshape(d,(-1,D)).sum(0) for d in data) / n
+                sumsq = sum(np.dot((np.reshape(d,(-1,D))-xbar).T,(np.reshape(d,(-1,D))-xbar))
+                        for d in data)
+        else:
+            xbar, sumsq = None, None
+        return n, xbar, sumsq
+
+    @staticmethod
+    def _get_weighted_statistics(data,weights,D):
+        # NOTE: _get_statistics is special case with all weights being 1
+        # this is kept as a separate method for speed and modularity
+        if isinstance(data,np.ndarray):
+            neff = weights.sum()
+            if neff > 0:
+                xbar = np.dot(weights,np.reshape(data,(-1,D))) / neff
+                centered = np.reshape(data,(-1,D)) - xbar
+                sumsq = np.dot(centered.T,(weights[:,na] * centered))
+            else:
+                xbar, sumsq = None, None
+        else:
+            neff = sum(w.sum() for w in weights)
+            if neff > 0:
+                xbar = sum(np.dot(w,np.reshape(d,(-1,D))) for w,d in zip(weights,data)) / neff
+                sumsq = sum(np.dot((np.reshape(d,(-1,D))-xbar).T,w[:,na]*(np.reshape(d,(-1,D))-xbar))
+                        for w,d in zip(weights,data))
+            else:
+                xbar, sumsq = None, None
+
+        return neff, xbar, sumsq
 
     def _posterior_hypparams(self,n,xbar,sumsq):
         mu_0, sigma_0, kappa_0, nu_0 = self.mu_0, self.sigma_0, self.kappa_0, self.nu_0
@@ -87,22 +126,6 @@ class Gaussian(GibbsSampling, MeanField, Collapsed, MaxLikelihood):
     def resample(self,data=[]):
         self._mu_mf, self._sigma_mf = self.mu, self.sigma = \
                 sample_niw(*self._posterior_hypparams(*self._get_statistics(data,self.D)))
-
-    @staticmethod
-    def _get_statistics(data,D):
-        n = getdatasize(data)
-        if n > 0:
-            if isinstance(data,np.ndarray):
-                xbar = np.reshape(data,(-1,D)).mean(0)
-                centered = data - xbar
-                sumsq = np.dot(centered.T,centered)
-            else:
-                xbar = sum(np.reshape(d,(-1,D)).sum(0) for d in data) / n
-                sumsq = sum(np.dot((np.reshape(d,(-1,D))-xbar).T,(np.reshape(d,(-1,D))-xbar))
-                        for d in data)
-        else:
-            xbar, sumsq = None, None
-        return n, xbar, sumsq
 
     ### Mean Field
 
@@ -158,29 +181,6 @@ class Gaussian(GibbsSampling, MeanField, Collapsed, MaxLikelihood):
         return special.digamma((self._nu_mf-np.arange(self.D))/2).sum() \
                 + self.D*np.log(2) - 2*np.log(chol.diagonal()).sum()
 
-    @staticmethod
-    def _get_weighted_statistics(data,weights,D):
-        # NOTE: _get_statistics is special case with all weights being 1
-        # this is kept as a separate method for speed and modularity
-        if isinstance(data,np.ndarray):
-            neff = weights.sum()
-            if neff > 0:
-                xbar = np.dot(weights,np.reshape(data,(-1,D))) / neff
-                centered = np.reshape(data,(-1,D)) - xbar
-                sumsq = np.dot(centered.T,(weights[:,na] * centered))
-            else:
-                xbar, sumsq = None, None
-        else:
-            neff = sum(w.sum() for w in weights)
-            if neff > 0:
-                xbar = sum(np.dot(w,np.reshape(d,(-1,D))) for w,d in zip(weights,data)) / neff
-                sumsq = sum(np.dot((np.reshape(d,(-1,D))-xbar).T,w[:,na]*(np.reshape(d,(-1,D))-xbar))
-                        for w,d in zip(weights,data))
-            else:
-                xbar, sumsq = None, None
-
-        return neff, xbar, sumsq
-
     ### Collapsed
 
     def log_marginal_likelihood(self,data):
@@ -214,6 +214,7 @@ class Gaussian(GibbsSampling, MeanField, Collapsed, MaxLikelihood):
             # broken!
             self.mu = 99999999*np.ones(D)
             self.sigma = np.eye(D)
+            self.broken = True
         else:
             self.mu = muhat
             self.sigma = sumsq/n
@@ -272,6 +273,191 @@ class Gaussian(GibbsSampling, MeanField, Collapsed, MaxLikelihood):
         theta = np.arctan2(U[0,0],U[0,1])*180/np.pi
         return {'x':self.mu[0],'y':self.mu[1],'rx':np.sqrt(s[0]),'ry':np.sqrt(s[1]),'theta':theta}
 
+class GaussianFixedMean(Gaussian, GibbsSampling, MaxLikelihood):
+    def __init__(self,mu,kappa_0,sigma_0,sigma=None):
+        self.mu = mu
+        self.kappa_0 = kappa_0
+        self.sigma_0 = sigma_0
+
+        if sigma is None:
+            self.resample()
+        else:
+            self.sigma = sigma
+
+    def num_parameters(self):
+        return self.D*(self.D+1)/2
+
+    def _get_statistics(self,data):
+        n = getdatasize(data)
+        if n > 0:
+            if isinstance(data,np.ndarray):
+                centered = data - self.mu
+                sumsq = centered.T.dot(centered)
+            else:
+                sumsq = sum((d-self.mu).T.dot(d-self.mu) for d in data)
+        else:
+            sumsq = None
+        return n, sumsq
+
+    def _get_weighted_statistics(self,data,weights):
+        if isinstance(data,np.ndarray):
+            neff = weights.sum()
+            if neff > 0:
+                centered = data - self.mu
+                sumsq = centered.T.dot(weights[:,na]*centered)
+            else:
+                sumsq = None
+        else:
+            neff = sum(w.sum() for w in weights)
+            if neff > 0:
+                sumsq = sum((d-self.mu).T.dot(w[:,na]*(d-self.mu)) for w,d in zip(weights,data)) / neff
+            else:
+                sumsq = None
+
+        return neff, sumsq
+
+    def _posterior_hypparams(self,n,sumsq):
+        kappa_0, sigma_0 = self.kappa_0, self.sigma_0
+        if n > 0:
+            kappa_n = kappa_0 + n
+            sigma_n = self.sigma_0 + sumsq
+            return kappa_n, sigma_n
+        else:
+            return kappa_0, sigma_0
+
+    ### Gibbs sampling
+
+    def resample(self,data=[]):
+        self.sigma = sample_invwishart(*self._posterior_hypparams(*self._get_statistics(data)))
+
+    ### Mean Field
+
+    def meanfieldupdate(self,data,weights):
+        raise NotImplementedError
+
+    def get_vlb(self):
+        raise NotImplementedError
+
+    def expected_log_likelihood(self,x):
+        raise NotImplementedError
+
+    ### Collapsed
+
+    def log_marginal_likelihood(self,data):
+        raise NotImplementedError
+
+    def _log_partition_function(self,*args,**kwargs):
+        raise NotImplementedError
+
+    ### Max likelihood
+
+    def max_likelihood(self,data,weights=None):
+        if weights is None:
+            n, sumsq = self._get_statistics(data)
+        else:
+            n, sumsq = self._get_weighted_statistics(data,weights)
+
+        D = self.D
+        if n < D or (np.linalg.svd(sumsq,compute_uv=False) > 1e-6).sum() < D:
+            # broken!
+            self.sigma = np.eye(D)*1e-9
+            self.broken = True
+        else:
+            self.sigma = sumsq/n
+
+
+class GaussianFixedCov(GibbsSampling, MaxLikelihood):
+    # See Gelman's Bayesian Data Analysis notation around Eq. 3.18, p. 85 in 2nd
+    # Edition
+    def __init__(self,sigma,mu_0,lmbda_0,mu=None):
+        self.mu_0 = mu_0
+        self.sigma_inv = np.linalg.inv(sigma) # TODO bad form!
+        self.lmbda_inv_0 = np.linalg.inv(lmbda_0) # TODO bad form!
+        self.D = self.mu_0.shape[0]
+
+        if mu is None:
+            self.resample()
+        else:
+            self.mu = mu
+
+    def num_parameters(self):
+        return self.D
+
+    def _get_statistics(self,data):
+        n = getdatasize(data)
+        if n > 0:
+            if isinstance(data,np.ndarray):
+                xbar = data.mean(0)
+            else:
+                xbar = sum(d.sum(0) for d in data) / n
+        else:
+            xbar = None
+
+        return n, xbar
+
+    def _get_weighted_statistics(self,data,weights):
+        if isinstance(data,np.ndarray):
+            neff = weights.sum()
+            if neff > 0:
+                xbar = weights.dot(data) / neff
+            else:
+                xbar = None
+        else:
+            neff = sum(w.sum() for w in weights)
+            if neff > 0:
+                xbar = sum(w.dot(d) for w,d in zip(weights,data)) / neff
+            else:
+                xbar = None
+
+        return neff, xbar
+
+    def _posterior_hypparams(self,n,xbar):
+        sigma_inv, mu_0, lmbda_inv_0 = self.sigma_inv, self.mu_0, self.lmbda_inv_0
+        if n > 0:
+            lmbda_inv_n = n*sigma_inv + lmbda_inv_0
+            mu_n = np.linalg.solve(lmbda_inv_n, lmbda_inv_0.dot(mu_0) + n*sigma_inv.dot(xbar))
+            return mu_n, lmbda_inv_n
+        else:
+            return mu_0, lmbda_inv_0
+
+    ### Gibbs sampling
+
+    def resample(self,data=[]):
+        mu_n, sigma_n_inv = self._posterior_hypparams(*self._get_statistics(data))
+        self.mu = util.general.solve_chofactor_system(sigma_n_inv,np.random.normal(size=self.D))[0] + mu_n
+
+    ### Mean Field
+
+    def meanfieldupdate(self,data,weights):
+        raise NotImplementedError
+
+    def get_vlb(self):
+        raise NotImplementedError
+
+    def expected_log_likelihood(self,x):
+        raise NotImplementedError
+
+    ### Collapsed
+
+    def log_marginal_likelihood(self,data):
+        raise NotImplementedError
+
+    def _log_partition_function(self,*args,**kwargs):
+        raise NotImplementedError
+
+    ### Max likelihood
+
+    def max_likelihood(self,data,weights=None):
+        if weights is None:
+            n, xbar = self._get_statistics(data)
+        else:
+            n, xbar = self._get_weighted_statistics(data,weights)
+
+        self.mu = xbar
+
+
+class GaussianNonConj(GibbsSampling, MaxLikelihood):
+    pass # TODO
 
 # TODO collapsed, meanfield, max_likelihood
 class DiagonalGaussian(GibbsSampling):
