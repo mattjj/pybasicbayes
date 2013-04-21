@@ -1051,7 +1051,7 @@ class Geometric(GibbsSampling, Collapsed):
         p
     '''
     def __repr__(self):
-        return 'Geometric(p=%0.2f)' % (self.p,)
+        return '%s(p=%0.2f)' % (self.__class__.__name__,self.p,)
 
     def __init__(self,alpha_0,beta_0,p=None):
         self.alpha_0 = alpha_0
@@ -1070,6 +1070,9 @@ class Geometric(GibbsSampling, Collapsed):
         raw[x>0] = (x[x>0]-1.)*np.log(1.-self.p) + np.log(self.p)
         raw[x<1] = -np.inf
         return raw if isinstance(x,np.ndarray) else raw[0]
+
+    def log_sf(self,x):
+        return stats.geom.logsf(x,self.p)
 
     def pmf(self,x):
         return stats.geom.pmf(x,self.p)
@@ -1119,6 +1122,9 @@ class Poisson(GibbsSampling, Collapsed):
     '''
     def __repr__(self):
         return 'Poisson(lmbda=%0.2f)' % (self.lmbda,)
+
+    def log_sf(self,x):
+        return stats.poisson.logsf(x,self.lmbda)
 
     def __init__(self,alpha_0,beta_0,lmbda=None):
         self.alpha_0 = alpha_0
@@ -1245,6 +1251,16 @@ class NegativeBinomial(GibbsSampling):
         raw[x<0] = -np.inf
         return raw if isinstance(x,np.ndarray) else raw[0]
 
+    def log_sf(self,x):
+        scalar = not isinstance(x,np.ndarray)
+        x = np.atleast_1d(x)
+        ret = np.log(special.betainc(x+1,self.r,self.p))
+        ret[x < 0] = np.log(1.)
+        if scalar:
+            return ret[0]
+        else:
+            return ret
+
     def rvs(self,size=None):
         return np.random.poisson(np.random.gamma(self.r,self.p/(1-self.p),size=size))
 
@@ -1352,7 +1368,8 @@ class NegativeBinomialIntegerR(NegativeBinomial):
     r_discrete_distribution is an array where index i is p(r=i+1)
     '''
     def __init__(self,r_discrete_distn,alpha_0,beta_0,r=None,p=None):
-        self.r_discrete_distn = r_discrete_distn
+        self.r_discrete_distn = np.asarray(r_discrete_distn)
+        self.r_discrete_distn /= self.r_discrete_distn.sum()
         self.alpha_0 = alpha_0
         self.beta_0 = beta_0
 
@@ -1384,9 +1401,12 @@ class NegativeBinomialIntegerR(NegativeBinomial):
                         + np.log(self.r_discrete_distn[self.r-1])
                 proposal_log_likelihood_value = np.sum(self.log_likelihood(x=data,r=proposal_r,p=proposal_p))
 
-                accept_probability = np.exp(min(0.,
-                    proposal_log_prior_value - current_log_prior_value \
-                            + proposal_log_likelihood_value - current_log_likelihood_value))
+                if np.isinf(proposal_log_likelihood_value) and np.isinf(current_log_likelihood_value):
+                    accept_probability = 1.
+                else:
+                    accept_probability = np.exp(min(0.,
+                        proposal_log_prior_value - current_log_prior_value \
+                                + proposal_log_likelihood_value - current_log_likelihood_value))
 
                 if np.random.rand() < accept_probability:
                     self.r, self.p = proposal_r, proposal_p
@@ -1397,11 +1417,11 @@ class NegativeBinomialIntegerR(NegativeBinomial):
 # class surgery, do you concur?
 def _start_at_r(cls):
     class Wrapper(cls):
-        def log_sf(self,x):
-            return super(Wrapper,self).log_sf(x-self.r)
+        def log_likelihood(self,x,*args,**kwargs):
+            return super(Wrapper,self).log_likelihood(x-self.r,*args,**kwargs)
 
-        def log_likelihood(self,x):
-            return super(Wrapper,self).log_likelihood(x-self.r)
+        def log_sf(self,x,*args,**kwargs):
+            return super(Wrapper,self).log_sf(x-self.r)
 
         def rvs(self,size=None):
             return super(Wrapper,self).rvs(size)+self.r
