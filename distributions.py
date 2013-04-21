@@ -27,6 +27,8 @@ import util.general
 class _GaussianBase(Distribution):
     __metaclass__ = abc.ABCMeta
 
+    ### distribution stuff
+
     def rvs(self,size=None):
         return np.random.multivariate_normal(mean=self.mu,cov=self.sigma,size=size)
 
@@ -35,6 +37,8 @@ class _GaussianBase(Distribution):
         x = np.reshape(x,(-1,D)) - mu
         xs,LT = util.general.solve_chofactor_system(sigma,x.T,overwrite_b=True)
         return -1./2. * inner1d(xs.T,xs.T) - D/2*np.log(2*np.pi) - np.log(LT.diagonal()).sum()
+
+    ### plotting
 
     def plot(self,data=None,color='b',plot_params=True,label=''):
         from util.plot import project_data, plot_gaussian_projection, plot_gaussian_2D
@@ -439,6 +443,8 @@ class GaussianNonConj(_GaussianBase, GibbsSampling):
     @property
     def sigma(self):
         return self._sigma_distn.sigma
+
+    ### Gibbs sampling
 
     def resample(self,data=[],niter=30):
         if getdatasize(data) == 0:
