@@ -18,6 +18,8 @@ from util.stats import sample_niw, sample_invwishart, invwishart_entropy,\
         getdatadimension
 import util.general
 
+# TODO reduce reallocation of parameters
+
 ################
 #  Continuous  #
 ################
@@ -424,8 +426,31 @@ class GaussianFixedCov(_GaussianBase, GibbsSampling, MaxLikelihood):
         self.mu = xbar
 
 
-class GaussianNonConj(_GaussianBase, GibbsSampling, MaxLikelihood):
-    pass # TODO
+class GaussianNonConj(_GaussianBase, GibbsSampling):
+    def __init__(self,mu_0,mu_sigma_0,kappa_0,sigma_sigma_0,mu=None,sigma=None):
+        self._sigma_distn = GaussianFixedMean(mu_0,kappa_0,sigma_sigma_0,sigma)
+        self._mu_distn = GaussianFixedCov(self._sigma_distn.sigma,mu_0,mu_sigma_0)
+
+    @property
+    def mu(self):
+        return self._mu_distn.mu
+
+    @property
+    def sigma(self):
+        return self._sigma_distn.sigma
+
+    def resample(self,data=[],niter=30):
+        if getdatasize(data) == 0:
+            niter = 1
+
+        for itr in xrange(niter):
+            # resample mu
+            self._mu_distn.sigma = self._sigma_distn.sigma
+            self._mu_distn.resample(data)
+
+            # resample sigma
+            self._sigma_distn.mu = self._mu_distn.mu
+            self._sigma_distn.resample(data)
 
 
 # TODO collapsed, meanfield, max_likelihood
