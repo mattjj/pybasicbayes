@@ -15,7 +15,7 @@ from abstractions import Distribution, GibbsSampling,\
 from util.stats import sample_niw, sample_invwishart, invwishart_entropy,\
         invwishart_log_partitionfunction, sample_discrete,\
         sample_discrete_from_log, getdatasize, flattendata,\
-        getdatadimension
+        getdatadimension, multivariate_t_loglik
 import util.general
 
 # TODO reduce reallocation of parameters
@@ -236,6 +236,14 @@ class Gaussian(_GaussianBase, GibbsSampling, MeanField, Collapsed, MaxLikelihood
         chol = util.general.cholesky(sigma)
         return nu*D/2*np.log(2) + special.multigammaln(nu/2,D) + D/2*np.log(2*np.pi/kappa) \
                 - nu*np.log(chol.diagonal()).sum()
+
+    def log_predictive_studentt(self,newdata,olddata):
+        # an alternative computation of log_predictive in which I have less faith
+        # TODO test this thing
+        mu_n, sigma_n, kappa_n, nu_n = self._posterior_hypparams(*self._get_statistics(olddata,self.D))
+        D = self.D
+        return multivariate_t_loglik(newdata,nu_n-D+1,mu_n,(kappa_n+1)/(kappa_n*(nu_n-D+1))*sigma_n)
+
 
     ### Max likelihood
 
