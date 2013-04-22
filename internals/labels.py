@@ -86,8 +86,7 @@ class Labels(object):
         np.exp(self.expectations,out=self.expectations)
         self.expectations /= self.expectations.sum(1)[:,na]
 
-        if hasattr(self,'z'):
-            del self.z
+        self.z = self.expectations.argmax(1)
 
 
 # TODO get counts/stats from model, as in pyhsmm direct assignment sampler

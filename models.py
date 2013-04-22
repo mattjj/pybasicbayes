@@ -169,10 +169,6 @@ class Mixture(ModelGibbsSampling, ModelMeanField, ModelEM):
         if len(self.labels_list) > 0:
             label_colors = {}
 
-            for l in self.labels_list:
-                if (not hasattr(l,'z')) and hasattr(l,'expectations'):
-                    l.z = l.expectations.argmax(1)
-
             used_labels = reduce(set.union,[set(l.z) for l in self.labels_list],set([]))
             num_labels = len(used_labels)
             num_subfig_rows = len(self.labels_list)
