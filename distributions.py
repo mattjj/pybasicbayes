@@ -237,18 +237,16 @@ class Gaussian(_GaussianBase, GibbsSampling, MeanField, Collapsed, MaxLikelihood
         return nu*D/2*np.log(2) + special.multigammaln(nu/2,D) + D/2*np.log(2*np.pi/kappa) \
                 - nu*np.log(chol.diagonal()).sum()
 
-    def log_predictive_studentt_onedatapoint(self,datapoint,olddata):
-        # NOTE: only works on scalar values
-        assert np.atleast_2d(datapoint).shape[0] == 1
+    def log_predictive_studentt_datapoints(self,datapoints,olddata):
         mu_n, sigma_n, kappa_n, nu_n = self._posterior_hypparams(*self._get_statistics(olddata,self.D))
         D = self.D
-        return multivariate_t_loglik(datapoint,nu_n-D+1,mu_n,(kappa_n+1)/(kappa_n*(nu_n-D+1))*sigma_n)[0]
+        return multivariate_t_loglik(datapoints,nu_n-D+1,mu_n,(kappa_n+1)/(kappa_n*(nu_n-D+1))*sigma_n)
 
     def log_predictive_studentt(self,newdata,olddata):
         # an alternative computation to the generic log_predictive, which is implemented
         # in terms of log_marginal_likelihood. mostly for testing, I think
         newdata = np.atleast_2d(newdata)
-        return sum(self.log_predictive_studentt_onedatapoint(d,combinedata((olddata,newdata[:i])))
+        return sum(self.log_predictive_studentt_datapoints(d,combinedata((olddata,newdata[:i])))[0]
                         for i,d in enumerate(newdata))
 
     ### Max likelihood
