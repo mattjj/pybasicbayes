@@ -364,8 +364,8 @@ class GaussianFixedCov(_GaussianBase, GibbsSampling, MaxLikelihood):
     def __init__(self,sigma,mu_0,lmbda_0,mu=None):
         self.mu_0 = mu_0
         self.sigma = sigma
-        self.sigma_inv = np.linalg.inv(sigma) # TODO bad form!
-        self.lmbda_inv_0 = np.linalg.inv(lmbda_0) # TODO bad form!
+        self.sigma_inv = np.linalg.inv(sigma)
+        self.lmbda_inv_0 = np.linalg.inv(lmbda_0)
         self.D = self.mu_0.shape[0]
 
         if mu is None:
