@@ -19,6 +19,7 @@ from util.stats import sample_niw, sample_invwishart, invwishart_entropy,\
 import util.general
 
 # TODO reduce reallocation of parameters
+# TODO fix up docstrings to work with base classes
 
 ################
 #  Continuous  #
@@ -1220,7 +1221,7 @@ class Poisson(GibbsSampling, Collapsed):
         self.lmbda = tot/n
 
 
-class NegativeBinomial(GibbsSampling):
+class _NegativeBinomialBase(Distribution):
     '''
     Negative Binomial distribution with a conjugate beta prior on p and a
     separate gamma prior on r. The parameter r does not need to be an integer.
@@ -1283,6 +1284,8 @@ class NegativeBinomial(GibbsSampling):
     def rvs(self,size=None):
         return np.random.poisson(np.random.gamma(self.r,self.p/(1-self.p),size=size))
 
+
+class NegativeBinomial(_NegativeBinomialBase, GibbsSampling):
     def resample(self,data=[],niter=20):
         if getdatasize(data) == 0:
             self.p = np.random.beta(self.alpha_0,self.beta_0)
@@ -1326,7 +1329,7 @@ class NegativeBinomial(GibbsSampling):
                 ### resample p
                 self.p = np.random.beta(self.alpha_0 + data.sum(), self.beta_0 + N*self.r)
 
-    ### unused alternatives
+    ### OLD unused alternatives
 
     def resample_logseriesaug(self,data=[],niter=20):
         # an alternative algorithm, kind of opaque and no advantages...
@@ -1361,7 +1364,7 @@ class NegativeBinomial(GibbsSampling):
             cls.logF = logF
 
 
-class NegativeBinomialFixedR(NegativeBinomial):
+class NegativeBinomialFixedR(_NegativeBinomialBass, GibbsSampling):
     def __init__(self,r,alpha_0,beta_0,p=None):
         self.r = r
         self.alpha_0 = alpha_0
@@ -1381,7 +1384,7 @@ class NegativeBinomialFixedR(NegativeBinomial):
             self.p = np.random.beta(self.alpha_0 + data.sum(), self.beta_0 + N*self.r)
 
 
-class NegativeBinomialIntegerR(NegativeBinomial):
+class NegativeBinomialIntegerR(_NegativeBinomialBase, GibbsSampling, MaxLikelihood):
     '''
     Nonconjugate Discrete+Beta prior
     r_discrete_distribution is an array where index i is p(r=i+1)
@@ -1432,6 +1435,52 @@ class NegativeBinomialIntegerR(NegativeBinomial):
                     current_log_prior_value = proposal_log_prior_value
                     current_log_likelihood_value = proposal_log_likelihood_value
 
+    def max_likelihood(self,data,weights=None):
+        if weights is None:
+            n, tot = self._get_statistics(data)
+        else:
+            n, tot = self._get_weighted_statistics(data,weights)
+
+        r_support = np.where(self.r_discrete_distn > 0)[0]+1
+        rmin, rmax = r_support[0], r_support[-1]
+
+        rs = np.arange(rmin,rmax+1)
+        ps = (tot/n) / (rs + tot/n)
+
+        # TODO make log_likelihood work with array args
+        if isinstance(data,np.ndarray):
+            likelihoods = np.array([self.log_likelihood(data,r=r,p=p).sum()
+                                        for r,p in zip(rs,ps)])
+        else:
+            likelihoods = np.array([sum(self.log_likelihood(d,r=r,p=p).sum()
+                                        for d in data) for r,p in zip(rs,ps)])
+
+        self.r = rmin + likelihoods.argmax()
+        self.p = ps[likelihoods.argmax()]
+
+    def _get_statistics(self,data):
+        if isinstance(data,np.ndarray):
+            assert np.all(data >= 0)
+            data = np.atleast_1d(data)
+            n, tot = data.shape[0], data.sum()
+        else:
+            assert all(np.all(d >= 0) for d in data)
+            n = sum(d.shape[0] for d in data)
+            tot = sum(d.sum() for d in data)
+
+        return n, tot
+
+    # TODO test
+    def _get_weighted_statistics(self,data,weights):
+        if isinstance(weights,np.ndarray):
+            assert np.all(data >= 0)
+            n, tot = weights.sum(), (data*weights).sum()
+        else:
+            assert all(np.all(d >= 0) for d in data)
+            n = sum(w.sum() for w in weights)
+            tot = sum((d*w).sum() for d,w in zip(data,weights))
+
+        return n, tot
 
 # class surgery, do you concur?
 def _start_at_r(cls):
@@ -1451,8 +1500,11 @@ def _start_at_r(cls):
             else:
                 return super(Wrapper,self).resample([d-self.r for d in data],*args,**kwargs)
 
-        def max_likelihood(self,*args,**kwargs):
-            raise NotImplementedError
+        def max_likelihood(self,data,*args,**kwargs):
+            if isinstance(data,np.ndarray):
+                return super(Wrapper,self).max_likelihood(data-self.r,*args,**kwargs)
+            else:
+                return super(Wrapper,self).max_likelihood([d-self.r for d in data],*args,**kwargs)
 
     Wrapper.__name__ = cls.__name__ + 'Variant'
     if cls.__doc__ is not None:
