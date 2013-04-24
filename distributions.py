@@ -1364,7 +1364,7 @@ class NegativeBinomial(_NegativeBinomialBase, GibbsSampling):
             cls.logF = logF
 
 
-class NegativeBinomialFixedR(_NegativeBinomialBase, GibbsSampling):
+class NegativeBinomialFixedR(_NegativeBinomialBase, GibbsSampling, MaxLikelihood):
     def __init__(self,r,alpha_0,beta_0,p=None):
         self.r = r
         self.alpha_0 = alpha_0
@@ -1383,8 +1383,40 @@ class NegativeBinomialFixedR(_NegativeBinomialBase, GibbsSampling):
             N = len(data)
             self.p = np.random.beta(self.alpha_0 + data.sum(), self.beta_0 + N*self.r)
 
+    # TODO test
+    def max_likelihood(self,data,weights=None):
+        if weights is None:
+            n, tot = self._get_statistics(data)
+        else:
+            n, tot = self._get_weighted_statistics(data,weights)
 
-class NegativeBinomialIntegerR(_NegativeBinomialBase, GibbsSampling, MaxLikelihood):
+        self.p = (tot/n) / (self.r + tot/n)
+
+    def _get_statistics(self,data):
+        if isinstance(data,np.ndarray):
+            assert np.all(data >= 0)
+            data = np.atleast_1d(data)
+            n, tot = data.shape[0], data.sum()
+        else:
+            assert all(np.all(d >= 0) for d in data)
+            n = sum(d.shape[0] for d in data)
+            tot = sum(d.sum() for d in data)
+
+        return n, tot
+
+    # TODO test
+    def _get_weighted_statistics(self,data,weights):
+        if isinstance(weights,np.ndarray):
+            assert np.all(data >= 0)
+            n, tot = weights.sum(), (data*weights).sum()
+        else:
+            assert all(np.all(d >= 0) for d in data)
+            n = sum(w.sum() for w in weights)
+            tot = sum((d*w).sum() for d,w in zip(data,weights))
+
+        return n, tot
+
+class NegativeBinomialIntegerR(NegativeBinomialFixedR, GibbsSampling, MaxLikelihood):
     '''
     Nonconjugate Discrete+Beta prior
     r_discrete_distribution is an array where index i is p(r=i+1)
@@ -1458,30 +1490,6 @@ class NegativeBinomialIntegerR(_NegativeBinomialBase, GibbsSampling, MaxLikeliho
 
             self.r = rmin + likelihoods.argmax()
             self.p = ps[likelihoods.argmax()]
-
-    def _get_statistics(self,data):
-        if isinstance(data,np.ndarray):
-            assert np.all(data >= 0)
-            data = np.atleast_1d(data)
-            n, tot = data.shape[0], data.sum()
-        else:
-            assert all(np.all(d >= 0) for d in data)
-            n = sum(d.shape[0] for d in data)
-            tot = sum(d.sum() for d in data)
-
-        return n, tot
-
-    # TODO test
-    def _get_weighted_statistics(self,data,weights):
-        if isinstance(weights,np.ndarray):
-            assert np.all(data >= 0)
-            n, tot = weights.sum(), (data*weights).sum()
-        else:
-            assert all(np.all(d >= 0) for d in data)
-            n = sum(w.sum() for w in weights)
-            tot = sum((d*w).sum() for d,w in zip(data,weights))
-
-        return n, tot
 
 # class surgery, do you concur?
 def _start_at_r(cls):
