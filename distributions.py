@@ -1364,7 +1364,7 @@ class NegativeBinomial(_NegativeBinomialBase, GibbsSampling):
             cls.logF = logF
 
 
-class NegativeBinomialFixedR(_NegativeBinomialBass, GibbsSampling):
+class NegativeBinomialFixedR(_NegativeBinomialBase, GibbsSampling):
     def __init__(self,r,alpha_0,beta_0,p=None):
         self.r = r
         self.alpha_0 = alpha_0
