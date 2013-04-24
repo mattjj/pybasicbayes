@@ -1441,22 +1441,23 @@ class NegativeBinomialIntegerR(_NegativeBinomialBase, GibbsSampling, MaxLikeliho
         else:
             n, tot = self._get_weighted_statistics(data,weights)
 
-        r_support = np.where(self.r_discrete_distn > 0)[0]+1
-        rmin, rmax = r_support[0], r_support[-1]
+        if n > 0:
+            r_support = np.where(self.r_discrete_distn > 0)[0]+1
+            rmin, rmax = r_support[0], r_support[-1]
 
-        rs = np.arange(rmin,rmax+1)
-        ps = (tot/n) / (rs + tot/n)
+            rs = np.arange(rmin,rmax+1)
+            ps = (tot/n) / (rs + tot/n)
 
-        # TODO make log_likelihood work with array args
-        if isinstance(data,np.ndarray):
-            likelihoods = np.array([self.log_likelihood(data,r=r,p=p).sum()
-                                        for r,p in zip(rs,ps)])
-        else:
-            likelihoods = np.array([sum(self.log_likelihood(d,r=r,p=p).sum()
-                                        for d in data) for r,p in zip(rs,ps)])
+            # TODO make log_likelihood work with array args
+            if isinstance(data,np.ndarray):
+                likelihoods = np.array([self.log_likelihood(data,r=r,p=p).sum()
+                                            for r,p in zip(rs,ps)])
+            else:
+                likelihoods = np.array([sum(self.log_likelihood(d,r=r,p=p).sum()
+                                            for d in data) for r,p in zip(rs,ps)])
 
-        self.r = rmin + likelihoods.argmax()
-        self.p = ps[likelihoods.argmax()]
+            self.r = rmin + likelihoods.argmax()
+            self.p = ps[likelihoods.argmax()]
 
     def _get_statistics(self,data):
         if isinstance(data,np.ndarray):
