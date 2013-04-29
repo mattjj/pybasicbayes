@@ -1262,14 +1262,19 @@ class _NegativeBinomialBase(Distribution):
     def log_likelihood(self,x,r=None,p=None):
         if r is None or p is None:
             r,p = self.r, self.p
-
         x = np.array(x,ndmin=1)
-        xnn = x[x >= 0]
-        raw = np.empty(x.shape)
-        raw[x>=0] = special.gammaln(r + xnn) - special.gammaln(r) - special.gammaln(xnn+1)\
-                + r*np.log(1-p) + xnn*np.log(p)
-        raw[x<0] = -np.inf
-        return raw if isinstance(x,np.ndarray) else raw[0]
+
+        if self.p > 0:
+            xnn = x[x >= 0]
+            raw = np.empty(x.shape)
+            raw[x>=0] = special.gammaln(r + xnn) - special.gammaln(r) - special.gammaln(xnn+1)\
+                    + r*np.log(1-p) + xnn*np.log(p)
+            raw[x<0] = -np.inf
+            return raw if isinstance(x,np.ndarray) else raw[0]
+        else:
+            raw = np.log(np.zeros(x.shape))
+            raw[x == 0] = 0.
+            return raw if isinstance(x,np.ndarray) else raw[0]
 
     def log_sf(self,x):
         scalar = not isinstance(x,np.ndarray)
