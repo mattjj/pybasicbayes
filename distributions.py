@@ -1514,11 +1514,14 @@ def _start_at_r(cls):
             else:
                 return super(Wrapper,self).resample([d-self.r for d in data],*args,**kwargs)
 
-        def max_likelihood(self,data,*args,**kwargs):
-            if isinstance(data,np.ndarray):
-                return super(Wrapper,self).max_likelihood(data-self.r,*args,**kwargs)
+        def max_likelihood(self,data,weights=None,*args,**kwargs):
+            if weights is not None:
+                raise NotImplementedError
             else:
-                return super(Wrapper,self).max_likelihood([d-self.r for d in data],*args,**kwargs)
+                if isinstance(data,np.ndarray):
+                    return super(Wrapper,self).max_likelihood(data-self.r,weights=None,*args,**kwargs)
+                else:
+                    return super(Wrapper,self).max_likelihood([d-self.r for d in data],weights=None,*args,**kwargs)
 
     Wrapper.__name__ = cls.__name__ + 'Variant'
     if cls.__doc__ is not None:
