@@ -219,8 +219,29 @@ class MixtureDistribution(Mixture, GibbsSampling, Distribution):
     This makes a Mixture act like a Distribution for use in other compound models
     '''
 
-    def resample(self,data,niter):
+    def resample(self,data,niter=None):
         # doesn't keep a reference to the data like a model would
+        assert isinstance(data,list) or isinstance(data,np.ndarray)
+        if isinstance(data,np.ndarray):
+            data = [np.asarray(data,dtype=np.float64)]
+        else:
+            data = map(lambda x: np.asarray(x,dtype=np.float64), data)
+
+        if niter is None:
+            raise NotImplementedError
+
+        for d in data:
+            self.add_data(d)
+
+        for itr in range(niter):
+            self.resample_model()
+
+        for d in data:
+            self.labels_list.pop()
+
+    def max_likelihood(self,data,weights=None):
+        if weights is not None:
+            raise NotImplementedError
         assert isinstance(data,list) or isinstance(data,np.ndarray)
         if isinstance(data,np.ndarray):
             data = [np.asarray(data,dtype=np.float64)]
@@ -230,8 +251,14 @@ class MixtureDistribution(Mixture, GibbsSampling, Distribution):
         for d in data:
             self.add_data(d)
 
-        for itr in range(niter):
-            self.resample_model()
+        prev_like = sum(self.log_likelihood(d).sum() for d in data)
+        for itr in range(100):
+            self.EM_step()
+            new_like = sum(self.log_likelihood(d).sum() for d in data)
+            if new_like <= prev_like + 0.1:
+                break
+            else:
+                prev_like = new_like
 
         for d in data:
             self.labels_list.pop()
@@ -251,8 +278,6 @@ class MixtureDistribution(Mixture, GibbsSampling, Distribution):
 
         for d in data:
             self.labels_list.pop()
-
-
 
 class CollapsedMixture(ModelGibbsSampling):
     __metaclass__ = abc.ABCMeta
