@@ -312,7 +312,7 @@ class FrozenMixtureDistribution(MixtureDistribution):
         # NOTE: x is indices
         K = len(self.components)
         vals = self._likelihoods[x.astype(np.int64)]
-        vals += self.weights.log_likelihoods(np.arange(K))
+        vals += self.weights.log_likelihood(np.arange(K))
         return np.logaddexp.reduce(vals,axis=1)
 
     def max_likelihood(self,data,weights=None):
