@@ -10,7 +10,7 @@ from warnings import warn
 from abstractions import ModelGibbsSampling, ModelMeanField, ModelEM
 from abstractions import Distribution, GibbsSampling, MeanField, Collapsed, MaxLikelihood
 from distributions import Categorical, CategoricalAndConcentration
-from internals.labels import Labels, CRPLabels
+from internals.labels import Labels, FrozenLabels, CRPLabels
 from pyhsmm.basic.stats import getdatasize
 
 class Mixture(ModelGibbsSampling, ModelMeanField, ModelEM):
@@ -281,7 +281,29 @@ class MixtureDistribution(Mixture, GibbsSampling, Distribution):
             self.labels_list.pop()
 
 
+# get aBl over whole dataset just once, slice that
 class FrozenMixtureDistribution(MixtureDistribution):
+    @staticmethod
+    def get_all_likelihoods(components,data):
+        if not isinstance(data,np.ndarray):
+            raise NotImplementedError
+
+        likelihoods = np.empty((data.shape[0],len(components)))
+        for idx, c in enumerate(components):
+            likelihoods[:,idx] = c.log_likelihood(data)
+        return likelihoods
+
+    def __init__(self,likelihoods,*args,**kwargs):
+        super(FrozenMixtureDistribution,self).__init__(*args,**kwargs)
+        self._likelihoods = likelihoods
+
+    def add_data(self,data):
+        self.labels_list.append(FrozenLabels(
+            data=data,
+            components=self.components,
+            weights=self.weights,
+            likelihoods=self._likelihoods))
+
     def resample(self,data,niter=None):
         raise NotImplementedError
 
@@ -290,9 +312,7 @@ class FrozenMixtureDistribution(MixtureDistribution):
             raise NotImplementedError
         assert isinstance(data,list) or isinstance(data,np.ndarray)
         if isinstance(data,np.ndarray):
-            data = [np.asarray(data,dtype=np.float64)]
-        else:
-            data = map(lambda x: np.asarray(x,dtype=np.float64), data)
+            data = [data]
 
         if getdatasize(data) > 0:
             for d in data:
