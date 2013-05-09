@@ -300,7 +300,7 @@ class FrozenMixtureDistribution(MixtureDistribution):
     def add_data(self,data):
         # NOTE: data is indices
         self.labels_list.append(FrozenLabels(
-            data=data,
+            data=data.astype(np.int64),
             components=self.components,
             weights=self.weights,
             likelihoods=self._likelihoods))
@@ -311,7 +311,7 @@ class FrozenMixtureDistribution(MixtureDistribution):
     def log_likelihood(self,x):
         # NOTE: x is indices
         K = len(self.components)
-        vals = self._likelihoods[x]
+        vals = self._likelihoods[x.astype(np.int64)]
         vals += self.weights.log_likelihoods(np.arange(K))
         return np.logaddexp.reduce(vals,axis=1)
 
