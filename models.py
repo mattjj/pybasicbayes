@@ -308,16 +308,7 @@ class FrozenMixtureDistribution(MixtureDistribution):
     def resample(self,data,niter=None):
         raise NotImplementedError
 
-    # def log_likelihood(self,x):
-    #     x = np.asarray(x,dtype=np.float64)
-    #     K = len(self.components)
-    #     vals = np.empty((x.shape[0],K))
-    #     for idx, c in enumerate(self.components):
-    #         vals[:,idx] = c.log_likelihood(x)
-    #     vals += self.weights.log_likelihood(np.arange(K))
-    #     return np.logaddexp.reduce(vals,axis=1)
-
-    def log_likeliood(self,x):
+    def log_likelihood(self,x):
         # NOTE: x is indices
         K = len(self.components)
         vals = self._likelihoods[x]
