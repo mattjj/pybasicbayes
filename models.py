@@ -11,6 +11,7 @@ from abstractions import ModelGibbsSampling, ModelMeanField, ModelEM
 from abstractions import Distribution, GibbsSampling, MeanField, Collapsed, MaxLikelihood
 from distributions import Categorical, CategoricalAndConcentration
 from internals.labels import Labels, CRPLabels
+from pyhsmm.basic.stats import getdatasize
 
 class Mixture(ModelGibbsSampling, ModelMeanField, ModelEM):
     '''
@@ -248,20 +249,21 @@ class MixtureDistribution(Mixture, GibbsSampling, Distribution):
         else:
             data = map(lambda x: np.asarray(x,dtype=np.float64), data)
 
-        for d in data:
-            self.add_data(d)
+        if getdatasize(data) > 0:
+            for d in data:
+                self.add_data(d)
 
-        prev_like = sum(self.log_likelihood(d).sum() for d in data)
-        for itr in range(100):
-            self.EM_step()
-            new_like = sum(self.log_likelihood(d).sum() for d in data)
-            if new_like <= prev_like + 0.1:
-                break
-            else:
-                prev_like = new_like
+            prev_like = sum(self.log_likelihood(d).sum() for d in data)
+            for itr in range(100):
+                self.EM_step()
+                new_like = sum(self.log_likelihood(d).sum() for d in data)
+                if new_like <= prev_like + 0.1:
+                    break
+                else:
+                    prev_like = new_like
 
-        for d in data:
-            self.labels_list.pop()
+            for d in data:
+                self.labels_list.pop()
 
     def plot(self,data=[],color='b',plot_params=True):
         if not isinstance(data,list):
@@ -292,20 +294,21 @@ class FrozenMixtureDistribution(MixtureDistribution):
         else:
             data = map(lambda x: np.asarray(x,dtype=np.float64), data)
 
-        for d in data:
-            self.add_data(d)
+        if getdatasize(data) > 0:
+            for d in data:
+                self.add_data(d)
 
-        prev_like = sum(self.log_likelihood(d).sum() for d in data)
-        for itr in range(100):
-            self.EM_step()
-            new_like = sum(self.log_likelihood(d).sum() for d in data)
-            if new_like <= prev_like + 0.1:
-                break
-            else:
-                prev_like = new_like
+            prev_like = sum(self.log_likelihood(d).sum() for d in data)
+            for itr in range(100):
+                self.EM_step()
+                new_like = sum(self.log_likelihood(d).sum() for d in data)
+                if new_like <= prev_like + 0.1:
+                    break
+                else:
+                    prev_like = new_like
 
-        for d in data:
-            self.labels_list.pop()
+            for d in data:
+                self.labels_list.pop()
 
     def EM_step(self):
         assert all(isinstance(c,MaxLikelihood) for c in self.components), \
