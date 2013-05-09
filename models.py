@@ -10,7 +10,8 @@ from warnings import warn
 from abstractions import ModelGibbsSampling, ModelMeanField, ModelEM
 from abstractions import Distribution, GibbsSampling, MeanField, Collapsed, MaxLikelihood
 from distributions import Categorical, CategoricalAndConcentration
-from internals.labels import Labels, CRPLabels
+from internals.labels import Labels, FrozenLabels, CRPLabels
+from pyhsmm.util.stats import getdatasize
 
 
 class Mixture(ModelGibbsSampling, ModelMeanField, ModelEM):
@@ -249,36 +250,110 @@ class MixtureDistribution(Mixture, GibbsSampling, Distribution):
         else:
             data = map(lambda x: np.asarray(x,dtype=np.float64), data)
 
-        for d in data:
-            self.add_data(d)
+        if getdatasize(data) > 0:
+            for d in data:
+                self.add_data(d)
 
-        prev_like = sum(self.log_likelihood(d).sum() for d in data)
-        for itr in range(100):
-            self.EM_step()
-            new_like = sum(self.log_likelihood(d).sum() for d in data)
-            if new_like <= prev_like + 0.1:
-                break
-            else:
-                prev_like = new_like
+            prev_like = sum(self.log_likelihood(d).sum() for d in data)
+            for itr in range(100):
+                self.EM_step()
+                new_like = sum(self.log_likelihood(d).sum() for d in data)
+                if new_like <= prev_like + 0.1:
+                    break
+                else:
+                    prev_like = new_like
 
-        for d in data:
-            self.labels_list.pop()
+            for d in data:
+                self.labels_list.pop()
 
-    def plot(self,color='b',data=[],plot_params=True):
-        # add data and make sure it has labels
+    def plot(self,data=[],color='b',plot_params=True):
         if not isinstance(data,list):
             data = [data]
         for d in data:
             self.add_data(d)
-        self.resample_model()
 
         for l in self.labels_list:
+            l.E_step()
             for label, o in enumerate(self.components):
                 if label in l.z:
                     o.plot(color=color,data=l.data[l.z == label] if l.data is not None else None)
 
         for d in data:
             self.labels_list.pop()
+
+
+# get aBl over whole dataset just once, slice that
+class FrozenMixtureDistribution(MixtureDistribution):
+    @staticmethod
+    def get_all_likelihoods(components,data):
+        if not isinstance(data,np.ndarray):
+            raise NotImplementedError
+
+        likelihoods = np.empty((data.shape[0],len(components)))
+        for idx, c in enumerate(components):
+            likelihoods[:,idx] = c.log_likelihood(data)
+        return likelihoods
+
+    def __init__(self,likelihoods,*args,**kwargs):
+        super(FrozenMixtureDistribution,self).__init__(*args,**kwargs)
+        self._likelihoods = likelihoods
+
+    def add_data(self,data):
+        # NOTE: data is indices
+        self.labels_list.append(FrozenLabels(
+            data=data.astype(np.int64),
+            components=self.components,
+            weights=self.weights,
+            likelihoods=self._likelihoods))
+
+    def resample(self,data,niter=None):
+        raise NotImplementedError
+
+    def log_likelihood(self,x):
+        # NOTE: x is indices
+        K = len(self.components)
+        vals = self._likelihoods[x.astype(np.int64)]
+        vals += self.weights.log_likelihood(np.arange(K))
+        return np.logaddexp.reduce(vals,axis=1)
+
+    def max_likelihood(self,data,weights=None):
+        # NOTE: data is an array or list of arrays of indices
+        if weights is not None:
+            raise NotImplementedError
+        assert isinstance(data,list) or isinstance(data,np.ndarray)
+        if isinstance(data,np.ndarray):
+            data = [data]
+
+        if getdatasize(data) > 0:
+            for d in data:
+                self.add_data(d)
+
+            prev_like = sum(self.log_likelihood(d).sum() for d in data)
+            for itr in range(100):
+                self.EM_step()
+                new_like = sum(self.log_likelihood(d).sum() for d in data)
+                if new_like <= prev_like + 0.1:
+                    break
+                else:
+                    prev_like = new_like
+
+            for d in data:
+                self.labels_list.pop()
+
+    def EM_step(self):
+        assert all(isinstance(c,MaxLikelihood) for c in self.components), \
+                'Components must implement MaxLikelihood'
+        assert len(self.labels_list) > 0, 'Must have data to run EM'
+
+        ## E step
+        for l in self.labels_list:
+            l.E_step()
+
+        ## M step
+        # mixture weights
+        self.weights.max_likelihood(np.arange(len(self.components)),
+                [l.expectations for l in self.labels_list])
+
 
 class CollapsedMixture(ModelGibbsSampling):
     __metaclass__ = abc.ABCMeta
