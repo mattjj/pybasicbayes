@@ -12,6 +12,7 @@ from abstractions import Distribution, GibbsSampling, MeanField, Collapsed, MaxL
 from distributions import Categorical, CategoricalAndConcentration
 from internals.labels import Labels, CRPLabels
 
+
 class Mixture(ModelGibbsSampling, ModelMeanField, ModelEM):
     '''
     This class is for mixtures of other distributions.
