@@ -263,21 +263,64 @@ class MixtureDistribution(Mixture, GibbsSampling, Distribution):
         for d in data:
             self.labels_list.pop()
 
-    def plot(self,color='b',data=[],plot_params=True):
-        # add data and make sure it has labels
+    def plot(self,data=[],color='b',plot_params=True):
         if not isinstance(data,list):
             data = [data]
         for d in data:
             self.add_data(d)
-        self.resample_model()
 
         for l in self.labels_list:
+            l.E_step()
             for label, o in enumerate(self.components):
                 if label in l.z:
                     o.plot(color=color,data=l.data[l.z == label] if l.data is not None else None)
 
         for d in data:
             self.labels_list.pop()
+
+
+class FrozenMixtureDistribution(MixtureDistribution):
+    def resample(self,data,niter=None):
+        raise NotImplementedError
+
+    def max_likelihood(self,data,weights=None):
+        if weights is not None:
+            raise NotImplementedError
+        assert isinstance(data,list) or isinstance(data,np.ndarray)
+        if isinstance(data,np.ndarray):
+            data = [np.asarray(data,dtype=np.float64)]
+        else:
+            data = map(lambda x: np.asarray(x,dtype=np.float64), data)
+
+        for d in data:
+            self.add_data(d)
+
+        prev_like = sum(self.log_likelihood(d).sum() for d in data)
+        for itr in range(100):
+            self.EM_step()
+            new_like = sum(self.log_likelihood(d).sum() for d in data)
+            if new_like <= prev_like + 0.1:
+                break
+            else:
+                prev_like = new_like
+
+        for d in data:
+            self.labels_list.pop()
+
+    def EM_step(self):
+        assert all(isinstance(c,MaxLikelihood) for c in self.components), \
+                'Components must implement MaxLikelihood'
+        assert len(self.labels_list) > 0, 'Must have data to run EM'
+
+        ## E step
+        for l in self.labels_list:
+            l.E_step()
+
+        ## M step
+        # mixture weights
+        self.weights.max_likelihood(np.arange(len(self.components)),
+                [l.expectations for l in self.labels_list])
+
 
 class CollapsedMixture(ModelGibbsSampling):
     __metaclass__ = abc.ABCMeta
