@@ -331,14 +331,8 @@ class FrozenMixtureDistribution(MixtureDistribution):
             for d in data:
                 self.add_data(d)
 
-            prev_like = sum(self.log_likelihood(d).sum() for d in data)
-            for itr in range(100):
+            for itr in range(10):
                 self.EM_step()
-                new_like = sum(self.log_likelihood(d).sum() for d in data)
-                if new_like <= prev_like + 0.1:
-                    break
-                else:
-                    prev_like = new_like
 
             for d in data:
                 self.labels_list.pop()
