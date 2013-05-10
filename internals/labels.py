@@ -97,7 +97,13 @@ class FrozenLabels(Labels):
         raise NotImplementedError
 
     def resample(self,temp=None):
-        raise NotImplementedError
+        scores = self._likelihoods[self.data] + \
+                self.weights.log_likelihood(np.arange(len(self.components)))
+
+        if temp is not None:
+            scores /= temp
+
+        self.z = sample_discrete_from_log(scores,axis=1)
 
     def E_step(self):
         data, N, K = self.data, self.data.shape[0], len(self.components)

@@ -222,23 +222,20 @@ class MixtureDistribution(Mixture, GibbsSampling, Distribution):
 
     def resample(self,data,niter=None):
         # doesn't keep a reference to the data like a model would
+        # TODO could just concatenate data
         assert isinstance(data,list) or isinstance(data,np.ndarray)
-        if isinstance(data,np.ndarray):
-            data = [np.asarray(data,dtype=np.float64)]
-        else:
-            data = map(lambda x: np.asarray(x,dtype=np.float64), data)
+        if not isinstance(data,np.ndarray):
+            data = np.concatenate(data)
 
         if niter is None:
             raise NotImplementedError
 
-        for d in data:
-            self.add_data(d)
+        self.add_data(data)
 
         for itr in range(niter):
             self.resample_model()
 
-        for d in data:
-            self.labels_list.pop()
+        self.labels_list.pop()
 
     def max_likelihood(self,data,weights=None):
         if weights is not None:
@@ -305,8 +302,10 @@ class FrozenMixtureDistribution(MixtureDistribution):
             weights=self.weights,
             likelihoods=self._likelihoods))
 
-    def resample(self,data,niter=None):
-        raise NotImplementedError
+    def resample_model(self):
+        for l in self.labels_list:
+            l.resample()
+        self.weights.resample([l.z for l in self.labels_list])
 
     def log_likelihood(self,x):
         # NOTE: x is indices
