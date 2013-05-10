@@ -314,6 +314,7 @@ class FrozenMixtureDistribution(MixtureDistribution):
         K = len(self.components)
         vals = self._likelihoods[x.astype(np.int64)]
         vals += self.weights.log_likelihood(np.arange(K))
+        # TODO TODO TODO does this make sense with zeros in the initialization?
         return np.logaddexp.reduce(vals,axis=1)
 
     def max_likelihood(self,data,weights=None):
