@@ -148,16 +148,20 @@ class Mixture(ModelGibbsSampling, ModelMeanField, ModelEM):
         return sum(c.num_parameters() for c in self.components) + self.weights.num_parameters()
 
     def BIC(self,data=None):
-        '''BIC on the passed data. If passed data is None (default), calculates BIC on the model's assigned data'''
+        '''
+        BIC on the passed data.
+        If passed data is None (default), calculates BIC on the model's assigned data.
+        '''
         # NOTE: in principle this method computes the BIC only after finding the
         # maximum likelihood parameters (or, of course, an EM fixed-point as an
         # approximation!)
-        assert data is None and len(self.labels_list) > 0, 'Must have data to get BIC'
         if data is None:
+            assert len(self.labels_list) > 0, \
+                    "If not passing in data, the class must already have it. Use the method add_data()"
             return -2*sum(self.log_likelihood(l.data).sum() for l in self.labels_list) + \
                         self.num_parameters() * np.log(sum(l.data.shape[0] for l in self.labels_list))
         else:
-            return -2*self.log_likelihood(data) + self.num_parameters() * np.log(data.shape[0])
+            return -2*np.sum(self.log_likelihood(data)) + self.num_parameters() * np.log(data.shape[0])
 
     def AIC(self):
         # NOTE: in principle this method computes the AIC only after finding the
