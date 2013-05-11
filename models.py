@@ -38,10 +38,10 @@ class Mixture(ModelGibbsSampling, ModelMeanField, ModelEM):
     def generate(self,N,keep=True):
         templabels = Labels(components=self.components,weights=self.weights,N=N) # this samples labels
 
-        out = np.empty(self.components[0].rvs(size=N).shape)
+        out = np.empty(self.components[0].rvs(N).shape)
         counts = np.bincount(templabels.z,minlength=len(self.components))
         for idx,(c,count) in enumerate(zip(self.components,counts)):
-            out[templabels.z == idx,...] = c.rvs(size=count)
+            out[templabels.z == idx,...] = c.rvs(count)
 
         perm = np.random.permutation(N)
         out = out[perm]
@@ -148,13 +148,17 @@ class Mixture(ModelGibbsSampling, ModelMeanField, ModelEM):
         # parameters, but I don't know why they wouldn't. Some convention?
         return sum(c.num_parameters() for c in self.components) + self.weights.num_parameters()
 
-    def BIC(self):
+    def BIC(self,data=None):
+        '''BIC on the passed data. If passed data is None (default), calculates BIC on the model's assigned data'''
         # NOTE: in principle this method computes the BIC only after finding the
         # maximum likelihood parameters (or, of course, an EM fixed-point as an
         # approximation!)
-        assert len(self.labels_list) > 0, 'Must have data to get BIC'
-        return -2*sum(self.log_likelihood(l.data).sum() for l in self.labels_list) + \
-                    self.num_parameters() * np.log(sum(l.data.shape[0] for l in self.labels_list))
+        assert data is None and len(self.labels_list) > 0, 'Must have data to get BIC'
+        if data is None:
+            return -2*sum(self.log_likelihood(l.data).sum() for l in self.labels_list) + \
+                        self.num_parameters() * np.log(sum(l.data.shape[0] for l in self.labels_list))
+        else:
+            return -2*self.log_likelihood(data) + self.num_parameters() * np.log(data.shape[0])
 
     def AIC(self):
         # NOTE: in principle this method computes the AIC only after finding the
@@ -221,25 +225,22 @@ class MixtureDistribution(Mixture, GibbsSampling, Distribution):
     This makes a Mixture act like a Distribution for use in other compound models
     '''
 
-    def resample(self,data,niter=None):
+    def resample(self,data,niter=25):
         # doesn't keep a reference to the data like a model would
         assert isinstance(data,list) or isinstance(data,np.ndarray)
-        if isinstance(data,np.ndarray):
-            data = [np.asarray(data,dtype=np.float64)]
-        else:
-            data = map(lambda x: np.asarray(x,dtype=np.float64), data)
 
-        if niter is None:
-            raise NotImplementedError
+        if getdatasize(data) > 0:
+            if not isinstance(data,np.ndarray):
+                data = np.concatenate(data)
 
-        for d in data:
-            self.add_data(d)
+            self.add_data(data)
 
-        for itr in range(niter):
-            self.resample_model()
+            for itr in range(niter):
+                self.resample_model()
 
-        for d in data:
             self.labels_list.pop()
+        else:
+            self.resample_model()
 
     def max_likelihood(self,data,weights=None):
         if weights is not None:
@@ -266,17 +267,18 @@ class MixtureDistribution(Mixture, GibbsSampling, Distribution):
             for d in data:
                 self.labels_list.pop()
 
-    def plot(self,data=[],color='b',plot_params=True):
+    def plot(self,data=[],color='b',label='',plot_params=True):
         if not isinstance(data,list):
             data = [data]
         for d in data:
             self.add_data(d)
 
         for l in self.labels_list:
-            l.E_step()
+            l.E_step() # sets l.z to MAP estimates
             for label, o in enumerate(self.components):
                 if label in l.z:
-                    o.plot(color=color,data=l.data[l.z == label] if l.data is not None else None)
+                    o.plot(color=color,label=label,
+                            data=l.data[l.z == label] if l.data is not None else None)
 
         for d in data:
             self.labels_list.pop()
@@ -294,9 +296,10 @@ class FrozenMixtureDistribution(MixtureDistribution):
             likelihoods[:,idx] = c.log_likelihood(data)
         return likelihoods
 
-    def __init__(self,likelihoods,*args,**kwargs):
+    def __init__(self,all_data,all_likelihoods,*args,**kwargs):
         super(FrozenMixtureDistribution,self).__init__(*args,**kwargs)
-        self._likelihoods = likelihoods
+        self._likelihoods = all_likelihoods
+        self._data = all_data
 
     def add_data(self,data):
         # NOTE: data is indices
@@ -306,8 +309,10 @@ class FrozenMixtureDistribution(MixtureDistribution):
             weights=self.weights,
             likelihoods=self._likelihoods))
 
-    def resample(self,data,niter=None):
-        raise NotImplementedError
+    def resample_model(self):
+        for l in self.labels_list:
+            l.resample()
+        self.weights.resample([l.z for l in self.labels_list])
 
     def log_likelihood(self,x):
         # NOTE: x is indices
@@ -329,14 +334,8 @@ class FrozenMixtureDistribution(MixtureDistribution):
             for d in data:
                 self.add_data(d)
 
-            prev_like = sum(self.log_likelihood(d).sum() for d in data)
-            for itr in range(100):
+            for itr in range(10):
                 self.EM_step()
-                new_like = sum(self.log_likelihood(d).sum() for d in data)
-                if new_like <= prev_like + 0.1:
-                    break
-                else:
-                    prev_like = new_like
 
             for d in data:
                 self.labels_list.pop()
@@ -354,6 +353,22 @@ class FrozenMixtureDistribution(MixtureDistribution):
         # mixture weights
         self.weights.max_likelihood(np.arange(len(self.components)),
                 [l.expectations for l in self.labels_list])
+
+    def plot(self,data=[],color='b',label='',plot_params=True):
+        if not isinstance(data,list):
+            data = [data]
+        for d in data:
+            self.add_data(d)
+
+        for l in self.labels_list:
+            l.E_step() # sets l.z to MAP estimates
+            for label, o in enumerate(self.components):
+                if label in l.z:
+                    o.plot(color=color,label=label,
+                            data=self._data[l.data[l.z == label]] if l.data is not None else None)
+
+        for d in data:
+            self.labels_list.pop()
 
 
 class CollapsedMixture(ModelGibbsSampling):
@@ -414,10 +429,10 @@ class CRPMixture(CollapsedMixture):
         templabels = CRPLabels(model=self,alpha_0=self.alpha_0,obs_distn=self.obs_distn,N=N)
 
         counts = np.bincount(templabels.z)
-        out = np.empty(self.obs_distn.rvs(size=N).shape)
+        out = np.empty(self.obs_distn.rvs(N).shape)
         for idx, count in enumerate(counts):
             self.obs_distn.resample()
-            out[templabels.z == idx,...] = self.obs_distn.rvs(size=count)
+            out[templabels.z == idx,...] = self.obs_distn.rvs(count)
 
         perm = np.random.permutation(N)
         out = out[perm]

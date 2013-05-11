@@ -34,6 +34,7 @@ class _GaussianBase(Distribution):
         return np.random.multivariate_normal(mean=self.mu,cov=self.sigma,size=size)
 
     def log_likelihood(self,x):
+        assert x.dtype == np.float64
         mu, sigma, D = self.mu, self.sigma, self.D
         x = np.reshape(x,(-1,D)) - mu
         xs,LT = util.general.solve_chofactor_system(sigma,x.T,overwrite_b=True)
