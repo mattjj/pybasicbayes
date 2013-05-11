@@ -273,7 +273,7 @@ class MixtureDistribution(Mixture, GibbsSampling, Distribution):
             self.add_data(d)
 
         for l in self.labels_list:
-            l.E_step()
+            l.E_step() # sets l.z to MAP estimates
             for label, o in enumerate(self.components):
                 if label in l.z:
                     o.plot(color=color,label=label,
@@ -295,9 +295,10 @@ class FrozenMixtureDistribution(MixtureDistribution):
             likelihoods[:,idx] = c.log_likelihood(data)
         return likelihoods
 
-    def __init__(self,likelihoods,*args,**kwargs):
+    def __init__(self,all_data,all_likelihoods,*args,**kwargs):
         super(FrozenMixtureDistribution,self).__init__(*args,**kwargs)
-        self._likelihoods = likelihoods
+        self._likelihoods = all_likelihoods
+        self._data = all_data
 
     def add_data(self,data):
         # NOTE: data is indices
@@ -351,6 +352,22 @@ class FrozenMixtureDistribution(MixtureDistribution):
         # mixture weights
         self.weights.max_likelihood(np.arange(len(self.components)),
                 [l.expectations for l in self.labels_list])
+
+    def plot(self,data=[],color='b',label='',plot_params=True):
+        if not isinstance(data,list):
+            data = [data]
+        for d in data:
+            self.add_data(d)
+
+        for l in self.labels_list:
+            l.E_step() # sets l.z to MAP estimates
+            for label, o in enumerate(self.components):
+                if label in l.z:
+                    o.plot(color=color,label=label,
+                            data=self._data[l.data[l.z == label]] if l.data is not None else None)
+
+        for d in data:
+            self.labels_list.pop()
 
 
 class CollapsedMixture(ModelGibbsSampling):
