@@ -26,7 +26,7 @@ class Labels(object):
                 self.resample()
 
     def _generate(self,N):
-        self.z = self.weights.rvs(size=N)
+        self.z = self.weights.rvs(N)
 
     def resample(self,temp=None):
         data = self.data

@@ -37,10 +37,10 @@ class Mixture(ModelGibbsSampling, ModelMeanField, ModelEM):
     def generate(self,N,keep=True):
         templabels = Labels(components=self.components,weights=self.weights,N=N) # this samples labels
 
-        out = np.empty(self.components[0].rvs(size=N).shape)
+        out = np.empty(self.components[0].rvs(N).shape)
         counts = np.bincount(templabels.z,minlength=len(self.components))
         for idx,(c,count) in enumerate(zip(self.components,counts)):
-            out[templabels.z == idx,...] = c.rvs(size=count)
+            out[templabels.z == idx,...] = c.rvs(count)
 
         perm = np.random.permutation(N)
         out = out[perm]
@@ -224,22 +224,22 @@ class MixtureDistribution(Mixture, GibbsSampling, Distribution):
     This makes a Mixture act like a Distribution for use in other compound models
     '''
 
-    def resample(self,data,niter=None):
+    def resample(self,data,niter=25):
         # doesn't keep a reference to the data like a model would
-        # TODO could just concatenate data
         assert isinstance(data,list) or isinstance(data,np.ndarray)
-        if not isinstance(data,np.ndarray):
-            data = np.concatenate(data)
 
-        if niter is None:
-            raise NotImplementedError
+        if getdatasize(data) > 0:
+            if not isinstance(data,np.ndarray):
+                data = np.concatenate(data)
 
-        self.add_data(data)
+            self.add_data(data)
 
-        for itr in range(niter):
+            for itr in range(niter):
+                self.resample_model()
+
+            self.labels_list.pop()
+        else:
             self.resample_model()
-
-        self.labels_list.pop()
 
     def max_likelihood(self,data,weights=None):
         if weights is not None:
@@ -266,7 +266,7 @@ class MixtureDistribution(Mixture, GibbsSampling, Distribution):
             for d in data:
                 self.labels_list.pop()
 
-    def plot(self,data=[],color='b',plot_params=True):
+    def plot(self,data=[],color='b',label='',plot_params=True):
         if not isinstance(data,list):
             data = [data]
         for d in data:
@@ -276,7 +276,8 @@ class MixtureDistribution(Mixture, GibbsSampling, Distribution):
             l.E_step()
             for label, o in enumerate(self.components):
                 if label in l.z:
-                    o.plot(color=color,data=l.data[l.z == label] if l.data is not None else None)
+                    o.plot(color=color,label=label,
+                            data=l.data[l.z == label] if l.data is not None else None)
 
         for d in data:
             self.labels_list.pop()
@@ -410,10 +411,10 @@ class CRPMixture(CollapsedMixture):
         templabels = CRPLabels(model=self,alpha_0=self.alpha_0,obs_distn=self.obs_distn,N=N)
 
         counts = np.bincount(templabels.z)
-        out = np.empty(self.obs_distn.rvs(size=N).shape)
+        out = np.empty(self.obs_distn.rvs(N).shape)
         for idx, count in enumerate(counts):
             self.obs_distn.resample()
-            out[templabels.z == idx,...] = self.obs_distn.rvs(size=count)
+            out[templabels.z == idx,...] = self.obs_distn.rvs(count)
 
         perm = np.random.permutation(N)
         out = out[perm]
