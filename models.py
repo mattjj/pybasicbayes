@@ -14,6 +14,7 @@ from distributions import Categorical, CategoricalAndConcentration
 from internals.labels import Labels, FrozenLabels, CRPLabels
 from pyhsmm.util.stats import getdatasize
 
+
 class Mixture(ModelGibbsSampling, ModelMeanField, ModelEM):
     '''
     This class is for mixtures of other distributions.
@@ -229,7 +230,7 @@ class MixtureDistribution(Mixture, GibbsSampling, Distribution):
     This makes a Mixture act like a Distribution for use in other compound models
     '''
 
-    def resample(self,data,niter=25):
+    def resample(self,data,niter=25,temp=None):
         # doesn't keep a reference to the data like a model would
         assert isinstance(data,list) or isinstance(data,np.ndarray)
 
@@ -240,11 +241,11 @@ class MixtureDistribution(Mixture, GibbsSampling, Distribution):
             self.add_data(data)
 
             for itr in range(niter):
-                self.resample_model()
+                self.resample_model(temp=temp)
 
             self.labels_list.pop()
         else:
-            self.resample_model()
+            self.resample_model(temp=temp)
 
     def max_likelihood(self,data,weights=None):
         if weights is not None:
@@ -315,9 +316,9 @@ class FrozenMixtureDistribution(MixtureDistribution):
             weights=self.weights,
             likelihoods=self._likelihoods))
 
-    def resample_model(self):
+    def resample_model(self, temp=None):
         for l in self.labels_list:
-            l.resample()
+            l.resample(temp=temp)
         self.weights.resample([l.z for l in self.labels_list])
 
     def log_likelihood_slower(self,x):
