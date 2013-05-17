@@ -88,38 +88,6 @@ class Labels(object):
 
         self.z = self.expectations.argmax(1)
 
-class FrozenLabels(Labels):
-    def __init__(self,likelihoods,*args,**kwargs):
-        super(FrozenLabels,self).__init__(*args,**kwargs)
-        self._likelihoods = likelihoods
-
-    def meanfieldupdate(self):
-        raise NotImplementedError
-
-    def resample(self,temp=None):
-        scores = self._likelihoods[self.data] + \
-                self.weights.log_likelihood(np.arange(len(self.components)))
-
-        if temp is not None:
-            scores /= temp
-
-        self.z = sample_discrete_from_log(scores,axis=1)
-
-    def E_step(self):
-        data, N, K = self.data, self.data.shape[0], len(self.components)
-        self.expectations = np.empty((N,K))
-
-        self.expectations = self._likelihoods[data]
-
-        self.expectations += self.weights.log_likelihood(np.arange(K))
-
-        self.expectations -= self.expectations.max(1)[:,na]
-        np.exp(self.expectations,out=self.expectations)
-        self.expectations /= self.expectations.sum(1)[:,na]
-
-        self.z = self.expectations.argmax(1)
-
-
 # TODO get counts/stats from model, as in pyhsmm direct assignment sampler
 class CRPLabels(object):
     def __init__(self,model,alpha_0,obs_distn,data=None,N=None):
