@@ -11,7 +11,7 @@ from warnings import warn
 from abstractions import ModelGibbsSampling, ModelMeanField, ModelEM
 from abstractions import Distribution, GibbsSampling, MeanField, Collapsed, MaxLikelihood
 from distributions import Categorical, CategoricalAndConcentration
-from internals.labels import Labels, FrozenLabels, CRPLabels
+from internals.labels import Labels, CRPLabels
 from pyhsmm.util.stats import getdatasize
 
 
