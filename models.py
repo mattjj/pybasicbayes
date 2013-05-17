@@ -4,6 +4,7 @@ na = np.newaxis
 from matplotlib import pyplot as plt
 from matplotlib import cm
 import scipy.special as special
+import scipy.weave
 import abc
 from warnings import warn
 
@@ -302,6 +303,8 @@ class FrozenMixtureDistribution(MixtureDistribution):
     def __init__(self,all_data,all_likelihoods,*args,**kwargs):
         super(FrozenMixtureDistribution,self).__init__(*args,**kwargs)
         self._likelihoods = all_likelihoods
+        self._maxes = all_likelihoods.max(axis=1)
+        self._shifted_likelihoods = np.exp(all_likelihoods - self._maxes[:,na])
         self._data = all_data
 
     def add_data(self,data):
@@ -317,13 +320,41 @@ class FrozenMixtureDistribution(MixtureDistribution):
             l.resample()
         self.weights.resample([l.z for l in self.labels_list])
 
-    def log_likelihood(self,x):
+    def log_likelihood_slower(self,x):
         # NOTE: x is indices
         K = len(self.components)
         vals = self._likelihoods[x.astype(np.int64)]
         vals += self.weights.log_likelihood(np.arange(K))
-        # TODO TODO TODO does this make sense with zeros in the initialization?
         return np.logaddexp.reduce(vals,axis=1)
+
+    def log_likelihood(self,sub_indices):
+        # NOTE: this method takes INDICES into the data
+        shifted_likelihoods = self._shifted_likelihoods
+        maxes = self._maxes
+        weights = self.weights.weights
+
+        K = weights.shape[0]
+        num_sub_indices = sub_indices.shape[0]
+        num_indices = shifted_likelihoods.shape[0]
+
+        out = np.empty(num_sub_indices)
+
+        scipy.weave.inline(
+                '''
+                using namespace Eigen;
+
+                Map<MatrixXd> eweights(weights,1,K);
+                Map<MatrixXd> eall_likelihoods(shifted_likelihoods,K,num_indices);
+
+                for (int i=0; i < num_sub_indices; i++) {
+                    int idx = sub_indices[i];
+                    out[i] = log((eweights * eall_likelihoods.col(idx)).array().value()) + maxes[idx];
+                }
+                ''',['sub_indices','shifted_likelihoods','K','num_indices',
+                    'num_sub_indices','out','weights','maxes'],
+                headers=['<Eigen/Core>','<math.h>'],include_dirs=['/usr/local/include/eigen3/'],
+                extra_compile_args=['-O3','-DNDEBUG'])
+        return out
 
     def max_likelihood(self,data,weights=None):
         # NOTE: data is an array or list of arrays of indices
