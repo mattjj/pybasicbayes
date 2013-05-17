@@ -224,7 +224,6 @@ class Mixture(ModelGibbsSampling, ModelMeanField, ModelEM):
                         for i,c in enumerate(self.components) if i in z]
                 }
 
-
 class MixtureDistribution(Mixture, GibbsSampling, Distribution):
     '''
     This makes a Mixture act like a Distribution for use in other compound models
