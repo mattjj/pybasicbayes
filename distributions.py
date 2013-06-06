@@ -630,7 +630,7 @@ class IsotropicGaussian(GibbsSampling):
         return n, xbar, sumsq
 
 
-class _ScalarGaussianBase(Distribution):
+class ScalarGaussian(Distribution):
     '''
     Abstract class for all scalar Gaussians.
     '''
@@ -651,7 +651,7 @@ class _ScalarGaussianBase(Distribution):
 
 
 # TODO meanfield, max_likelihood
-class ScalarGaussianNIX(_ScalarGaussianBase, GibbsSampling, Collapsed):
+class ScalarGaussianNIX(ScalarGaussian, GibbsSampling, Collapsed):
     '''
     Conjugate Normal-(Scaled-)Inverse-ChiSquared prior. (Another parameterization is the
     Normal-Inverse-Gamma.)
@@ -732,7 +732,7 @@ class ScalarGaussianNIX(_ScalarGaussianBase, GibbsSampling, Collapsed):
         return stats.t.logpdf(y,nu_n,loc=mu_n,scale=np.sqrt((1+kappa_n)*sigmasq_n/kappa_n))
 
 
-class ScalarGaussianNonconjNIX(_ScalarGaussianBase, GibbsSampling):
+class ScalarGaussianNonconjNIX(ScalarGaussian, GibbsSampling):
     '''
     Non-conjugate separate priors on mean and variance parameters, via
     mu ~ Normal(mu_0,tausq_0)
@@ -781,7 +781,7 @@ class ScalarGaussianNonconjNIX(_ScalarGaussianBase, GibbsSampling):
             self.sigmasqbin[...] = self.sigmasq
 
 
-class ScalarGaussianFixedvar(_ScalarGaussianBase, GibbsSampling):
+class ScalarGaussianFixedvar(ScalarGaussian, GibbsSampling):
     '''
     Conjugate normal prior on mean.
     '''
