@@ -1012,8 +1012,7 @@ class Multinomial(Categorical):
     A Poisson process conditioned on the number of points emitted.
     '''
     def log_likelihood(self,x):
-        x = np.asarray(x)
-        assert x.ndim == 2 and x.shape[1] == self.K
+        assert isinstance(x,np.ndarray) and x.ndim == 2 and x.shape[1] == self.K
         return np.where(x,x*np.log(self.weights),0.).sum(1) \
                 + special.gammaln(x.sum(1)+1) - special.gammaln(x+1).sum(1)
 
@@ -1022,14 +1021,15 @@ class Multinomial(Categorical):
 
     def resample(self,data=[]):
         'data is an array of counts or a list of such arrays)'
-        warn('untested')
+        # resample is implemented by hooking into the parent's calls to
+        # _get_statistics (see below)
         super(Multinomial,self).resample(data)
 
     @staticmethod
     def _get_statistics(data,K):
         # the passed in data should be like Categorical data that's already been
-        # counted (e.g. with np.bincount), so here we just pass it along to the
-        # superclass's methods
+        # counted (e.g. with np.bincount), so here we just sum things and pass
+        # them to the parent's methods
         warn('untested')
         if isinstance(data,np.ndarray):
             assert data.ndim == 2
@@ -1044,11 +1044,7 @@ class Multinomial(Categorical):
         raise NotImplementedError # TODO
 
     def max_likelihood(self,counts,weights=None):
-        warn('untested')
-        if weights is None:
-            self.weights = counts /counts.sum()
-        else:
-            raise NotImplementedError # TODO
+        raise NotImplementedError # TODO
 
 
 # TODO this is all repeated code from CategoricalAndConcentration!
