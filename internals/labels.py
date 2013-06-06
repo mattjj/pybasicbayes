@@ -56,6 +56,9 @@ class Labels(object):
         self.r = np.exp(logr - logr.max(1)[:,na])
         self.r /= self.r.sum(1)[:,na]
 
+        # for plotting
+        self.z = self.r.argmax(1)
+
     def get_vlb(self):
         # return avg energy plus entropy, our contribution to the mean field
         # variational lower bound
