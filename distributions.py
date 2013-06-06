@@ -1014,7 +1014,7 @@ class Multinomial(Categorical):
     def log_likelihood(self,x):
         x = np.asarray(x)
         assert x.ndim == 2 and x.shape[1] == self.K
-        return (x*np.log(self.weights)).sum(1) \
+        return np.where(x,x*np.log(self.weights),0.).sum(1) \
                 + special.gammaln(x.sum(1)+1)[:,na] - special.gammaln(x+1).sum(1)[:,na]
 
     def resample(self,data=[]):
