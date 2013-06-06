@@ -1032,12 +1032,12 @@ class Multinomial(Categorical):
         # superclass's methods
         warn('untested')
         if isinstance(data,np.ndarray):
-            return data,
+            assert data.ndim == 2
+            return data.sum(0),
         else:
-            data = np.array(data)
-            if data.size == 0:
+            if len(data) == 0:
                 return np.zeros(K,dtype=int),
-            return np.array(data).sum(0),
+            return np.concatenate(data).sum(0),
 
     @staticmethod
     def _get_weighted_statistics(data,weights):
