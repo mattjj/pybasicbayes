@@ -51,6 +51,7 @@ import operator
 models_and_scores = sorted([(m,s[-1]) for m,s
     in zip(allmodels,allscores)],key=operator.itemgetter(1),reverse=True)
 
+plt.figure()
 models_and_scores[0][0].plot()
 plt.title('best model')
 
