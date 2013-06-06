@@ -24,7 +24,7 @@ class Distribution(object):
     def log_likelihood(self,x):
         '''
         log likelihood (either log probability mass function or log probability
-        density function)
+        density function) of the ndarray x
         '''
         pass
 
