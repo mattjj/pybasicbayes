@@ -33,6 +33,7 @@ class Mixture(ModelGibbsSampling, ModelMeanField, ModelEM):
         self.labels_list = []
 
     def add_data(self,data):
+        # TODO get rid of this asarray...
         self.labels_list.append(Labels(data=np.asarray(data,dtype=np.float64),
             components=self.components,weights=self.weights))
 

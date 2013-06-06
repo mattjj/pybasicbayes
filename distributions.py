@@ -1015,7 +1015,10 @@ class Multinomial(Categorical):
         x = np.asarray(x)
         assert x.ndim == 2 and x.shape[1] == self.K
         return np.where(x,x*np.log(self.weights),0.).sum(1) \
-                + special.gammaln(x.sum(1)+1)[:,na] - special.gammaln(x+1).sum(1)[:,na]
+                + special.gammaln(x.sum(1)+1) - special.gammaln(x+1).sum(1)
+
+    def rvs(self,size=None):
+        raise NotImplementedError
 
     def resample(self,data=[]):
         'data is an array of counts or a list of such arrays)'
@@ -1024,6 +1027,9 @@ class Multinomial(Categorical):
 
     @staticmethod
     def _get_statistics(data,K):
+        # the passed in data should be like Categorical data that's already been
+        # counted (e.g. with np.bincount), so here we just pass it along to the
+        # superclass's methods
         warn('untested')
         if isinstance(data,np.ndarray):
             return data,
@@ -1047,27 +1053,28 @@ class Multinomial(Categorical):
 
 # TODO this is all repeated code from CategoricalAndConcentration!
 # metaprogramming, please!
-class MultinomialAndConcentration(Multinomial):
-    '''
-    Similar to CategoricalAndConcentration, but data are counts.
-    '''
-    def __init__(self,a_0,b_0,K,concentration=None,weights=None):
-        self.concentration = DirGamma(a_0=a_0,b_0=b_0,K=K,concentration=concentration)
-        super(MultinomialAndConcentration,self).__init__(alpha_0=self.concentration.concentration,K=K,weights=weights)
+# TODO this class is OUT OF COMMISSION until it's actually tested
+# class __MultinomialAndConcentration(Multinomial):
+#     '''
+#     Similar to CategoricalAndConcentration, but data are counts.
+#     '''
+#     def __init__(self,a_0,b_0,K,concentration=None,weights=None):
+#         self.concentration = DirGamma(a_0=a_0,b_0=b_0,K=K,concentration=concentration)
+#         super(MultinomialAndConcentration,self).__init__(alpha_0=self.concentration.concentration,K=K,weights=weights)
 
-    def resample(self,data=[]):
-        warn('untested')
-        counts, = self._get_statistics(data,self.K)
-        self.concentration.resample(counts)
-        self.alphav_0 = np.repeat(self.concentration.concentration/self.K,self.K)
-        super(MultinomialAndConcentration,self).resample(data)
+#     def resample(self,data=[]):
+#         warn('untested')
+#         counts, = self._get_statistics(data,self.K)
+#         self.concentration.resample(counts)
+#         self.alphav_0 = np.repeat(self.concentration.concentration/self.K,self.K)
+#         super(MultinomialAndConcentration,self).resample(data)
 
-    def meanfieldupdate(self,*args,**kwargs): # TODO
-        warn('MeanField not implemented for %s; concentration parameter will stay fixed')
-        super(MultinomialAndConcentration,self).meanfieldupdate(*args,**kwargs)
+#     def meanfieldupdate(self,*args,**kwargs): # TODO
+#         warn('MeanField not implemented for %s; concentration parameter will stay fixed')
+#         super(MultinomialAndConcentration,self).meanfieldupdate(*args,**kwargs)
 
-    def max_likelihood(self,*args,**kwargs):
-        raise NotImplementedError, "max_likelihood doesn't make sense on this object"
+#     def max_likelihood(self,*args,**kwargs):
+#         raise NotImplementedError, "max_likelihood doesn't make sense on this object"
 
 
 class Geometric(GibbsSampling, Collapsed):
