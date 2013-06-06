@@ -991,6 +991,9 @@ class CategoricalAndConcentration(Categorical):
         self.alphav_0 = np.repeat(self.concentration.concentration/self.K,self.K)
         super(CategoricalAndConcentration,self).resample(data)
 
+    def resample_just_weights(self,data=[]):
+        super(CategoricalAndConcentration,self).resample(data)
+
     def meanfieldupdate(self,*args,**kwargs): # TODO
         warn('MeanField not implemented for %s; concentration parameter will stay fixed')
         super(CategoricalAndConcentration,self).meanfieldupdate(*args,**kwargs)
