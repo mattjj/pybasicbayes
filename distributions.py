@@ -1009,14 +1009,19 @@ class Multinomial(Categorical):
     A Poisson process conditioned on the number of points emitted.
     '''
     def log_likelihood(self,x):
-        return np.bincount(x,minlength=self.K)*np.log(self.weights)
+        x = np.asarray(x)
+        assert x.ndim == 2 and x.shape[1] == self.K
+        return (x*np.log(self.weights)).sum(1) \
+                + special.gammaln(x.sum(1)+1)[:,na] - special.gammaln(x+1).sum(1)[:,na]
 
     def resample(self,data=[]):
         'data is an array of counts or a list of such arrays)'
+        warn('untested')
         super(Multinomial,self).resample(data)
 
     @staticmethod
     def _get_statistics(data,K):
+        warn('untested')
         if isinstance(data,np.ndarray):
             return data,
         else:
@@ -1030,6 +1035,7 @@ class Multinomial(Categorical):
         raise NotImplementedError # TODO
 
     def max_likelihood(self,counts,weights=None):
+        warn('untested')
         if weights is None:
             self.weights = counts /counts.sum()
         else:
@@ -1047,6 +1053,7 @@ class MultinomialAndConcentration(Multinomial):
         super(MultinomialAndConcentration,self).__init__(alpha_0=self.concentration.concentration,K=K,weights=weights)
 
     def resample(self,data=[]):
+        warn('untested')
         counts, = self._get_statistics(data,self.K)
         self.concentration.resample(counts)
         self.alphav_0 = np.repeat(self.concentration.concentration/self.K,self.K)
