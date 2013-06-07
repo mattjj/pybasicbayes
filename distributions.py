@@ -1395,6 +1395,7 @@ class NegativeBinomialFixedR(_NegativeBinomialBase, GibbsSampling, MaxLikelihood
             self.p = p
 
     def resample(self,data=[]):
+        # TODO TODO this should call self._get_statistics
         if getdatasize(data) == 0:
             self.p = np.random.beta(self.alpha_0,self.beta_0)
         else:
@@ -1412,7 +1413,9 @@ class NegativeBinomialFixedR(_NegativeBinomialBase, GibbsSampling, MaxLikelihood
         self.p = (tot/n) / (self.r + tot/n)
 
     def _get_statistics(self,data):
-        if isinstance(data,np.ndarray):
+        if getdatasize(data) == 0:
+            n, tot = 0, 0
+        elif isinstance(data,np.ndarray):
             assert np.all(data >= 0)
             data = np.atleast_1d(data)
             n, tot = data.shape[0], data.sum()
@@ -1460,19 +1463,14 @@ class NegativeBinomialIntegerR(NegativeBinomialFixedR, GibbsSampling, MaxLikelih
             self.r = sample_discrete(self.r_discrete_distn)+1
         else:
             data = flattendata(data)
-            N = len(data)
 
             current_log_prior_value = stats.beta.logpdf(self.p,self.alpha_0,self.beta_0) \
                     + np.log(self.r_discrete_distn[self.r-1])
-            current_log_likelihood_value = np.sum(self.log_likelihood(data))
+            current_log_likelihood_value = np.sum(self.log_likelihood(data)) # NOTE TO SELF
 
             for itr in xrange(nsteps):
-                proposal_r = sample_discrete(self.r_discrete_distn)+1
-                proposal_p = np.random.beta(self.alpha_0 + data.sum(), self.beta_0 + N*proposal_r)
-
-                proposal_log_prior_value =  stats.beta.logpdf(proposal_p,self.alpha_0,self.beta_0) \
-                        + np.log(self.r_discrete_distn[self.r-1])
-                proposal_log_likelihood_value = np.sum(self.log_likelihood(x=data,r=proposal_r,p=proposal_p))
+                proposal_r, proposal_p, proposal_log_prior_value, proposal_log_likelihood_value = \
+                        self._propose_pr(data)
 
                 if np.isinf(proposal_log_likelihood_value) and np.isinf(current_log_likelihood_value):
                     accept_probability = 1.
@@ -1485,6 +1483,18 @@ class NegativeBinomialIntegerR(NegativeBinomialFixedR, GibbsSampling, MaxLikelih
                     self.r, self.p = proposal_r, proposal_p
                     current_log_prior_value = proposal_log_prior_value
                     current_log_likelihood_value = proposal_log_likelihood_value
+
+    def _propose_pr(self,data):
+        N = len(data)
+
+        proposal_r = sample_discrete(self.r_discrete_distn)+1
+        proposal_p = np.random.beta(self.alpha_0 + data.sum(), self.beta_0 + N*proposal_r)
+
+        proposal_log_prior_value =  stats.beta.logpdf(proposal_p,self.alpha_0,self.beta_0) \
+                + np.log(self.r_discrete_distn[proposal_r-1])
+        proposal_log_likelihood_value = np.sum(self.log_likelihood(x=data,r=proposal_r,p=proposal_p))
+
+        return proposal_r, proposal_p, proposal_log_prior_value, proposal_log_likelihood_value
 
     def max_likelihood(self,data,weights=None):
         if weights is None:
@@ -1513,8 +1523,9 @@ class NegativeBinomialIntegerR(NegativeBinomialFixedR, GibbsSampling, MaxLikelih
 # class surgery, do you concur?
 def _start_at_r(cls):
     class Wrapper(cls):
-        def log_likelihood(self,x,*args,**kwargs):
-            return super(Wrapper,self).log_likelihood(x-self.r,*args,**kwargs)
+        def log_likelihood(self,x,**kwargs):
+            r = kwargs['r'] if 'r' in kwargs else self.r
+            return super(Wrapper,self).log_likelihood(x-r,**kwargs)
 
         def log_sf(self,x,*args,**kwargs):
             return super(Wrapper,self).log_sf(x-self.r)
@@ -1522,11 +1533,17 @@ def _start_at_r(cls):
         def rvs(self,size=None):
             return super(Wrapper,self).rvs(size)+self.r
 
-        def resample(self,data=[],*args,**kwargs):
-            if isinstance(data,np.ndarray):
-                return super(Wrapper,self).resample(data-self.r,*args,**kwargs)
-            else:
-                return super(Wrapper,self).resample([d-self.r for d in data],*args,**kwargs)
+        def _propose_pr(self,data):
+            N = len(data)
+
+            proposal_r = sample_discrete(self.r_discrete_distn[:data.min()])+1
+            proposal_p = np.random.beta(self.alpha_0 + (data - proposal_r).sum(), self.beta_0 + N*proposal_r)
+
+            proposal_log_prior_value =  stats.beta.logpdf(proposal_p,self.alpha_0,self.beta_0) \
+                    + np.log(self.r_discrete_distn[proposal_r-1])
+            proposal_log_likelihood_value = np.sum(self.log_likelihood(x=data,r=proposal_r,p=proposal_p))
+
+            return proposal_r, proposal_p, proposal_log_prior_value, proposal_log_likelihood_value
 
         def max_likelihood(self,data,weights=None,*args,**kwargs):
             if weights is not None:
@@ -1539,10 +1556,9 @@ def _start_at_r(cls):
 
     Wrapper.__name__ = cls.__name__ + 'Variant'
     if cls.__doc__ is not None:
-        Wrapper.__doc__ = 'Variant!\n\n' + cls.__doc__
+        Wrapper.__doc__ = 'Variant that has support {r,r+1,...}!\n\n' + cls.__doc__
     return Wrapper
 
-NegativeBinomialVariant = _start_at_r(NegativeBinomial)
 NegativeBinomialFixedRVariant = _start_at_r(NegativeBinomialFixedR)
 NegativeBinomialIntegerRVariant = _start_at_r(NegativeBinomialIntegerR)
 
