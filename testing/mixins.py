@@ -3,6 +3,7 @@ import numpy as np
 import abc, os
 
 from nose.plugins.attrib import attr
+
 from ..util import testing
 
 class DistributionTester(object):
@@ -26,7 +27,7 @@ class BigDataGibbsTester(DistributionTester):
 
     @property
     def big_data_size(self):
-        return 10000
+        return 20000
 
 
     def big_data_tests(self):
@@ -52,11 +53,11 @@ class GewekeGibbsTester(DistributionTester):
 
     @property
     def geweke_nsamples(self):
-        return 10000
+        return 20000
 
     @property
     def geweke_data_size(self):
-        return 10
+        return 5 # NOTE: more data usually means slower mixing
 
     @property
     def geweke_ntrials(self):
@@ -68,7 +69,7 @@ class GewekeGibbsTester(DistributionTester):
 
     @property
     def geweke_num_statistic_fails_to_tolerate(self):
-        return 1
+        return 0
 
 
     @attr('slow')
@@ -88,23 +89,26 @@ class GewekeGibbsTester(DistributionTester):
         nsamples, data_size, ntrials = self.geweke_nsamples, \
                 self.geweke_data_size, self.geweke_ntrials
 
+        d = self.distribution_class(**hypparam_dict)
+        sample_dim = np.atleast_1d(self.geweke_statistics(d,d.rvs(10))).shape[0]
+
         num_statistic_fails = 0
         for trial in xrange(ntrials):
             # collect forward-generated statistics
-            forward_statistics = []
+            forward_statistics = np.squeeze(np.empty((nsamples,sample_dim)))
             for i in xrange(nsamples):
                 d = self.distribution_class(**hypparam_dict)
                 data = d.rvs(data_size)
-                forward_statistics.append(self.geweke_statistics(d,data))
+                forward_statistics[i] = self.geweke_statistics(d,data)
 
             # collect gibbs-generated statistics
-            gibbs_statistics = []
+            gibbs_statistics = np.squeeze(np.empty((nsamples,sample_dim)))
             d = self.distribution_class(**hypparam_dict)
             data = d.rvs(data_size)
             for i in xrange(nsamples):
                 d.resample(data)
                 data = d.rvs(data_size)
-                gibbs_statistics.append(self.geweke_statistics(d,data))
+                gibbs_statistics[i] = self.geweke_statistics(d,data)
 
             testing.populations_eq_quantile_plot(forward_statistics,gibbs_statistics,fig=fig)
             try:
@@ -119,7 +123,8 @@ class GewekeGibbsTester(DistributionTester):
         plt.savefig(figpath)
 
         assert num_statistic_fails <= self.geweke_num_statistic_fails_to_tolerate, \
-                'Geweke may have failed, check figures, e.g. %0.3f vs %0.3f' % example_violating_means
+                'Geweke may have failed, check figures in %s (e.g. %0.3f vs %0.3f)' \
+                % ((os.path.dirname(figpath),) + example_violating_means)
 
 
 ##########

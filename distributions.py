@@ -1444,8 +1444,16 @@ class NegativeBinomialIntegerR(NegativeBinomialFixedR, GibbsSampling, MaxLikelih
     r_discrete_distribution is an array where index i is p(r=i+1)
     '''
     def __init__(self,r_discrete_distn,alpha_0,beta_0,r=None,p=None):
-        self.r_discrete_distn = np.asarray(r_discrete_distn)
-        self.r_discrete_distn /= self.r_discrete_distn.sum()
+        # TODO let r distn be passed in by support/vals
+
+        r_discrete_distn = np.asarray(r_discrete_distn,dtype=np.float)
+        r_support, = np.where(r_discrete_distn)
+        r_probs = r_discrete_distn[r_support]
+        r_probs /= r_probs.sum()
+        r_support += 1 # r_probs[0] corresponds to r=1
+
+        self.r_support = r_support
+        self.r_probs = r_probs
         self.alpha_0 = alpha_0
         self.beta_0 = beta_0
 
@@ -1455,46 +1463,32 @@ class NegativeBinomialIntegerR(NegativeBinomialFixedR, GibbsSampling, MaxLikelih
             self.r = r
             self.p = p
 
-    def resample(self,data=[],nsteps=20):
-        # MH / simulated annealing
-        # see web.mit.edu/~wingated/www/introductions/mcmc-gibbs-intro.pdf
+    def rvs(self,size=None):
+        out = np.random.geometric(1-self.p,size=size)-1
+        for i in xrange(self.r-1):
+            out += np.random.geometric(1-self.p,size=size)-1
+        return out
+
+    def resample(self,data=[]):
         if getdatasize(data) == 0:
             self.p = np.random.beta(self.alpha_0,self.beta_0)
-            self.r = sample_discrete(self.r_discrete_distn)+1
+            self.r = self.r_support[sample_discrete(self.r_probs)]
         else:
+            # directly marginalize beta to sample r | data ; p | r, data
             data = flattendata(data)
+            N = data.shape[0]
+            data_sum = data.sum()
+            log_marg_likelihoods = special.betaln(self.alpha_0 + data_sum, self.beta_0 + self.r_support*N) \
+                                    - special.betaln(self.alpha_0, self.beta_0) \
+                                    + (special.gammaln(data[:,na]+self.r_support)
+                                            - special.gammaln(data[:,na]+1)
+                                            - special.gammaln(self.r_support)).sum(0)
+            log_marg_probs = np.log(self.r_probs) + log_marg_likelihoods
+            log_marg_probs -= log_marg_probs.max()
+            marg_probs = np.exp(log_marg_probs)
 
-            current_log_prior_value = stats.beta.logpdf(self.p,self.alpha_0,self.beta_0) \
-                    + np.log(self.r_discrete_distn[self.r-1])
-            current_log_likelihood_value = np.sum(self.log_likelihood(data)) # NOTE TO SELF
-
-            for itr in xrange(nsteps):
-                proposal_r, proposal_p, proposal_log_prior_value, proposal_log_likelihood_value = \
-                        self._propose_pr(data)
-
-                if np.isinf(proposal_log_likelihood_value) and np.isinf(current_log_likelihood_value):
-                    accept_probability = 1.
-                else:
-                    accept_probability = np.exp(min(0.,
-                        proposal_log_prior_value - current_log_prior_value \
-                                + proposal_log_likelihood_value - current_log_likelihood_value))
-
-                if np.random.rand() < accept_probability:
-                    self.r, self.p = proposal_r, proposal_p
-                    current_log_prior_value = proposal_log_prior_value
-                    current_log_likelihood_value = proposal_log_likelihood_value
-
-    def _propose_pr(self,data):
-        N = len(data)
-
-        proposal_r = sample_discrete(self.r_discrete_distn)+1
-        proposal_p = np.random.beta(self.alpha_0 + data.sum(), self.beta_0 + N*proposal_r)
-
-        proposal_log_prior_value =  stats.beta.logpdf(proposal_p,self.alpha_0,self.beta_0) \
-                + np.log(self.r_discrete_distn[proposal_r-1])
-        proposal_log_likelihood_value = np.sum(self.log_likelihood(x=data,r=proposal_r,p=proposal_p))
-
-        return proposal_r, proposal_p, proposal_log_prior_value, proposal_log_likelihood_value
+            self.r = self.r_support[sample_discrete(marg_probs)]
+            self.p = np.random.beta(self.alpha_0 + data_sum, self.beta_0 + N*self.r)
 
     def max_likelihood(self,data,weights=None):
         if weights is None:
@@ -1533,17 +1527,9 @@ def _start_at_r(cls):
         def rvs(self,size=None):
             return super(Wrapper,self).rvs(size)+self.r
 
-        def _propose_pr(self,data):
-            N = len(data)
-
-            proposal_r = sample_discrete(self.r_discrete_distn[:data.min()])+1
-            proposal_p = np.random.beta(self.alpha_0 + (data - proposal_r).sum(), self.beta_0 + N*proposal_r)
-
-            proposal_log_prior_value =  stats.beta.logpdf(proposal_p,self.alpha_0,self.beta_0) \
-                    + np.log(self.r_discrete_distn[proposal_r-1])
-            proposal_log_likelihood_value = np.sum(self.log_likelihood(x=data,r=proposal_r,p=proposal_p))
-
-            return proposal_r, proposal_p, proposal_log_prior_value, proposal_log_likelihood_value
+        def resample(self,data=[],nsteps=20):
+            # NOTE: truncate r_discrete_distn. in fact, sum over it...
+            raise NotImplementedError
 
         def max_likelihood(self,data,weights=None,*args,**kwargs):
             if weights is not None:
