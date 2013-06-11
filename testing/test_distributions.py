@@ -71,7 +71,7 @@ class TestNegativeBinomialIntegerR(BigDataGibbsTester,GewekeGibbsTester,Distribu
             return d.r*d.p/(1.-d.p)
         def var(d):
             return mean(d)/(1.-d.p)
-        return np.allclose(mean(d1),mean(d2),rtol=0.05) and np.allclose(var(d1),var(d2),rtol=0.05)
+        return np.allclose(mean(d1),mean(d2),rtol=0.05) and np.allclose(var(d1),var(d2),rtol=0.1)
 
     def geweke_statistics(self,d,data):
         return d.p
