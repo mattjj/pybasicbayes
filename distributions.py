@@ -1474,11 +1474,12 @@ class NegativeBinomialIntegerR(NegativeBinomialFixedR, GibbsSampling, MaxLikelih
             self.p = np.random.beta(self.alpha_0,self.beta_0)
             self.r = self.r_support[sample_discrete(self.r_probs)]
         else:
-            # directly marginalize beta to sample r | data ; p | r, data
+            # directly marginalize beta to sample r | data
             data = flattendata(data)
             N = data.shape[0]
             data_sum = data.sum()
-            log_marg_likelihoods = special.betaln(self.alpha_0 + data_sum, self.beta_0 + self.r_support*N) \
+            log_marg_likelihoods = special.betaln(self.alpha_0 + data_sum,
+                                                        self.beta_0 + self.r_support*N) \
                                     - special.betaln(self.alpha_0, self.beta_0) \
                                     + (special.gammaln(data[:,na]+self.r_support)
                                             - special.gammaln(data[:,na]+1)
@@ -1527,9 +1528,31 @@ def _start_at_r(cls):
         def rvs(self,size=None):
             return super(Wrapper,self).rvs(size)+self.r
 
-        def resample(self,data=[],nsteps=20):
-            # NOTE: truncate r_discrete_distn. in fact, sum over it...
-            raise NotImplementedError
+        def resample(self,data=[]):
+            if getdatasize(data) == 0:
+                self.p = np.random.beta(self.alpha_0,self.beta_0)
+                self.r = self.r_support[sample_discrete(self.r_probs)]
+            else:
+                # directly marginalize beta to sample r | data
+                data = flattendata(data)
+                N = data.shape[0]
+                data_sum = data.sum()
+                feasible = self.r_support <= data.min()
+                assert np.any(feasible), 'data has zero probability under the model'
+                r_probs = self.r_probs[feasible]
+                r_support = self.r_support[feasible]
+                log_marg_likelihoods = special.betaln(self.alpha_0 + data_sum - N*r_support,
+                                                            self.beta_0 + r_support*N) \
+                                        - special.betaln(self.alpha_0, self.beta_0) \
+                                        + (special.gammaln(data[:,na])
+                                                - special.gammaln(data[:,na]-r_support+1)
+                                                - special.gammaln(r_support)).sum(0)
+                log_marg_probs = np.log(r_probs) + log_marg_likelihoods
+                log_marg_probs -= log_marg_probs.max()
+                marg_probs = np.exp(log_marg_probs)
+
+                self.r = r_support[sample_discrete(marg_probs)]
+                self.p = np.random.beta(self.alpha_0 + data_sum - N*self.r, self.beta_0 + N*self.r)
 
         def max_likelihood(self,data,weights=None,*args,**kwargs):
             if weights is not None:
