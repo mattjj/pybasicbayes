@@ -110,3 +110,27 @@ class TestCategorical(BigDataGibbsTester,GewekeGibbsTester,DistributionTester):
     def geweke_pval(self):
         return 0.01
 
+@attr('gaussian')
+class TestGaussian(BigDataGibbsTester,GewekeGibbsTester,DistributionTester):
+    @property
+    def distribution_class(self):
+        return distributions.Gaussian
+
+    @property
+    def hyperparameter_settings(self):
+        return (dict(mu_0=np.zeros(2),sigma_0=np.eye(2),kappa_0=1.,nu_0=4.),)
+
+    def params_close(self,d1,d2):
+        return np.linalg.norm(d1.mu-d2.mu) < 0.1 and np.linalg.norm(d1.sigma-d2.sigma) < 0.1
+
+    def geweke_statistics(self,d,data):
+        return np.concatenate((d.mu,np.diag(d.sigma)))
+
+    @property
+    def geweke_nsamples(self):
+        return 30000
+
+    @property
+    def geweke_data_size(self):
+        return 20
+
