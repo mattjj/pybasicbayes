@@ -55,7 +55,7 @@ class Mixture(ModelGibbsSampling, ModelMeanField, ModelEM):
 
         return out, templabels.z
 
-    def log_likelihood(self,x):
+    def _log_likelihoods(self,x):
         x = np.asarray(x,dtype=np.float64)
         K = len(self.components)
         vals = np.empty((x.shape[0],K))
@@ -63,6 +63,9 @@ class Mixture(ModelGibbsSampling, ModelMeanField, ModelEM):
             vals[:,idx] = c.log_likelihood(x)
         vals += self.weights.log_likelihood(np.arange(K))
         return np.logaddexp.reduce(vals,axis=1)
+
+    def log_likelihood(self,x):
+        return self._log_likelihoods(x).sum()
 
     ### Gibbs sampling
 
@@ -161,17 +164,17 @@ class Mixture(ModelGibbsSampling, ModelMeanField, ModelEM):
         if data is None:
             assert len(self.labels_list) > 0, \
                     "If not passing in data, the class must already have it. Use the method add_data()"
-            return -2*sum(self.log_likelihood(l.data).sum() for l in self.labels_list) + \
+            return -2*sum(self.log_likelihood(l.data) for l in self.labels_list) + \
                         self.num_parameters() * np.log(sum(l.data.shape[0] for l in self.labels_list))
         else:
-            return -2*np.sum(self.log_likelihood(data)) + self.num_parameters() * np.log(data.shape[0])
+            return -2*self.log_likelihood(data) + self.num_parameters() * np.log(data.shape[0])
 
     def AIC(self):
         # NOTE: in principle this method computes the AIC only after finding the
         # maximum likelihood parameters (or, of course, an EM fixed-point as an
         # approximation!)
         assert len(self.labels_list) > 0, 'Must have data to get AIC'
-        return 2*self.num_parameters() - 2*sum(self.log_likelihood(l.data).sum() for l in self.labels_list)
+        return 2*self.num_parameters() - 2*sum(self.log_likelihood(l.data) for l in self.labels_list)
 
     ### Misc.
 
@@ -230,6 +233,9 @@ class MixtureDistribution(Mixture, GibbsSampling, Distribution):
     This makes a Mixture act like a Distribution for use in other compound models
     '''
 
+    def log_likelihood(self,x):
+        return self._log_likelihoods(x)
+
     def resample(self,data,niter=25,temp=None):
         # doesn't keep a reference to the data like a model would
         assert isinstance(data,list) or isinstance(data,np.ndarray)
@@ -260,10 +266,10 @@ class MixtureDistribution(Mixture, GibbsSampling, Distribution):
             for d in data:
                 self.add_data(d)
 
-            prev_like = sum(self.log_likelihood(d).sum() for d in data)
+            prev_like = sum(self.log_likelihood(d) for d in data)
             for itr in range(100):
                 self.EM_step()
-                new_like = sum(self.log_likelihood(d).sum() for d in data)
+                new_like = sum(self.log_likelihood(d) for d in data)
                 if new_like <= prev_like + 0.1:
                     break
                 else:
