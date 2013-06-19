@@ -904,9 +904,6 @@ class Categorical(GibbsSampling, MeanField, MaxLikelihood):
 
     @staticmethod
     def _get_statistics(data,K):
-        assert isinstance(data,np.ndarray) or \
-                (isinstance(data,list) and all(isinstance(d,np.ndarray) for d in data))
-
         if isinstance(data,np.ndarray):
             counts = np.bincount(data,minlength=K)
         else:

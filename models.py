@@ -34,7 +34,7 @@ class Mixture(ModelGibbsSampling, ModelMeanField, ModelEM):
 
     def add_data(self,data):
         # TODO get rid of this asarray...
-        self.labels_list.append(Labels(data=np.asarray(data,dtype=np.float64),
+        self.labels_list.append(Labels(data=np.asarray(data),
             components=self.components,weights=self.weights))
 
     def generate(self,N,keep=True):
@@ -56,7 +56,7 @@ class Mixture(ModelGibbsSampling, ModelMeanField, ModelEM):
         return out, templabels.z
 
     def _log_likelihoods(self,x):
-        x = np.asarray(x,dtype=np.float64)
+        x = np.asarray(x)
         K = len(self.components)
         vals = np.empty((x.shape[0],K))
         for idx, c in enumerate(self.components):
@@ -258,9 +258,9 @@ class MixtureDistribution(Mixture, GibbsSampling, Distribution):
             raise NotImplementedError
         assert isinstance(data,list) or isinstance(data,np.ndarray)
         if isinstance(data,np.ndarray):
-            data = [np.asarray(data,dtype=np.float64)]
+            data = [np.asarray(data)]
         else:
-            data = map(lambda x: np.asarray(x,dtype=np.float64), data)
+            data = map(lambda x: np.asarray(x), data)
 
         if getdatasize(data) > 0:
             for d in data:
@@ -333,7 +333,7 @@ class CRPMixture(CollapsedMixture):
 
     def add_data(self,data):
         assert len(self.labels_list) == 0
-        self.labels_list.append(CRPLabels(model=self,data=np.asarray(data,dtype=np.float64),
+        self.labels_list.append(CRPLabels(model=self,data=np.asarray(data),
             alpha_0=self.alpha_0,obs_distn=self.obs_distn))
 
     def resample_model(self):
