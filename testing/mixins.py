@@ -123,7 +123,7 @@ class GewekeGibbsTester(DistributionTester):
         plt.savefig(figpath)
 
         assert num_statistic_fails <= self.geweke_num_statistic_fails_to_tolerate, \
-                'Geweke may have failed, check figures in %s (e.g. %0.3f vs %0.3f)' \
+                'Geweke may have failed, check figures in %s (e.g. %s vs %s)' \
                 % ((os.path.dirname(figpath),) + example_violating_means)
 
 
