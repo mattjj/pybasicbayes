@@ -49,7 +49,9 @@ class _GaussianBase(Distribution):
 
         if self.D > 2 and ((not hasattr(self,'plotting_subspace_basis'))
                 or (self.plotting_subspace_basis.shape[1] != self.D)):
-            # TODO improve this bookkeeping. need a notion of collection
+            # TODO improve this bookkeeping. need a notion of collection. it's
+            # totally potentially broken and confusing to set class members like
+            # this!
 
             subspace = np.random.randn(self.D,2)
             self.__class__.plotting_subspace_basis = np.linalg.qr(subspace)[0].T.copy()
@@ -66,7 +68,6 @@ class _GaussianBase(Distribution):
             else:
                 plot_gaussian_2D(self.mu,self.sigma,color=color,label=label)
 
-    # TODO improve this
     def to_json_dict(self):
         assert self.D == 2
         U,s,_ = np.linalg.svd(self.sigma)
@@ -475,7 +476,7 @@ class GaussianNonConj(_GaussianBase, GibbsSampling):
 
 
 # TODO collapsed, meanfield, max_likelihood
-class DiagonalGaussian(GibbsSampling):
+class DiagonalGaussian(_GaussianBase,GibbsSampling):
     '''
     Product of normal-inverse-gamma priors over mu (mean vector) and sigmas
     (vector of scalar variances).
@@ -486,8 +487,10 @@ class DiagonalGaussian(GibbsSampling):
 
     It allows placing different prior hyperparameters on different components.
     '''
-    # doesn't inherit from Gaussian because it allows different prior
-    # hyperparameters on different components
+
+    @property
+    def sigma(self):
+        return np.diag(self.sigmas)
 
     def __init__(self,mu_0,nus_0,alphas_0,betas_0,mu=None,sigmas=None):
         D = self.D = mu_0.shape[0]
