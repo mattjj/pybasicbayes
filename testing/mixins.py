@@ -114,7 +114,7 @@ class GewekeGibbsTester(DistributionTester):
             try:
                 testing.assert_populations_eq_moments(forward_statistics,gibbs_statistics,pval=self.geweke_pval)
             except AssertionError:
-                example_violating_means = np.mean(forward_statistics), np.mean(gibbs_statistics)
+                example_violating_means = forward_statistics.mean(0), gibbs_statistics.mean(0)
                 num_statistic_fails += 1
 
         import os

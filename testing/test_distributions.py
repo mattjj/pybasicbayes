@@ -132,5 +132,29 @@ class TestGaussian(BigDataGibbsTester,GewekeGibbsTester,DistributionTester):
 
     @property
     def geweke_data_size(self):
-        return 20
+        return 10
+
+@attr('diagonalgaussian')
+class TestDiagonalGaussian(BigDataGibbsTester,GewekeGibbsTester,DistributionTester):
+    @property
+    def distribution_class(self):
+        return distributions.DiagonalGaussian
+
+    @property
+    def hyperparameter_settings(self):
+        return (dict(mu_0=np.zeros(2),nus_0=7,alphas_0=1,betas_0=1),)
+
+    def params_close(self,d1,d2):
+        return np.linalg.norm(d1.mu-d2.mu) < 0.1 and np.linalg.norm(d1.sigmas-d2.sigmas) < 0.25
+
+    def geweke_statistics(self,d,data):
+        return np.concatenate((d.mu,d.sigmas))
+
+    @property
+    def geweke_nsamples(self):
+        return 30000
+
+    @property
+    def geweke_data_size(self):
+        return 10
 
