@@ -530,6 +530,8 @@ class DiagonalGaussian(GibbsSampling):
             betas_n = betas_0 + 1/2*sumsq + n*nus_0/(n+nus_0) * 1/2*(xbar - mu_0)**2
             mu_n = (n*xbar + nus_0*mu_0)/(n+nus_0)
 
+            assert alphas_n.ndim == betas_n.ndim == 1
+
             return mu_n, nus_n, alphas_n, betas_n
         else:
             return mu_0, nus_0, alphas_0, betas_0
@@ -550,10 +552,10 @@ class DiagonalGaussian(GibbsSampling):
                 data = np.reshape(data,(-1,D))
                 xbar = data.mean(0)
                 centered = data - xbar
-                sumsq = np.diag(np.dot(centered.T,centered))
+                sumsq = np.dot(centered.T,centered)
             else:
                 xbar = sum(np.reshape(d,(-1,D)).sum(0) for d in data) / n
-                sumsq = np.diag(sum(((np.reshape(d,(-1,D)) - xbar)**2).sum(0) for d in data))
+                sumsq = sum(((np.reshape(d,(-1,D)) - xbar)**2).sum(0) for d in data)
         else:
             xbar, sumsq = None, None
         return n, xbar, sumsq
