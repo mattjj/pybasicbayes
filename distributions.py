@@ -509,6 +509,7 @@ class DiagonalGaussian(GibbsSampling):
         if mu is None or sigmas is None:
             self.resample()
         else:
+            assert sigmas.ndim == 1
             self.mu = mu
             self.sigmas = sigmas
 
@@ -539,6 +540,7 @@ class DiagonalGaussian(GibbsSampling):
         mu_n, nus_n, alphas_n, betas_n = self._posterior_hypparams(*self._get_statistics(data))
         self.sigmas = 1/np.random.gamma(alphas_n,scale=1/betas_n)
         self.mu = np.sqrt(self.sigmas/nus_n)*np.random.randn(self.D) + mu_n
+        assert self.sigmas.ndim == 1
 
     def _get_statistics(self,data):
         D = self.D
