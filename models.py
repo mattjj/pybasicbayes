@@ -228,6 +228,17 @@ class Mixture(ModelGibbsSampling, ModelMeanField, ModelEM):
                         for i,c in enumerate(self.components) if i in z]
                 }
 
+    def predictive_likelihoods(self,test_data,forecast_horizons):
+        return [self._log_likelihoods(test_data[k:]) for k in forecast_horizons]
+
+    def block_predictive_likelihoods(self,test_data,blocklens):
+        csums = np.cumsum(self._log_likelihoods(test_data))
+        outs = []
+        for k in blocklens:
+            outs.append(csums[k:] - csums[:-k])
+        return outs
+
+
 class MixtureDistribution(Mixture, GibbsSampling, Distribution):
     '''
     This makes a Mixture act like a Distribution for use in other compound models
