@@ -229,8 +229,7 @@ class Mixture(ModelGibbsSampling, ModelMeanField, ModelEM):
                 }
 
     def predictive_likelihoods(self,test_data,forecast_horizons):
-        likes = self._log_likelihoods(test_data)
-        return [likes[k:] for k in forecast_horizons]
+        return [self._log_likelihoods(test_data[k:]) for k in forecast_horizons]
 
     def block_predictive_likelihoods(self,test_data,blocklens):
         csums = np.cumsum(self._log_likelihoods(test_data))
