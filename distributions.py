@@ -1504,7 +1504,8 @@ class NegativeBinomialIntegerR(NegativeBinomialFixedR, GibbsSampling, MaxLikelih
             n, tot = self._get_weighted_statistics(data,weights)
 
         if n > 0:
-            r_support = np.where(self.r_discrete_distn > 0)[0]+1
+            # NOTE: uses r_support for feasible region
+            r_support = self.r_support
             rmin, rmax = r_support[0], r_support[-1]
 
             rs = np.arange(rmin,rmax+1)
