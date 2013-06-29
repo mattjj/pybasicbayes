@@ -62,6 +62,7 @@ class Mixture(ModelGibbsSampling, ModelMeanField, ModelEM):
         for idx, c in enumerate(self.components):
             vals[:,idx] = c.log_likelihood(x)
         vals += self.weights.log_likelihood(np.arange(K))
+        assert not np.isnan(vals).any()
         return np.logaddexp.reduce(vals,axis=1)
 
     def log_likelihood(self,x):
@@ -238,7 +239,6 @@ class Mixture(ModelGibbsSampling, ModelMeanField, ModelEM):
         for k in blocklens:
             outs.append(csums[k:] - csums[:-k])
         return outs
-
 
 class MixtureDistribution(Mixture, GibbsSampling, Distribution):
     '''
