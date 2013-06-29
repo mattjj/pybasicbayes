@@ -4,7 +4,6 @@ na = np.newaxis
 from matplotlib import pyplot as plt
 from matplotlib import cm
 import scipy.special as special
-import scipy.weave
 import abc
 from warnings import warn
 
