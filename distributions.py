@@ -8,6 +8,7 @@ import scipy.stats as stats
 import scipy.special as special
 import matplotlib.pyplot as plt
 import abc
+import copy
 from warnings import warn
 
 from abstractions import Distribution, GibbsSampling,\
@@ -171,6 +172,12 @@ class Gaussian(_GaussianBase, GibbsSampling, MeanField, Collapsed, MaxLikelihood
     def resample(self,data=[]):
         self._mu_mf, self._sigma_mf = self.mu, self.sigma = \
                 sample_niw(*self._posterior_hypparams(*self._get_statistics(data,self.D)))
+
+    def copy_sample(self):
+        new = copy.copy(self)
+        new.mu = self.mu.copy()
+        new.sigma = self.sigma.copy()
+        return new
 
     ### Mean Field
 
