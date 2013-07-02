@@ -83,7 +83,7 @@ class Mixture(ModelGibbsSampling, ModelMeanField, ModelEM):
 
     def copy_sample(self):
         new = copy.copy(self)
-        new.obs_distns = [o.copy_sample() for o in self.obs_distns]
+        new.components = [c.copy_sample() for c in self.components]
         new.weights = self.weights.copy_sample()
         new.labels_list = [l.copy_sample() for l in self.labels_list]
         return new
