@@ -1,5 +1,6 @@
 import abc
 import numpy as np
+import copy
 
 from util.stats import combinedata
 
@@ -38,6 +39,17 @@ class GibbsSampling(Distribution):
     @abc.abstractmethod
     def resample(self,data=[]):
         pass
+
+    def copy_sample(self):
+        '''
+        return an object copy suitable for making lists of posterior samples
+        (override this method to prevent copying shared structures into each sample)
+        '''
+        return copy.deepcopy(self)
+
+    def resample_and_copy(self):
+        self.resample()
+        return self.copy_sample()
 
 class MeanField(Distribution):
     __metaclass__ = abc.ABCMeta
@@ -140,6 +152,17 @@ class ModelGibbsSampling(Model):
     def resample_model(self): # TODO niter?
         pass
 
+    def copy_sample(self):
+        '''
+        return an object copy suitable for making lists of posterior samples
+        (override this method to prevent copying shared structures into each sample)
+        '''
+        return copy.deepcopy(self)
+
+    def resample_and_copy(self):
+        self.resample_model()
+        return self.copy_sample()
+
 class ModelMeanField(Model):
     __metaclass__ = abc.ABCMeta
 
@@ -161,3 +184,4 @@ class ModelMAPEM(Model):
     @abc.abstractmethod
     def MAP_EM_step(self):
         pass
+
