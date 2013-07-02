@@ -2,6 +2,7 @@ from __future__ import division
 import numpy as np
 na = np.newaxis
 import numpy.ma as ma
+import copy
 
 from ..util.stats import sample_discrete_from_log, sample_discrete
 
@@ -28,6 +29,8 @@ class Labels(object):
     def _generate(self,N):
         self.z = self.weights.rvs(N)
 
+    ### Gibbs sampling
+
     def resample(self,temp=None):
         data = self.data
 
@@ -38,6 +41,11 @@ class Labels(object):
             scores /= temp
 
         self.z = sample_discrete_from_log(scores,axis=1)
+
+    def copy_sample(self):
+        new = copy.copy(self)
+        new.z = self.z.copy()
+        return new
 
     ### Mean Field
 

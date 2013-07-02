@@ -4,7 +4,7 @@ na = np.newaxis
 from matplotlib import pyplot as plt
 from matplotlib import cm
 import scipy.special as special
-import abc
+import abc, copy
 from warnings import warn
 
 from abstractions import ModelGibbsSampling, ModelMeanField, ModelEM
@@ -80,6 +80,13 @@ class Mixture(ModelGibbsSampling, ModelMeanField, ModelEM):
             c.resample(data=[(l.data[l.z == idx] if (l.z == idx).any() else []) for l in self.labels_list]) # numpy issue #2587, np.array([]).reshape((0,2))[[]]
 
         self.weights.resample([l.z for l in self.labels_list])
+
+    def copy_sample(self):
+        new = copy.copy(self)
+        new.obs_distns = [o.copy_sample() for o in self.obs_distns]
+        new.weights = self.weights.copy_sample()
+        new.labels_list = [l.copy_sample() for l in self.labels_list]
+        return new
 
     ### Mean Field
 
