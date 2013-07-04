@@ -185,8 +185,14 @@ class _EMBase(Model):
         for itr in xrange(maxiter):
             method()
             likes.append(self.log_likelihood())
-            if len(likes) > 1 and likes[-1]-likes[-2] < tol:
-                return likes
+            if len(likes) > 1:
+                if np.abs(likes[-1]-likes[-2]) < tol:
+                    return likes
+                elif likes[-1]-likes[-2] < tol:
+                    # oscillation, do one more
+                    method()
+                    likes.append(self.log_likelihood())
+                    return likes
         print 'WARNING: EM_fit reached maxiter of %d' % maxiter
         return likes
 
