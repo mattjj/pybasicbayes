@@ -31,10 +31,10 @@ class Mixture(ModelGibbsSampling, ModelMeanField, ModelEM):
 
         self.labels_list = []
 
-    def add_data(self,data):
-        # TODO get rid of this asarray...
+    def add_data(self,data,**kwargs):
         self.labels_list.append(Labels(data=np.asarray(data),
-            components=self.components,weights=self.weights))
+            components=self.components,weights=self.weights,
+            **kwargs))
 
     def generate(self,N,keep=True):
         templabels = Labels(components=self.components,weights=self.weights,N=N) # this samples labels
@@ -153,7 +153,6 @@ class Mixture(ModelGibbsSampling, ModelMeanField, ModelEM):
         # mixture weights
         self.weights.max_likelihood(np.arange(len(self.components)),
                 [l.expectations for l in self.labels_list])
-
 
     def num_parameters(self):
         # NOTE: scikit.learn's gmm.py doesn't count the weights in the number of
@@ -275,26 +274,13 @@ class MixtureDistribution(Mixture, GibbsSampling, Distribution):
         if weights is not None:
             raise NotImplementedError
         assert isinstance(data,list) or isinstance(data,np.ndarray)
-        if isinstance(data,np.ndarray):
-            data = [np.asarray(data)]
-        else:
-            data = map(lambda x: np.asarray(x), data)
+        if isinstance(data,list):
+            data = np.concatenate(data)
 
         if getdatasize(data) > 0:
-            for d in data:
-                self.add_data(d)
-
-            prev_like = sum(self.log_likelihood(d) for d in data)
-            for itr in range(100):
-                self.EM_step()
-                new_like = sum(self.log_likelihood(d) for d in data)
-                if new_like <= prev_like + 0.1:
-                    break
-                else:
-                    prev_like = new_like
-
-            for d in data:
-                self.labels_list.pop()
+            self.add_data(data)
+            self.EM_fit()
+            self.labels_list = []
 
     def plot(self,data=[],color='b',label='',plot_params=True):
         if not isinstance(data,list):

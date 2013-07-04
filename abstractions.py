@@ -171,15 +171,40 @@ class ModelMeanField(Model):
         # returns variational lower bound after update
         pass
 
-class ModelEM(Model):
+class _EMBase(Model):
     __metaclass__ = abc.ABCMeta
+
+    @abc.abstractmethod
+    def log_likelihood(self):
+        # returns a log likelihood number on attached data
+        pass
+
+    def _EM_fit(self,method,tol=1e-1,maxiter=100):
+        # NOTE: doesn't re-initialize!
+        likes = []
+        for itr in xrange(maxiter):
+            method()
+            likes.append(self.log_likelihood())
+            if len(likes) > 1 and likes[-1]-likes[-2] < tol:
+                return likes
+        print 'WARNING: EM_fit reached maxiter of %d' % maxiter
+        return likes
+
+class ModelEM(_EMBase):
+    __metaclass__ = abc.ABCMeta
+
+    def EM_fit(self,tol=1e-1,maxiter=100):
+        return self._EM_fit(self.EM_step,tol=tol,maxiter=maxiter)
 
     @abc.abstractmethod
     def EM_step(self):
         pass
 
-class ModelMAPEM(Model):
+class ModelMAPEM(_EMBase):
     __metaclass__ = abc.ABCMeta
+
+    def MAP_EM_fit(self,tol=1e-1,maxiter=100):
+        return self._EM_fit(self.MAP_EM_step,tol=tol,maxiter=maxiter)
 
     @abc.abstractmethod
     def MAP_EM_step(self):
