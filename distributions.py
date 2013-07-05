@@ -22,6 +22,26 @@ import util.general
 # TODO reduce reallocation of parameters
 # TODO fix up docstrings to work with base classes
 
+##########
+#  Meta  #
+##########
+
+class _FixedParams(Distribution):
+    def num_parameters(self):
+        return 0
+
+    def resample(self,*args,**kwargs):
+        pass
+
+    def meanfieldupdate(self,*args,**kwargs):
+        pass
+
+    def get_vlb(self):
+        return 0.
+
+    def copy_sample(self):
+        return self
+
 ################
 #  Continuous  #
 ################
@@ -294,7 +314,7 @@ class Gaussian(_GaussianBase, GibbsSampling, MeanField, Collapsed, MaxLikelihood
 
         return cls(muhat,sumsq/n,n,n,mu=muhat,sigma=sumsq/n)
 
-    def max_a_posteriori(self,data,weights=None):
+    def MAP(self,data,weights=None):
         # max likelihood with prior pseudocounts included in data
         D = self.D
         if weights is None:
@@ -450,6 +470,13 @@ class GaussianFixedCov(_GaussianBase, GibbsSampling, MaxLikelihood):
             n, xbar = self._get_weighted_statistics(data,weights)
 
         self.mu = xbar
+
+
+class GaussianFixed(_FixedParams, Gaussian):
+    def __init__(self,mu,sigma):
+        self.mu = mu
+        self.sigma = sigma
+        self.D = self.mu.shape[0]
 
 
 class GaussianNonConj(_GaussianBase, GibbsSampling):
