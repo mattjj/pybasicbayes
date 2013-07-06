@@ -12,7 +12,7 @@ import copy
 from warnings import warn
 
 from abstractions import Distribution, GibbsSampling,\
-        MeanField, Collapsed, MaxLikelihood
+        MeanField, Collapsed, MaxLikelihood, MAP
 from util.stats import sample_niw, sample_invwishart, invwishart_entropy,\
         invwishart_log_partitionfunction, sample_discrete,\
         sample_discrete_from_log, getdatasize, flattendata,\
@@ -97,7 +97,7 @@ class _GaussianBase(Distribution):
         return {'x':self.mu[0],'y':self.mu[1],'rx':np.sqrt(s[0]),'ry':np.sqrt(s[1]),'theta':theta}
 
 
-class Gaussian(_GaussianBase, GibbsSampling, MeanField, Collapsed, MaxLikelihood):
+class Gaussian(_GaussianBase, GibbsSampling, MeanField, Collapsed, MaxLikelihood, MAP):
     '''
     Multivariate Gaussian distribution class.
 
@@ -883,7 +883,7 @@ class ScalarGaussianFixedvar(ScalarGaussian, GibbsSampling):
 #  Discrete  #
 ##############
 
-class Categorical(GibbsSampling, MeanField, MaxLikelihood):
+class Categorical(GibbsSampling, MeanField, MaxLikelihood, MAP):
     '''
     This class represents a categorical distribution over labels, where the
     parameter is weights and the prior is a Dirichlet distribution.
@@ -999,7 +999,7 @@ class Categorical(GibbsSampling, MeanField, MaxLikelihood):
 
         self.weights = counts/counts.sum()
 
-    def max_likelihood_withprior(self,data,weights=None):
+    def MAP(self,data,weights=None):
         K = self.K
         if weights is None:
             counts, = self._get_statistics(data,K)

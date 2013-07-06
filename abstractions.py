@@ -16,9 +16,7 @@ class Distribution(object):
 
     @abc.abstractmethod
     def rvs(self,size=[]):
-        '''
-        random variates (samples)
-        '''
+        'random variates (samples)'
         pass
 
     @abc.abstractmethod
@@ -93,14 +91,7 @@ class MaxLikelihood(Distribution):
     def max_likelihood_constructor(cls,data,weights=None):
         '''
         creates a new instance with the parameters set to their maximum
-        likelihood values and the hyperparameters set to something reasonable
-        along the lines of empirical Bayes
-        '''
-        raise NotImplementedError
-
-    def max_likelihood_withprior(self,data,weights=None):
-        '''
-        max_likelihood including prior statistics, for use with MAP EM
+        likelihood values
         '''
         raise NotImplementedError
 
@@ -108,7 +99,7 @@ class MAP(Distribution):
     __metaclass__ = abc.ABCMeta
 
     @abc.abstractmethod
-    def map(self,data,weights=None):
+    def MAP(self,data,weights=None):
         '''
         sets the parameters to their MAP values given the (weighted) data
         analogous to max_likelihood but includes pseudocounts
