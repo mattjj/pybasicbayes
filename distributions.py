@@ -63,7 +63,7 @@ class _GaussianBase(Distribution):
 
     ### plotting
 
-    def plot(self,data=None,color='b',plot_params=True,label=''):
+    def plot(self,data=None,indices=None,color='b',plot_params=True,label=''):
         from util.plot import project_data, plot_gaussian_projection, plot_gaussian_2D
         if data is not None:
             data = flattendata(data)
@@ -689,8 +689,25 @@ class ScalarGaussian(Distribution):
     def __repr__(self):
         return self.__class__.__name__ + '(mu=%f,sigmasq=%f)' % (self.mu,self.sigmasq)
 
-    def plot(self,data=None,color='b',plot_params=True):
-        raise NotImplementedError # TODO
+    def plot(self,data=None,indices=None,color='b',plot_params=True,label=None):
+        data = np.concatenate(data) if data is not None else None
+        indices = np.concatenate(indices) if indices is not None else None
+
+        if data is not None:
+            assert indices is not None
+            plt.plot(indices,data,color=color,marker='x',linestyle='')
+
+        if plot_params:
+            assert indices is not None
+            if len(indices) > 1:
+                from util.general import rle
+                vals, lens = rle(np.diff(indices))
+                starts = np.concatenate(((0,),lens.cumsum()[:-1]))
+                for start, blocklen in zip(starts[vals == 1], lens[vals == 1]):
+                    plt.plot(indices[start:start+blocklen],
+                            np.repeat(self.mu,blocklen),color=color,linestyle='--')
+            else:
+                plt.plot(indices,[self.mu],color=color,marker='+')
 
 
 # TODO meanfield, max_likelihood
