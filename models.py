@@ -281,7 +281,8 @@ class MixtureDistribution(Mixture, GibbsSampling, Distribution):
             self.EM_fit()
             self.labels_list = []
 
-    def plot(self,data=[],color='b',label='',plot_params=True):
+    def plot(self,data=[],color='b',label='',plot_params=True,indices=None):
+        # TODO handle indices for 1D
         if not isinstance(data,list):
             data = [data]
         for d in data:
