@@ -72,14 +72,13 @@ class Mixture(ModelGibbsSampling, ModelMeanField, ModelEM):
     def resample_model(self,temp=None):
         assert all(isinstance(c,GibbsSampling) for c in self.components), \
                 'Components must implement GibbsSampling'
-
-        for l in self.labels_list:
-            l.resample(temp=temp)
-
         for idx, c in enumerate(self.components):
             c.resample(data=[(l.data[l.z == idx] if (l.z == idx).any() else []) for l in self.labels_list]) # numpy issue #2587, np.array([]).reshape((0,2))[[]]
 
         self.weights.resample([l.z for l in self.labels_list])
+
+        for l in self.labels_list:
+            l.resample(temp=temp)
 
     def copy_sample(self):
         new = copy.copy(self)
