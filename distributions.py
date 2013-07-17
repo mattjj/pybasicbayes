@@ -49,10 +49,29 @@ class _FixedParams(Distribution):
 class _GaussianBase(Distribution):
     __metaclass__ = abc.ABCMeta
 
+    ### internals
+
+    def getsigma(self):
+        return self._sigma
+
+    def setsigma(self,sigma):
+        self._sigma = sigma
+        self._sigma_chol = None
+
+    sigma = property(getsigma,setsigma)
+
+    @property
+    def sigma_chol(self):
+        if self._sigma_chol is None:
+            self._sigma_chol = np.linalg.cholesky(self._sigma)
+        return self._sigma_chol
+
     ### distribution stuff
 
     def rvs(self,size=None):
-        return np.random.multivariate_normal(mean=self.mu,cov=self.sigma,size=size)
+        size = 1 if size is None else size
+        size = size + (self.mu.shape[0],) if isinstance(size,tuple) else (size,self.mu.shape[0])
+        return self.mu + np.random.normal(size=size).dot(self.sigma_chol.T)
 
     def log_likelihood(self,x):
         assert x.dtype == np.float64
