@@ -1593,19 +1593,17 @@ class NegativeBinomialIntegerR(NegativeBinomialFixedR, GibbsSampling, MaxLikelih
             self.r = rmin + likelihoods.argmax()
             self.p = ps[likelihoods.argmax()]
 
-# class surgery, do you concur?
-def _start_at_r(cls):
-    class Wrapper(cls):
-        def log_likelihood(self,x,**kwargs):
-            r = kwargs['r'] if 'r' in kwargs else self.r
-            return super(Wrapper,self).log_likelihood(x-r,**kwargs)
+class _NegativeBinomialFixedRVariant(NegativeBinomialFixedR):
+    def resample(self,data=[]):
+        if isinstance(data,np.ndarray):
+            assert (data >= self.r).all()
+            data = data-self.r
+        else:
+            assert all((d >= self.r).all() for d in data)
+            data = [d-self.r for d in data]
+        super(_NegativeBinomialFixedRVariant,self).resample(data)
 
-        def log_sf(self,x,*args,**kwargs):
-            return super(Wrapper,self).log_sf(x-self.r)
-
-        def rvs(self,size=None):
-            return super(Wrapper,self).rvs(size)+self.r
-
+class _NegativeBinomialIntegerRVariant(NegativeBinomialIntegerR):
         def resample(self,data=[]):
             if getdatasize(data) == 0:
                 self.p = np.random.beta(self.alpha_0,self.beta_0)
@@ -1632,6 +1630,19 @@ def _start_at_r(cls):
                 self.r = r_support[sample_discrete(marg_probs)]
                 self.p = np.random.beta(self.alpha_0 + data_sum - N*self.r, self.beta_0 + N*self.r)
 
+# class surgery, do you concur?
+def _start_at_r(cls):
+    class Wrapper(cls):
+        def log_likelihood(self,x,**kwargs):
+            r = kwargs['r'] if 'r' in kwargs else self.r
+            return super(Wrapper,self).log_likelihood(x-r,**kwargs)
+
+        def log_sf(self,x,*args,**kwargs):
+            return super(Wrapper,self).log_sf(x-self.r)
+
+        def rvs(self,size=None):
+            return super(Wrapper,self).rvs(size)+self.r
+
         def max_likelihood(self,data,weights=None,*args,**kwargs):
             if weights is not None:
                 raise NotImplementedError
@@ -1646,8 +1657,8 @@ def _start_at_r(cls):
         Wrapper.__doc__ = 'Variant that has support {r,r+1,...}!\n\n' + cls.__doc__
     return Wrapper
 
-NegativeBinomialFixedRVariant = _start_at_r(NegativeBinomialFixedR)
-NegativeBinomialIntegerRVariant = _start_at_r(NegativeBinomialIntegerR)
+NegativeBinomialFixedRVariant = _start_at_r(_NegativeBinomialFixedRVariant)
+NegativeBinomialIntegerRVariant = _start_at_r(_NegativeBinomialIntegerRVariant)
 
 ################################
 #  Special Case Distributions  #
