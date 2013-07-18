@@ -73,6 +73,7 @@ class _GaussianBase(Distribution):
         size = size + (self.mu.shape[0],) if isinstance(size,tuple) else (size,self.mu.shape[0])
         return self.mu + np.random.normal(size=size).dot(self.sigma_chol.T)
 
+    # TODO used cached cholesky
     def log_likelihood(self,x):
         assert x.dtype == np.float64
         mu, sigma, D = self.mu, self.sigma, self.D
@@ -226,9 +227,9 @@ class Gaussian(_GaussianBase, GibbsSampling, MeanField, Collapsed, MaxLikelihood
         # update
         self._mu_mf, self._sigma_mf, self._kappa_mf, self._nu_mf = \
                 self._posterior_hypparams(*self._get_weighted_statistics(data,weights,self.D))
-        self._sigma_mf_chol = None
-        self.mu, self.sigma = self._mu_mf, self._sigma_mf/(self._nu_mf - self.D - 1) # for plotting
+        self.mu, self.sigma = self._mu_mf, self._sigma_mf/(self._nu_mf - self.D - 1) # for plotting AND invalidating cached cholesky
 
+    # TODO can get rid of this and use the other cached chol
     def _get_sigma_mf_chol(self):
         if not hasattr(self,'_sigma_mf_chol') or self._sigma_mf_chol is None:
             self._sigma_mf_chol = util.general.cholesky(self._sigma_mf)
