@@ -1124,32 +1124,6 @@ class Multinomial(Categorical):
         raise NotImplementedError # TODO
 
 
-# TODO this is all repeated code from CategoricalAndConcentration!
-# metaprogramming, please!
-# TODO this class is OUT OF COMMISSION until it's actually tested
-# class __MultinomialAndConcentration(Multinomial):
-#     '''
-#     Similar to CategoricalAndConcentration, but data are counts.
-#     '''
-#     def __init__(self,a_0,b_0,K,concentration=None,weights=None):
-#         self.concentration = DirGamma(a_0=a_0,b_0=b_0,K=K,concentration=concentration)
-#         super(MultinomialAndConcentration,self).__init__(alpha_0=self.concentration.concentration,K=K,weights=weights)
-
-#     def resample(self,data=[]):
-#         warn('untested')
-#         counts, = self._get_statistics(data,self.K)
-#         self.concentration.resample(counts)
-#         self.alphav_0 = np.repeat(self.concentration.concentration/self.K,self.K)
-#         super(MultinomialAndConcentration,self).resample(data)
-
-#     def meanfieldupdate(self,*args,**kwargs): # TODO
-#         warn('MeanField not implemented for %s; concentration parameter will stay fixed')
-#         super(MultinomialAndConcentration,self).meanfieldupdate(*args,**kwargs)
-
-#     def max_likelihood(self,*args,**kwargs):
-#         raise NotImplementedError, "max_likelihood doesn't make sense on this object"
-
-
 class Geometric(GibbsSampling, Collapsed):
     '''
     Geometric distribution with a conjugate beta prior.
