@@ -4,10 +4,10 @@ import numpy as np
 from nose.plugins.attrib import attr
 
 from .. import distributions as distributions
-from mixins import DistributionTester, BigDataGibbsTester, GewekeGibbsTester
+from mixins import BigDataGibbsTester, GewekeGibbsTester
 
 @attr('geometric')
-class TestGeometric(BigDataGibbsTester,GewekeGibbsTester,DistributionTester):
+class TestGeometric(BigDataGibbsTester,GewekeGibbsTester):
     @property
     def distribution_class(self):
         return distributions.Geometric
@@ -23,7 +23,7 @@ class TestGeometric(BigDataGibbsTester,GewekeGibbsTester,DistributionTester):
         return d.p
 
 @attr('poisson')
-class TestPoisson(BigDataGibbsTester,GewekeGibbsTester,DistributionTester):
+class TestPoisson(BigDataGibbsTester,GewekeGibbsTester):
     @property
     def distribution_class(self):
         return distributions.Poisson
@@ -39,7 +39,7 @@ class TestPoisson(BigDataGibbsTester,GewekeGibbsTester,DistributionTester):
         return d.lmbda
 
 @attr('negbinfixedr')
-class TestNegativeBinomialFixedR(BigDataGibbsTester,GewekeGibbsTester,DistributionTester):
+class TestNegativeBinomialFixedR(BigDataGibbsTester,GewekeGibbsTester):
     @property
     def distribution_class(self):
         return distributions.NegativeBinomialFixedR
@@ -55,7 +55,7 @@ class TestNegativeBinomialFixedR(BigDataGibbsTester,GewekeGibbsTester,Distributi
         return d.p
 
 @attr('negbinintr')
-class TestNegativeBinomialIntegerR(BigDataGibbsTester,GewekeGibbsTester,DistributionTester):
+class TestNegativeBinomialIntegerR(BigDataGibbsTester,GewekeGibbsTester):
     @property
     def distribution_class(self):
         return distributions.NegativeBinomialIntegerR
@@ -87,7 +87,7 @@ class TestNegativeBinomialIntegerRVariant(TestNegativeBinomialIntegerR):
         return distributions.NegativeBinomialIntegerRVariant
 
 @attr('categorical')
-class TestCategorical(BigDataGibbsTester,GewekeGibbsTester,DistributionTester):
+class TestCategorical(BigDataGibbsTester,GewekeGibbsTester):
     @property
     def distribution_class(self):
         return distributions.Categorical
@@ -111,7 +111,7 @@ class TestCategorical(BigDataGibbsTester,GewekeGibbsTester,DistributionTester):
         return 0.01
 
 @attr('gaussian')
-class TestGaussian(BigDataGibbsTester,GewekeGibbsTester,DistributionTester):
+class TestGaussian(BigDataGibbsTester,GewekeGibbsTester):
     @property
     def distribution_class(self):
         return distributions.Gaussian
@@ -135,7 +135,7 @@ class TestGaussian(BigDataGibbsTester,GewekeGibbsTester,DistributionTester):
         return 20
 
 @attr('diagonalgaussian')
-class TestDiagonalGaussian(BigDataGibbsTester,GewekeGibbsTester,DistributionTester):
+class TestDiagonalGaussian(BigDataGibbsTester,GewekeGibbsTester):
     @property
     def distribution_class(self):
         return distributions.DiagonalGaussian
@@ -157,4 +157,50 @@ class TestDiagonalGaussian(BigDataGibbsTester,GewekeGibbsTester,DistributionTest
     @property
     def geweke_data_size(self):
         return 20
+
+@attr('CRP')
+class TestCRP(BigDataGibbsTester):
+    @property
+    def distribution_class(self):
+        return distributions.CRP
+
+    @property
+    def hyperparameter_settings(self):
+        return (dict(a_0=1.,b_0=1./10),)
+
+    @property
+    def big_data_size(self):
+        return [50]*200
+
+    def params_close(self,d1,d2):
+        return np.abs(d1.concentration - d2.concentration) < 0.5
+
+@attr('GammaCompoundDirichlet')
+class TestDirichletCompoundGamma(object):
+    def test_weaklimit(self):
+        a = distributions.CRP(10,1)
+        b = distributions.GammaCompoundDirichlet(1000,10,1)
+
+        a.concentration = b.concentration = 10.
+
+        from matplotlib import pyplot as plt
+
+        plt.figure()
+        crp_counts = np.zeros(10)
+        gcd_counts = np.zeros(10)
+        for itr in range(500):
+            crp_rvs = np.sort(a.rvs(25))[::-1][:10]
+            crp_counts[:len(crp_rvs)] += crp_rvs
+            gcd_counts += np.sort(b.rvs(25))[::-1][:10]
+
+        plt.plot(crp_counts/200,gcd_counts/200,'bx-')
+        plt.xlim(0,10)
+        plt.ylim(0,10)
+
+        import os
+        figpath = os.path.join(os.path.dirname(__file__),'figures',
+                self.__class__.__name__,'weaklimittest.pdf')
+        if not os.path.exists(os.path.dirname(figpath)):
+            os.mkdir(os.path.dirname(figpath))
+        plt.savefig(figpath)
 

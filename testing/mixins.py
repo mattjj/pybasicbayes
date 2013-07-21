@@ -29,10 +29,15 @@ class BigDataGibbsTester(DistributionTester):
     def big_data_size(self):
         return 20000
 
+    @property
+    def big_data_repeats_per_setting(self):
+        return 1
+
 
     def big_data_tests(self):
         for setting_idx, hypparam_dict in enumerate(self.hyperparameter_settings):
-            yield self.check_big_data, setting_idx, hypparam_dict
+            for i in range(self.big_data_repeats_per_setting):
+                yield self.check_big_data, setting_idx, hypparam_dict
 
     def check_big_data(self,setting_idx,hypparam_dict):
         d1 = self.distribution_class(**hypparam_dict)
