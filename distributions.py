@@ -1604,35 +1604,32 @@ class _NegativeBinomialIntegerRVariant(NegativeBinomialIntegerR):
                 self.r = r_support[sample_discrete(marg_probs)]
                 self.p = np.random.beta(self.alpha_0 + data_sum - N*self.r, self.beta_0 + N*self.r)
 
-# class surgery, do you concur?
-def _start_at_r(cls):
-    class Wrapper(cls):
-        def log_likelihood(self,x,**kwargs):
-            r = kwargs['r'] if 'r' in kwargs else self.r
-            return super(Wrapper,self).log_likelihood(x-r,**kwargs)
+class _StartAtRMixin(object):
+    def log_likelihood(self,x,**kwargs):
+        r = kwargs['r'] if 'r' in kwargs else self.r
+        return super(_StartAtRMixin,self).log_likelihood(x-r,**kwargs)
 
-        def log_sf(self,x,*args,**kwargs):
-            return super(Wrapper,self).log_sf(x-self.r)
+    def log_sf(self,x,*args,**kwargs):
+        return super(_StartAtRMixin,self).log_sf(x-self.r)
 
-        def rvs(self,size=None):
-            return super(Wrapper,self).rvs(size)+self.r
+    def rvs(self,size=None):
+        return super(_StartAtRMixin,self).rvs(size)+self.r
 
-        def max_likelihood(self,data,weights=None,*args,**kwargs):
-            if weights is not None:
-                raise NotImplementedError
+    def max_likelihood(self,data,weights=None,*args,**kwargs):
+        if weights is not None:
+            raise NotImplementedError
+        else:
+            if isinstance(data,np.ndarray):
+                return super(_StartAtRMixin,self).max_likelihood(data-self.r,weights=None,*args,**kwargs)
             else:
-                if isinstance(data,np.ndarray):
-                    return super(Wrapper,self).max_likelihood(data-self.r,weights=None,*args,**kwargs)
-                else:
-                    return super(Wrapper,self).max_likelihood([d-self.r for d in data],weights=None,*args,**kwargs)
+                return super(_StartAtRMixin,self).max_likelihood([d-self.r for d in data],weights=None,*args,**kwargs)
 
-    Wrapper.__name__ = cls.__name__ + 'Variant'
-    if cls.__doc__ is not None:
-        Wrapper.__doc__ = 'Variant that has support {r,r+1,...}!\n\n' + cls.__doc__
-    return Wrapper
 
-NegativeBinomialFixedRVariant = _start_at_r(_NegativeBinomialFixedRVariant)
-NegativeBinomialIntegerRVariant = _start_at_r(_NegativeBinomialIntegerRVariant)
+class NegativeBinomialFixedRVariant(_StartAtRMixin,_NegativeBinomialFixedRVariant):
+    pass
+
+class NegativeBinomialIntegerRVariant(_StartAtRMixin,_NegativeBinomialIntegerRVariant):
+    pass
 
 ################################
 #  Special Case Distributions  #
