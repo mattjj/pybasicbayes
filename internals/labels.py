@@ -118,7 +118,7 @@ class CRPLabels(object):
     def _generate(self,N):
         # run a CRP forwards
         alpha_0 = self.alpha_0
-        self.z = np.zeros(N,dtype=np.int)
+        self.z = np.zeros(N,dtype=np.int32)
         for n in range(N):
             self.z[n] = sample_discrete(np.concatenate((np.bincount(self.z[:n]),(alpha_0,))))
 
