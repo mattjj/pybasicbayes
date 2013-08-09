@@ -8,12 +8,16 @@ from pybasicbayes import models, distributions
 from pybasicbayes.util.text import progprint_xrange
 
 alpha_0=5.0
-obs_hypparams=dict(mu_0=np.zeros(2),sigma_0=np.eye(2),kappa_0=0.05,nu_0=5)
+obs_hypparams=dict(mu_0=np.zeros(2),sigma_0=np.eye(2),kappa_0=1.,nu_0=5)
 
 priormodel = models.Mixture(alpha_0=alpha_0,
         components=[distributions.Gaussian(**obs_hypparams) for itr in range(30)])
 
-data = priormodel.rvs(400)
+data = priormodel.rvs(500)
+
+plt.figure()
+priormodel.plot()
+plt.title('true model')
 
 del priormodel
 
@@ -32,7 +36,7 @@ for superitr in range(5):
     # Gibbs sampling to wander around the posterior
     print 'Gibbs Sampling'
     for itr in progprint_xrange(100):
-        posteriormodel.resample_model()
+        posteriormodel.resample_model(temp=100)
 
     # mean field to lock onto a mode
     print 'Mean Field'
@@ -43,7 +47,7 @@ for superitr in range(5):
     allmodels.append(copy.deepcopy(posteriormodel))
 
 plt.figure()
-for scores in allscores:
+for scores in allscores[1:]:
     plt.plot(scores)
 plt.title('model vlb scores vs iteration')
 
