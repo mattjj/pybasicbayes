@@ -147,10 +147,10 @@ class Gaussian(_GaussianBase, GibbsSampling, MeanField, Collapsed, MaxLikelihood
         else:
             self.mu = mu
             self.sigma = sigma
-        self._mu_mf = self.mu
-        self._sigma_mf = self.sigma
-        self._kappa_mf = kappa_0
-        self._nu_mf = nu_0
+        self.mu_mf = self.mu
+        self.sigma_mf = self.sigma
+        self.kappa_mf = kappa_0
+        self.nu_mf = nu_0
 
     def num_parameters(self):
         return self.D*(self.D+1)/2
@@ -223,45 +223,52 @@ class Gaussian(_GaussianBase, GibbsSampling, MeanField, Collapsed, MaxLikelihood
 
     # NOTE my sumsq is Bishop's Nk*Sk
 
+    def _get_sigma_mf(self):
+        return self._sigma_mf
+
+    def _set_sigma_mf(self,val):
+        self._sigma_mf = val
+        self._sigma_mf_chol = None
+
+    sigma_mf = property(_get_sigma_mf,_set_sigma_mf)
+
+    @property
+    def sigma_mf_chol(self):
+        if self._sigma_mf_chol is None:
+            self._sigma_mf_chol = np.linalg.cholesky(self.sigma_mf)
+        return self._sigma_mf_chol
+
     def meanfieldupdate(self,data,weights):
         # update
-        self._mu_mf, self._sigma_mf, self._kappa_mf, self._nu_mf = \
+        self.mu_mf, self.sigma_mf, self.kappa_mf, self.nu_mf = \
                 self._posterior_hypparams(*self._get_weighted_statistics(data,weights,self.D))
-        self.mu, self.sigma = self._mu_mf, self._sigma_mf/(self._nu_mf - self.D - 1) # for plotting AND invalidating cached cholesky
-
-    # TODO can get rid of this and use the other cached chol
-    def _get_sigma_mf_chol(self):
-        if not hasattr(self,'_sigma_mf_chol') or self._sigma_mf_chol is None:
-            self._sigma_mf_chol = util.general.cholesky(self._sigma_mf)
-        return self._sigma_mf_chol
+        self.mu, self.sigma = self.mu_mf, self.sigma_mf/(self.nu_mf - self.D - 1) # for plotting
 
     def get_vlb(self):
         # return avg energy plus entropy, our contribution to the mean field
         # variational lower bound
         D = self.D
         loglmbdatilde = self._loglmbdatilde()
-        chol = self._get_sigma_mf_chol()
 
         # see Eq. 10.77 in Bishop
-        q_entropy = -0.5 * (loglmbdatilde + self.D * (np.log(self._kappa_mf/(2*np.pi))-1)) \
-                + invwishart_entropy(self._sigma_mf,self._nu_mf,chol)
+        q_entropy = -0.5 * (loglmbdatilde + self.D * (np.log(self.kappa_mf/(2*np.pi))-1)) \
+                + invwishart_entropy(self.sigma_mf,self.nu_mf)
         # see Eq. 10.74 in Bishop, we aren't summing over K
         p_avgengy = 0.5 * (D * np.log(self.kappa_0/(2*np.pi)) + loglmbdatilde \
-                - D*self.kappa_0/self._kappa_mf - self.kappa_0*self._nu_mf*\
-                np.dot(self._mu_mf -
-                    self.mu_0,util.general.solve_psd(self._sigma_mf,self._mu_mf - self.mu_0,chol=chol))) \
+                - D*self.kappa_0/self.kappa_mf - self.kappa_0*self.nu_mf*\
+                np.dot(self.mu_mf -
+                    self.mu_0,np.linalg.solve(self.sigma_mf,self.mu_mf - self.mu_0))) \
                 + invwishart_log_partitionfunction(self.sigma_0,self.nu_0) \
-                + (self.nu_0 - D - 1)/2*loglmbdatilde - 1/2*self._nu_mf*\
-                util.general.solve_psd(self._sigma_mf,self.sigma_0,chol=chol).trace()
+                + (self.nu_0 - D - 1)/2*loglmbdatilde - 1/2*self.nu_mf*\
+                np.linalg.solve(self.sigma_mf,self.sigma_0).trace()
 
         return p_avgengy + q_entropy
 
     def expected_log_likelihood(self,x):
-        mu_n, sigma_n, kappa_n, nu_n = self._mu_mf, self._sigma_mf, self._kappa_mf, self._nu_mf
+        mu_n, sigma_n, kappa_n, nu_n = self.mu_mf, self.sigma_mf, self.kappa_mf, self.nu_mf
         D = self.D
         x = np.reshape(x,(-1,D)) - mu_n # x is now centered
-        chol = self._get_sigma_mf_chol()
-        xs = util.general.solve_triangular(chol,x.T,overwrite_b=True)
+        xs = np.linalg.solve(self.sigma_mf_chol,x.T)
 
         # see Eqs. 10.64, 10.67, and 10.71 in Bishop
         return self._loglmbdatilde()/2 - D/(2*kappa_n) - nu_n/2 * \
@@ -269,8 +276,8 @@ class Gaussian(_GaussianBase, GibbsSampling, MeanField, Collapsed, MaxLikelihood
 
     def _loglmbdatilde(self):
         # see Eq. 10.65 in Bishop
-        chol = self._get_sigma_mf_chol()
-        return special.digamma((self._nu_mf-np.arange(self.D))/2).sum() \
+        chol = self.sigma_mf_chol
+        return special.digamma((self.nu_mf-np.arange(self.D))/2).sum() \
                 + self.D*np.log(2) - 2*np.log(chol.diagonal()).sum()
 
     ### Collapsed
@@ -1020,9 +1027,9 @@ class Categorical(GibbsSampling, MeanField, MaxLikelihood, MAP):
                 (isinstance(weights,list) and all(isinstance(w,np.ndarray) for w in weights))
 
         if isinstance(weights,np.ndarray):
-            counts = weights.sum(0)
+            counts = np.atleast_2d(weights).sum(0)
         else:
-            counts = sum(w.sum(0) for w in weights)
+            counts = sum(np.atleast_2d(w).sum(0) for w in weights)
         return counts,
 
     ### Max likelihood
