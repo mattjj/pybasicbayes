@@ -210,7 +210,7 @@ class Gaussian(_GaussianBase, GibbsSampling, MeanField, Collapsed, MaxLikelihood
     ### Gibbs sampling
 
     def resample(self,data=[]):
-        self._mu_mf, self._sigma_mf = self.mu, self.sigma = \
+        self.mu_mf, self.sigma_mf = self.mu, self.sigma = \
                 sample_niw(*self._posterior_hypparams(*self._get_statistics(data,self.D)))
 
     def copy_sample(self):
