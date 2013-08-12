@@ -1065,7 +1065,7 @@ class CategoricalAndConcentration(Categorical):
         pi ~ Dir(concentration/K)
     '''
     def __init__(self,a_0,b_0,K,concentration=None,weights=None):
-        self.concentration = DirGamma(a_0=a_0,b_0=b_0,K=K,concentration=concentration)
+        self.concentration = GammaCompoundDirichlet(a_0=a_0,b_0=b_0,K=K,concentration=concentration)
         super(CategoricalAndConcentration,self).__init__(alpha_0=self.concentration.concentration,
                 K=K,weights=weights)
 
