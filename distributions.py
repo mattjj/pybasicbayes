@@ -1631,7 +1631,6 @@ class _StartAtRMixin(object):
             else:
                 return super(_StartAtRMixin,self).max_likelihood([d-self.r for d in data],weights=None,*args,**kwargs)
 
-
 class NegativeBinomialFixedRVariant(_StartAtRMixin,_NegativeBinomialFixedRVariant):
     pass
 
