@@ -290,7 +290,7 @@ class Gaussian(_GaussianBase, GibbsSampling, MeanField, Collapsed, MaxLikelihood
 
     def _log_partition_function(self,mu,sigma,kappa,nu):
         D = self.D
-        chol = util.general.cholesky(sigma)
+        chol = np.linalg.cholesky(sigma)
         return nu*D/2*np.log(2) + special.multigammaln(nu/2,D) + D/2*np.log(2*np.pi/kappa) \
                 - nu*np.log(chol.diagonal()).sum()
 
