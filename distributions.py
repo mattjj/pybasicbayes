@@ -147,10 +147,10 @@ class Gaussian(_GaussianBase, GibbsSampling, MeanField, Collapsed, MaxLikelihood
         else:
             self.mu = mu
             self.sigma = sigma
-        self._mu_mf = self.mu
-        self._sigma_mf = self.sigma
-        self._kappa_mf = kappa_0
-        self._nu_mf = nu_0
+        self.mu_mf = self.mu
+        self.sigma_mf = self.sigma
+        self.kappa_mf = kappa_0
+        self.nu_mf = nu_0
 
     def num_parameters(self):
         return self.D*(self.D+1)/2
@@ -223,45 +223,52 @@ class Gaussian(_GaussianBase, GibbsSampling, MeanField, Collapsed, MaxLikelihood
 
     # NOTE my sumsq is Bishop's Nk*Sk
 
+    def _get_sigma_mf(self):
+        return self._sigma_mf
+
+    def _set_sigma_mf(self,val):
+        self._sigma_mf = val
+        self._sigma_mf_chol = None
+
+    sigma_mf = property(_get_sigma_mf,_set_sigma_mf)
+
+    @property
+    def sigma_mf_chol(self):
+        if self._sigma_mf_chol is None:
+            self._sigma_mf_chol = np.linalg.cholesky(self.sigma_mf)
+        return self._sigma_mf_chol
+
     def meanfieldupdate(self,data,weights):
         # update
-        self._mu_mf, self._sigma_mf, self._kappa_mf, self._nu_mf = \
+        self.mu_mf, self.sigma_mf, self.kappa_mf, self.nu_mf = \
                 self._posterior_hypparams(*self._get_weighted_statistics(data,weights,self.D))
-        self.mu, self.sigma = self._mu_mf, self._sigma_mf/(self._nu_mf - self.D - 1) # for plotting AND invalidating cached cholesky
-
-    # TODO can get rid of this and use the other cached chol
-    def _get_sigma_mf_chol(self):
-        if not hasattr(self,'_sigma_mf_chol') or self._sigma_mf_chol is None:
-            self._sigma_mf_chol = util.general.cholesky(self._sigma_mf)
-        return self._sigma_mf_chol
+        self.mu, self.sigma = self.mu_mf, self.sigma_mf/(self.nu_mf - self.D - 1) # for plotting
 
     def get_vlb(self):
         # return avg energy plus entropy, our contribution to the mean field
         # variational lower bound
         D = self.D
         loglmbdatilde = self._loglmbdatilde()
-        chol = self._get_sigma_mf_chol()
 
         # see Eq. 10.77 in Bishop
-        q_entropy = -0.5 * (loglmbdatilde + self.D * (np.log(self._kappa_mf/(2*np.pi))-1)) \
-                + invwishart_entropy(self._sigma_mf,self._nu_mf,chol)
+        q_entropy = -0.5 * (loglmbdatilde + self.D * (np.log(self.kappa_mf/(2*np.pi))-1)) \
+                + invwishart_entropy(self.sigma_mf,self.nu_mf)
         # see Eq. 10.74 in Bishop, we aren't summing over K
         p_avgengy = 0.5 * (D * np.log(self.kappa_0/(2*np.pi)) + loglmbdatilde \
-                - D*self.kappa_0/self._kappa_mf - self.kappa_0*self._nu_mf*\
-                np.dot(self._mu_mf -
-                    self.mu_0,util.general.solve_psd(self._sigma_mf,self._mu_mf - self.mu_0,chol=chol))) \
+                - D*self.kappa_0/self.kappa_mf - self.kappa_0*self.nu_mf*\
+                np.dot(self.mu_mf -
+                    self.mu_0,np.linalg.solve(self.sigma_mf,self.mu_mf - self.mu_0))) \
                 + invwishart_log_partitionfunction(self.sigma_0,self.nu_0) \
-                + (self.nu_0 - D - 1)/2*loglmbdatilde - 1/2*self._nu_mf*\
-                util.general.solve_psd(self._sigma_mf,self.sigma_0,chol=chol).trace()
+                + (self.nu_0 - D - 1)/2*loglmbdatilde - 1/2*self.nu_mf*\
+                np.linalg.solve(self.sigma_mf,self.sigma_0).trace()
 
         return p_avgengy + q_entropy
 
     def expected_log_likelihood(self,x):
-        mu_n, sigma_n, kappa_n, nu_n = self._mu_mf, self._sigma_mf, self._kappa_mf, self._nu_mf
+        mu_n, sigma_n, kappa_n, nu_n = self.mu_mf, self.sigma_mf, self.kappa_mf, self.nu_mf
         D = self.D
         x = np.reshape(x,(-1,D)) - mu_n # x is now centered
-        chol = self._get_sigma_mf_chol()
-        xs = util.general.solve_triangular(chol,x.T,overwrite_b=True)
+        xs = np.linalg.solve(self.sigma_mf_chol,x.T)
 
         # see Eqs. 10.64, 10.67, and 10.71 in Bishop
         return self._loglmbdatilde()/2 - D/(2*kappa_n) - nu_n/2 * \
@@ -269,8 +276,8 @@ class Gaussian(_GaussianBase, GibbsSampling, MeanField, Collapsed, MaxLikelihood
 
     def _loglmbdatilde(self):
         # see Eq. 10.65 in Bishop
-        chol = self._get_sigma_mf_chol()
-        return special.digamma((self._nu_mf-np.arange(self.D))/2).sum() \
+        chol = self.sigma_mf_chol
+        return special.digamma((self.nu_mf-np.arange(self.D))/2).sum() \
                 + self.D*np.log(2) - 2*np.log(chol.diagonal()).sum()
 
     ### Collapsed
@@ -1020,9 +1027,9 @@ class Categorical(GibbsSampling, MeanField, MaxLikelihood, MAP):
                 (isinstance(weights,list) and all(isinstance(w,np.ndarray) for w in weights))
 
         if isinstance(weights,np.ndarray):
-            counts = weights.sum(0)
+            counts = np.atleast_2d(weights).sum(0)
         else:
-            counts = sum(w.sum(0) for w in weights)
+            counts = sum(np.atleast_2d(w).sum(0) for w in weights)
         return counts,
 
     ### Max likelihood
@@ -1630,23 +1637,19 @@ class NegativeBinomialFixedRVariant(_StartAtRMixin,_NegativeBinomialFixedRVarian
 class NegativeBinomialIntegerRVariant(_StartAtRMixin,_NegativeBinomialIntegerRVariant):
     pass
 
-################################
-#  Special Case Distributions  #
-################################
 
-# TODO maybe move these to another module? priors with funny likelihoods
+class CRP(GibbsSampling):
+    '''
+    concentration ~ Gamma(a_0,b_0) [b_0 is inverse scale, inverse of numpy scale arg]
+    rvs ~ CRP(concentration)
 
-class CRPGamma(GibbsSampling):
+    This class models CRPs. The parameter is the concentration parameter (proportional
+    to probability of starting a new table given some number of customers in the
+    restaurant), which has a Gamma prior.
     '''
-    Implements Gamma(a,b) prior over DP/CRP concentration parameter given
-    CRP data (integrating out the weights). NOT for Gamma/Poisson, which would
-    be called Poisson.
-    see appendix A of http://www.cs.berkeley.edu/~jordan/papers/hdp.pdf
-    and appendix C of Emily Fox's PhD thesis
-    the notation of w's and s's follows from the HDP paper
-    '''
+
     def __repr__(self):
-        return 'CRPGamma(concentration=%0.2f)' % self.concentration
+        return '%s(concentration=%0.2f)' % (self.__class__.__name__,self.concentration)
 
     def __init__(self,a_0,b_0,concentration=None):
         self.a_0 = a_0
@@ -1657,21 +1660,16 @@ class CRPGamma(GibbsSampling):
         else:
             self.resample(niter=1)
 
-    def log_likelihood(self,x):
-        raise NotImplementedError # TODO product of gammas
-
     def rvs(self,customer_counts):
-        '''
-        Number of distinct tables. Not complete CRPs. customer_counts is a list
-        of customer counts, and len(customer_counts) is the number of
-        restaurants.
-        '''
+        # could replace this with one of the faster C versions I have lying
+        # around, but at least the Python version is clearer
         assert isinstance(customer_counts,list) or isinstance(customer_counts,int)
         if isinstance(customer_counts,int):
             customer_counts = [customer_counts]
 
         restaurants = []
         for num in customer_counts:
+            # a CRP with num customers
             tables = []
             for c in range(num):
                 newidx = sample_discrete(np.array(tables + [self.concentration]))
@@ -1679,8 +1677,25 @@ class CRPGamma(GibbsSampling):
                     tables += [1]
                 else:
                     tables[newidx] += 1
+
             restaurants.append(tables)
+
         return restaurants if len(restaurants) > 1 else restaurants[0]
+
+    def log_likelihood(self,restaurants):
+        assert isinstance(restaurants,list) and len(restaurants) > 0
+        if not isinstance(restaurants[0],list): restaurants=[restaurants]
+
+        likes = []
+        for counts in restaurants:
+            counts = np.array([c for c in counts if c > 0])    # remove zero counts b/c of gammaln
+            K = len(counts) # number of tables
+            N = sum(counts) # number of customers
+            likes.append(K*np.log(self.concentration) + np.sum(special.gammaln(counts)) +
+                            special.gammaln(self.concentration) -
+                            special.gammaln(N+self.concentration))
+
+        return np.asarray(likes) if len(likes) > 1 else likes[0]
 
     def resample(self,data=[],niter=25):
         for itr in range(niter):
@@ -1689,7 +1704,6 @@ class CRPGamma(GibbsSampling):
 
     def _posterior_hypparams(self,sample_numbers,total_num_distinct):
         # NOTE: this is a stochastic function: it samples auxiliary variables
-        # and should be repeated
         if total_num_distinct > 0:
             sample_numbers = np.array(sample_numbers)
             sample_numbers = sample_numbers[sample_numbers > 0]
@@ -1701,9 +1715,6 @@ class CRPGamma(GibbsSampling):
             return self.a_0, self.b_0
 
     def _get_statistics(self,data):
-        # data is a list of CRP samples, each of which is written as a list of
-        # counts of customers at tables, i.e.
-        # [5 7 2 ... 1 ]
         assert isinstance(data,list)
         if len(data) == 0:
             sample_numbers = 0
@@ -1718,42 +1729,29 @@ class CRPGamma(GibbsSampling):
 
         return sample_numbers, total_num_distinct
 
-    @classmethod
-    def test(cls,niter=50):
-        d1 = cls(a_0=1.,b_0=1./4)
-        data = d1.rvs([50 for i in range(50)])
-
-        d2 = cls(a_0=1.,b_0=1./4)
-        concs = []
-        for itr in range(50):
-            d2.resample(data,niter=niter)
-            concs.append(d2.concentration)
-
-        plt.hist(concs,normed=True)
-        ymin, ymax = plt.ylim()
-        plt.vlines([d1.concentration],ymin,ymax,linestyles='dashed')
-        plt.ylim(ymin,ymax)
-        plt.xlim(0,20)
-
-
-class DirGamma(CRPGamma):
+class GammaCompoundDirichlet(CRP):
+    # TODO this class is a bit ugly
     '''
     Implements a Gamma(a_0,b_0) prior over finite dirichlet concentration
-    parameter. The concentration is scaled according to the weak-limit according
-    to the number of dimensions K. It stochastically splits counts into CRP
-    counts and uses the CRPGamma class's methods.
+    parameter. The concentration is scaled according to the weak-limit sequence.
 
     For each set of counts i, the model is
         concentration ~ Gamma(a_0,b_0)
         pi_i ~ Dir(concentration/K)
         data_i ~ Multinomial(pi_i)
+
+    K is a free parameter in that with big enough K (relative to the size of the
+    sampled data) everything starts to act like a DP; K is just the size of the
+    size of the mesh projection.
     '''
+
     def __repr__(self):
-        return 'DirGamma(concentration=%0.2f/%d)' % (self.concentration*self.K,self.K)
+        return '%s(concentration=%0.2f,K=%d)' % (self.__class__.__name__,
+                self.concentration,self.K)
 
     def __init__(self,K,a_0,b_0,concentration=None):
         self.K = K
-        super(DirGamma,self).__init__(a_0=a_0,b_0=b_0,
+        super(GammaCompoundDirichlet,self).__init__(a_0=a_0,b_0=b_0,
                 concentration=concentration)
 
     def rvs(self,sample_counts):
@@ -1771,6 +1769,7 @@ class DirGamma(CRPGamma):
         else:
             self.weighted_cols = np.ones(self.K)
 
+        # all this is to check if data is empty
         if isinstance(data,np.ndarray):
             size = data.sum()
         elif isinstance(data,list):
@@ -1780,14 +1779,15 @@ class DirGamma(CRPGamma):
             size = 0
 
         if size > 0:
-            super(DirGamma,self).resample(data,niter=niter)
+            super(GammaCompoundDirichlet,self).resample(data,niter=niter)
         else:
-            super(DirGamma,self).resample(data,niter=1)
+            super(GammaCompoundDirichlet,self).resample(data,niter=1)
 
     def _get_statistics(self,data):
+        # NOTE: this is a stochastic function: it samples auxiliary variables
         counts = np.array(data,ndmin=2)
 
-        # sample m's
+        # sample m's, which sample an inverse of the weak limit projection
         if counts.sum() == 0:
             return 0, 0
         else:
@@ -1825,21 +1825,4 @@ class DirGamma(CRPGamma):
                 m += (np.random.rand(n) < self.concentration*self.K*self.weighted_cols[j] \
                         / (np.arange(n)+self.concentration*self.K*self.weighted_cols[j])).sum()
             return counts.sum(1), m
-
-    @classmethod
-    def test(cls,niter=50):
-        d1 = cls(K=25,a_0=1.,b_0=1./4)
-        data = d1.rvs([50 for i in range(50)])
-
-        d2 = cls(K=25,a_0=1.,b_0=1./4)
-        concs = []
-        for itr in range(50):
-            d2.resample(data,niter=niter)
-            concs.append(d2.concentration)
-
-        plt.hist(concs,normed=True)
-        ymin, ymax = plt.ylim()
-        plt.vlines([d1.concentration],ymin,ymax,linestyles='dashed')
-        plt.ylim(ymin,ymax)
-        plt.xlim(0,20)
 

@@ -23,7 +23,7 @@ class Distribution(object):
     def log_likelihood(self,x):
         '''
         log likelihood (either log probability mass function or log probability
-        density function) of the ndarray x
+        density function) of x, which has the same type as the output of rvs()
         '''
         pass
 
