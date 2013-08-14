@@ -73,13 +73,13 @@ class _GaussianBase(Distribution):
         size = size + (self.mu.shape[0],) if isinstance(size,tuple) else (size,self.mu.shape[0])
         return self.mu + np.random.normal(size=size).dot(self.sigma_chol.T)
 
-    # TODO used cached cholesky
     def log_likelihood(self,x):
-        assert x.dtype == np.float64
         mu, sigma, D = self.mu, self.sigma, self.D
+        sigma_chol = self.sigma_chol
         x = np.reshape(x,(-1,D)) - mu
-        xs,LT = util.general.solve_chofactor_system(sigma,x.T,overwrite_b=True)
-        return -1./2. * inner1d(xs.T,xs.T) - D/2*np.log(2*np.pi) - np.log(LT.diagonal()).sum()
+        xs = scipy.linalg.solve_triangular(sigma_chol,x.T,lower=True)
+        return -1./2. * inner1d(xs.T,xs.T) - D/2*np.log(2*np.pi) \
+                - np.log(sigma_chol.diagonal()).sum()
 
     ### plotting
 
@@ -486,7 +486,9 @@ class GaussianFixedCov(_GaussianBase, GibbsSampling, MaxLikelihood):
 
     def resample(self,data=[]):
         mu_n, sigma_n_inv = self._posterior_hypparams(*self._get_statistics(data))
-        self.mu = util.general.solve_chofactor_system(sigma_n_inv,np.random.normal(size=self.D))[0] + mu_n
+        L = np.linalg.cholesky(sigma_n_inv)
+        self.mu = scipy.linalg.solve_triangular(L,np.random.normal(size=self.D),lower=True) \
+                + mu_n
 
     ### Max likelihood
 
