@@ -40,7 +40,7 @@ plt.plot(data[:,0],data[:,1],'kx')
 plt.title('data')
 ```
 
-![randomly generated mixture model data](http://www.mit.edu/~mattjj/github/pybasicbayes/data.png)
+![randomly generated mixture model data](http://www.mit.edu/~mattjj/github/pybasicbayes/datapoints.png)
 
 Imagine we loaded these data from some measurements file and we wanted to fit a
 mixture model to it. We can create a new `Mixture` and run inference to get a
@@ -91,7 +91,7 @@ for scores in allscores:
 plt.title('model vlb scores vs iteration')
 ```
 
-![model vlb scores vs iteration](http://www.mit.edu/~mattjj/github/pybasicbayes/modelscore.png)
+![model vlb scores vs iteration](http://www.mit.edu/~mattjj/github/pybasicbayes/scores.png)
 
 And show the point estimate of the best model by calling the convenient `Mixture.plot()`:
 
@@ -100,7 +100,7 @@ models_and_scores[0][0].plot()
 plt.title('best model')
 ```
 
-![best fit model and data](http://www.mit.edu/~mattjj/github/pybasicbayes/modelfit.png)
+![best fit model and data](http://www.mit.edu/~mattjj/github/pybasicbayes/fit.png)
 
 Since these are Bayesian methods, we have much more than just a point estimate
 for plotting: we have fit entire distributions, so we can query any confidence
