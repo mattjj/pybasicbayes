@@ -94,6 +94,11 @@ class Mixture(ModelGibbsSampling, ModelMeanField, ModelEM):
                 'Components must implement MeanField'
         assert len(self.labels_list) > 0, 'Must have data to run MeanField'
 
+        # NOTE: to interleave mean field steps with Gibbs sampling steps, label
+        # updates needs to come first, otherwise the sampled updates will be
+        # ignored and the model will essentially stay where it was the last time
+        # mean field updates were run
+
         ### update sweep!
         # update the label responsibilities
         for l in self.labels_list:
