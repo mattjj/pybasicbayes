@@ -95,12 +95,9 @@ class Mixture(ModelGibbsSampling, ModelMeanField, ModelEM):
         assert len(self.labels_list) > 0, 'Must have data to run MeanField'
 
         ### update sweep!
-        # for the vlb evidence term to be correct, this step needs to happen
-        # last, but here we make sure there are responsibilities from the
-        # previous iteration
+        # update the label responsibilities
         for l in self.labels_list:
-            if not hasattr(l,'r'):
-                l.meanfieldupdate()
+            l.meanfieldupdate()
 
         # pass the weights to pi
         K = len(self.components)
@@ -110,10 +107,6 @@ class Mixture(ModelGibbsSampling, ModelMeanField, ModelEM):
         for idx, c in enumerate(self.components):
             c.meanfieldupdate([l.data for l in self.labels_list],
                     [l.r[:,idx] for l in self.labels_list])
-
-        # update the labels "responsibilities" last
-        for l in self.labels_list:
-            l.meanfieldupdate()
 
         ### get vlb!
         vlb = 0.
