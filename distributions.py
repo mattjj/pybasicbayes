@@ -17,24 +17,22 @@ from util.stats import sample_niw, sample_invwishart, invwishart_entropy,\
         invwishart_log_partitionfunction, sample_discrete,\
         sample_discrete_from_log, getdatasize, flattendata,\
         getdatadimension, combinedata, multivariate_t_loglik
-import util.general
 
 # TODO reduce reallocation of parameters
-# TODO fix up docstrings to work with base classes
 
 ##########
 #  Meta  #
 ##########
 
-class _FixedParams(Distribution):
+class _FixedParamsMixin(Distribution):
     def num_parameters(self):
         return 0
 
     def resample(self,*args,**kwargs):
-        pass
+        return self
 
     def meanfieldupdate(self,*args,**kwargs):
-        pass
+        return self
 
     def get_vlb(self):
         return 0.
@@ -48,6 +46,9 @@ class _FixedParams(Distribution):
 
 class _GaussianBase(Distribution):
     __metaclass__ = abc.ABCMeta
+
+    def __repr__(self):
+        return '%s(\nmu=\n%s,\nsigma=\n%s\n)' % (self.__class__.__name__,self.mu,self.sigma)
 
     ### internals
 
@@ -74,7 +75,7 @@ class _GaussianBase(Distribution):
         return self.mu + np.random.normal(size=size).dot(self.sigma_chol.T)
 
     def log_likelihood(self,x):
-        mu, sigma, D = self.mu, self.sigma, self.D
+        mu, sigma, D = self.mu, self.sigma, self.mu.shape[0]
         sigma_chol = self.sigma_chol
         x = np.reshape(x,(-1,D)) - mu
         xs = scipy.linalg.solve_triangular(sigma_chol,x.T,lower=True)
@@ -88,33 +89,37 @@ class _GaussianBase(Distribution):
         if data is not None:
             data = flattendata(data)
 
-        if self.D > 2 and ((not hasattr(self,'plotting_subspace_basis'))
-                or (self.plotting_subspace_basis.shape[1] != self.D)):
+        D = self.mu.shape[0]
+
+        if D > 2 and ((not hasattr(self,'plotting_subspace_basis'))
+                or (self.plotting_subspace_basis.shape[1] != D)):
             # TODO improve this bookkeeping. need a notion of collection. it's
             # totally potentially broken and confusing to set class members like
             # this!
 
-            subspace = np.random.randn(self.D,2)
+            subspace = np.random.randn(D,2)
             self.__class__.plotting_subspace_basis = np.linalg.qr(subspace)[0].T.copy()
 
         if data is not None:
-            if self.D > 2:
+            if D > 2:
                 data = project_data(data,self.plotting_subspace_basis)
             plt.plot(data[:,0],data[:,1],marker='.',linestyle=' ',color=color)
 
         if plot_params:
-            if self.D > 2:
+            if D > 2:
                 plot_gaussian_projection(self.mu,self.sigma,self.plotting_subspace_basis,
                         color=color,label=label)
             else:
                 plot_gaussian_2D(self.mu,self.sigma,color=color,label=label)
 
     def to_json_dict(self):
-        assert self.D == 2
+        D = self.mu.shape[0]
+        assert D == 2
         U,s,_ = np.linalg.svd(self.sigma)
         U /= np.linalg.det(U)
         theta = np.arctan2(U[0,0],U[0,1])*180/np.pi
-        return {'x':self.mu[0],'y':self.mu[1],'rx':np.sqrt(s[0]),'ry':np.sqrt(s[1]),'theta':theta}
+        return {'x':self.mu[0],'y':self.mu[1],'rx':np.sqrt(s[0]),'ry':np.sqrt(s[1]),
+                'theta':theta}
 
 
 class Gaussian(_GaussianBase, GibbsSampling, MeanField, Collapsed, MaxLikelihood, MAP):
@@ -133,32 +138,34 @@ class Gaussian(_GaussianBase, GibbsSampling, MeanField, Collapsed, MaxLikelihood
         mu, sigma
     '''
 
-    def __init__(self,mu_0,sigma_0,kappa_0,nu_0,mu=None,sigma=None):
+    def __init__(self,mu=None,sigma=None,
+            mu_0=None,sigma_0=None,kappa_0=None,nu_0=None,
+            kappa_mf=None,nu_mf=None):
+        self.mu    = mu
+        self.sigma = sigma
+
         self.mu_0    = mu_0
         self.sigma_0 = sigma_0
         self.kappa_0 = kappa_0
         self.nu_0    = nu_0
 
-        self.D = mu_0.shape[0]
-        assert sigma_0.shape == (self.D,self.D) and self.D >= 2
+        self.kappa_mf = kappa_mf if kappa_mf is not None else kappa_0
+        self.nu_mf    = nu_mf if nu_mf is not None else nu_0
+        self.mu_mf    = mu
+        self.sigma_mf = sigma
 
-        if mu is None or sigma is None:
-            self.resample()
-        else:
-            self.mu = mu
-            self.sigma = sigma
-        self.mu_mf = self.mu
-        self.sigma_mf = self.sigma
-        self.kappa_mf = kappa_0
-        self.nu_mf = nu_0
+        if (mu,sigma) == (None,None) and None not in (mu_0,sigma_0,kappa_0,nu_0):
+            self.resample() # initialize from prior
 
     def num_parameters(self):
-        return self.D*(self.D+1)/2
+        D = len(self.mu)
+        return D*(D+1)/2
 
     @staticmethod
-    def _get_statistics(data,D):
+    def _get_statistics(data,D=None):
         n = getdatasize(data)
         if n > 0:
+            D = getdatadimension(data) if D is None else D
             if isinstance(data,np.ndarray):
                 xbar = np.reshape(data,(-1,D)).mean(0)
                 centered = data - xbar
@@ -172,12 +179,13 @@ class Gaussian(_GaussianBase, GibbsSampling, MeanField, Collapsed, MaxLikelihood
         return n, xbar, sumsq
 
     @staticmethod
-    def _get_weighted_statistics(data,weights,D):
+    def _get_weighted_statistics(data,weights,D=None):
         # NOTE: _get_statistics is special case with all weights being 1
         # this is kept as a separate method for speed and modularity
         if isinstance(data,np.ndarray):
             neff = weights.sum()
             if neff > 0:
+                D = getdatadimension(data) if D is None else D
                 xbar = np.dot(weights,np.reshape(data,(-1,D))) / neff
                 centered = np.reshape(data,(-1,D)) - xbar
                 sumsq = np.dot(centered.T,(weights[:,na] * centered))
@@ -186,6 +194,7 @@ class Gaussian(_GaussianBase, GibbsSampling, MeanField, Collapsed, MaxLikelihood
         else:
             neff = sum(w.sum() for w in weights)
             if neff > 0:
+                D = getdatadimension(data) if D is None else D
                 xbar = sum(np.dot(w,np.reshape(d,(-1,D))) for w,d in zip(weights,data)) / neff
                 sumsq = sum(np.dot((np.reshape(d,(-1,D))-xbar).T,w[:,na]*(np.reshape(d,(-1,D))-xbar))
                         for w,d in zip(weights,data))
@@ -210,8 +219,10 @@ class Gaussian(_GaussianBase, GibbsSampling, MeanField, Collapsed, MaxLikelihood
     ### Gibbs sampling
 
     def resample(self,data=[]):
+        D = len(self.mu_0)
         self.mu_mf, self.sigma_mf = self.mu, self.sigma = \
-                sample_niw(*self._posterior_hypparams(*self._get_statistics(data,self.D)))
+                sample_niw(*self._posterior_hypparams(*self._get_statistics(data,D)))
+        return self
 
     def copy_sample(self):
         new = copy.copy(self)
@@ -240,18 +251,19 @@ class Gaussian(_GaussianBase, GibbsSampling, MeanField, Collapsed, MaxLikelihood
 
     def meanfieldupdate(self,data,weights):
         # update
+        D = len(self.mu_0)
         self.mu_mf, self.sigma_mf, self.kappa_mf, self.nu_mf = \
-                self._posterior_hypparams(*self._get_weighted_statistics(data,weights,self.D))
-        self.mu, self.sigma = self.mu_mf, self.sigma_mf/(self.nu_mf - self.D - 1) # for plotting
+                self._posterior_hypparams(*self._get_weighted_statistics(data,weights,D))
+        self.mu, self.sigma = self.mu_mf, self.sigma_mf/(self.nu_mf - D - 1) # for plotting
 
     def get_vlb(self):
         # return avg energy plus entropy, our contribution to the mean field
         # variational lower bound
-        D = self.D
+        D = len(self.mu_0)
         loglmbdatilde = self._loglmbdatilde()
 
         # see Eq. 10.77 in Bishop
-        q_entropy = -0.5 * (loglmbdatilde + self.D * (np.log(self.kappa_mf/(2*np.pi))-1)) \
+        q_entropy = -0.5 * (loglmbdatilde + D * (np.log(self.kappa_mf/(2*np.pi))-1)) \
                 + invwishart_entropy(self.sigma_mf,self.nu_mf)
         # see Eq. 10.74 in Bishop, we aren't summing over K
         p_avgengy = 0.5 * (D * np.log(self.kappa_0/(2*np.pi)) + loglmbdatilde \
@@ -266,7 +278,7 @@ class Gaussian(_GaussianBase, GibbsSampling, MeanField, Collapsed, MaxLikelihood
 
     def expected_log_likelihood(self,x):
         mu_n, sigma_n, kappa_n, nu_n = self.mu_mf, self.sigma_mf, self.kappa_mf, self.nu_mf
-        D = self.D
+        D = len(mu_n)
         x = np.reshape(x,(-1,D)) - mu_n # x is now centered
         xs = np.linalg.solve(self.sigma_mf_chol,x.T)
 
@@ -276,27 +288,28 @@ class Gaussian(_GaussianBase, GibbsSampling, MeanField, Collapsed, MaxLikelihood
 
     def _loglmbdatilde(self):
         # see Eq. 10.65 in Bishop
+        D = len(self.mu_0)
         chol = self.sigma_mf_chol
-        return special.digamma((self.nu_mf-np.arange(self.D))/2).sum() \
-                + self.D*np.log(2) - 2*np.log(chol.diagonal()).sum()
+        return special.digamma((self.nu_mf-np.arange(D))/2).sum() \
+                + D*np.log(2) - 2*np.log(chol.diagonal()).sum()
 
     ### Collapsed
 
     def log_marginal_likelihood(self,data):
-        n, D = getdatasize(data), self.D
-        return self._log_partition_function(*self._posterior_hypparams(*self._get_statistics(data,self.D))) \
+        n, D = getdatasize(data), len(self.mu_0)
+        return self._log_partition_function(*self._posterior_hypparams(*self._get_statistics(data))) \
                 - self._log_partition_function(self.mu_0,self.sigma_0,self.kappa_0,self.nu_0) \
                 - n*D/2 * np.log(2*np.pi)
 
     def _log_partition_function(self,mu,sigma,kappa,nu):
-        D = self.D
+        D = len(mu)
         chol = np.linalg.cholesky(sigma)
         return nu*D/2*np.log(2) + special.multigammaln(nu/2,D) + D/2*np.log(2*np.pi/kappa) \
                 - nu*np.log(chol.diagonal()).sum()
 
     def log_predictive_studentt_datapoints(self,datapoints,olddata):
-        mu_n, sigma_n, kappa_n, nu_n = self._posterior_hypparams(*self._get_statistics(olddata,self.D))
-        D = self.D
+        D = len(self.mu_0)
+        mu_n, sigma_n, kappa_n, nu_n = self._posterior_hypparams(*self._get_statistics(olddata,D))
         return multivariate_t_loglik(datapoints,nu_n-D+1,mu_n,(kappa_n+1)/(kappa_n*(nu_n-D+1))*sigma_n)
 
     def log_predictive_studentt(self,newdata,olddata):
@@ -313,11 +326,11 @@ class Gaussian(_GaussianBase, GibbsSampling, MeanField, Collapsed, MaxLikelihood
     # matters we've got bigger problems!
 
     def max_likelihood(self,data,weights=None):
-        D = self.D
+        D = getdatadimension(data)
         if weights is None:
-            n, muhat, sumsq = self._get_statistics(data,D)
+            n, muhat, sumsq = self._get_statistics(data)
         else:
-            n, muhat, sumsq = self._get_weighted_statistics(data,weights,D)
+            n, muhat, sumsq = self._get_weighted_statistics(data,weights)
 
         # this SVD is necessary to check if the max likelihood solution is
         # degenerate, which can happen in the EM algorithm
@@ -330,42 +343,34 @@ class Gaussian(_GaussianBase, GibbsSampling, MeanField, Collapsed, MaxLikelihood
             self.mu = muhat
             self.sigma = sumsq/n
 
-    @classmethod
-    def max_likelihood_constructor(cls,data,weights=None):
-        D = getdatadimension(data)
-        if weights is None:
-            n, muhat, sumsq = cls._get_statistics(data,D)
-        else:
-            n, muhat, sumsq = cls._get_weighted_statistics(data,weights,D)
-        assert n >= D
-
-        return cls(muhat,sumsq/n,n,n,mu=muhat,sigma=sumsq/n)
+        return self
 
     def MAP(self,data,weights=None):
         # max likelihood with prior pseudocounts included in data
-        D = self.D
         if weights is None:
-            n, muhat, sumsq = self._get_statistics(data,D)
+            n, muhat, sumsq = self._get_statistics(data)
         else:
-            n, muhat, sumsq = self._get_weighted_statistics(data,weights,D)
+            n, muhat, sumsq = self._get_weighted_statistics(data,weights)
 
         self.mu, self.sigma, _, _ = self._posterior_hypparams(n,muhat,sumsq)
+        return self
 
 
 class GaussianFixedMean(_GaussianBase, GibbsSampling, MaxLikelihood):
-    def __init__(self,mu,kappa_0,sigma_0,sigma=None):
+    def __init__(self,mu=None,sigma=None,kappa_0=None,sigma_0=None):
+        self.sigma = sigma
+
         self.mu = mu
+
         self.kappa_0 = kappa_0
         self.sigma_0 = sigma_0
-        self.D = mu.shape[0]
 
-        if sigma is None:
-            self.resample()
-        else:
-            self.sigma = sigma
+        if sigma is None and None not in (kappa_0,sigma_0):
+            self.resample() # initialize from prior
 
     def num_parameters(self):
-        return self.D*(self.D+1)/2
+        D = len(self.mu)
+        return D*(D+1)/2
 
     def _get_statistics(self,data):
         n = getdatasize(data)
@@ -409,16 +414,17 @@ class GaussianFixedMean(_GaussianBase, GibbsSampling, MaxLikelihood):
 
     def resample(self,data=[]):
         self.sigma = sample_invwishart(*self._posterior_hypparams(*self._get_statistics(data)))
+        return self
 
     ### Max likelihood
 
     def max_likelihood(self,data,weights=None):
+        D = getdatadimension(data)
         if weights is None:
             n, sumsq = self._get_statistics(data)
         else:
             n, sumsq = self._get_weighted_statistics(data,weights)
 
-        D = self.D
         if n < D or (np.linalg.svd(sumsq,compute_uv=False) > 1e-6).sum() < D:
             # broken!
             self.sigma = np.eye(D)*1e-9
@@ -426,24 +432,37 @@ class GaussianFixedMean(_GaussianBase, GibbsSampling, MaxLikelihood):
         else:
             self.sigma = sumsq/n
 
+        return self
+
 
 class GaussianFixedCov(_GaussianBase, GibbsSampling, MaxLikelihood):
     # See Gelman's Bayesian Data Analysis notation around Eq. 3.18, p. 85 in 2nd
     # Edition
-    def __init__(self,sigma,mu_0,lmbda_0,mu=None):
-        self.mu_0 = mu_0
-        self.sigma = sigma
-        self.sigma_inv = np.linalg.inv(sigma)
-        self.lmbda_inv_0 = np.linalg.inv(lmbda_0)
-        self.D = self.mu_0.shape[0]
+    def __init__(self,mu=None,sigma=None,mu_0=None,lmbda_0=None):
+        self.mu = mu
 
-        if mu is None:
+        self.sigma = sigma
+
+        self.mu_0 = mu_0
+        self.lmbda_0 = lmbda_0
+
+        if mu is None and None not in (mu_0,lmbda_0):
             self.resample()
-        else:
-            self.mu = mu
+
+    @property
+    def sigma_inv(self):
+        if not hasattr(self,'_sigma_inv'):
+            self._sigma_inv = np.linalg.inv(self.sigma)
+        return self._sigma_inv
+
+    @property
+    def lmbda_inv_0(self):
+        if not hasattr(self,'_lmbda_inv_0'):
+            self._lmbda_inv_0 = np.linalg.inv(self.lmbda_0)
+        return self._lmbda_inv_0
 
     def num_parameters(self):
-        return self.D
+        return len(self.mu)
 
     def _get_statistics(self,data):
         n = getdatasize(data)
@@ -486,9 +505,11 @@ class GaussianFixedCov(_GaussianBase, GibbsSampling, MaxLikelihood):
 
     def resample(self,data=[]):
         mu_n, sigma_n_inv = self._posterior_hypparams(*self._get_statistics(data))
+        D = len(mu_n)
         L = np.linalg.cholesky(sigma_n_inv)
-        self.mu = scipy.linalg.solve_triangular(L,np.random.normal(size=self.D),lower=True) \
+        self.mu = scipy.linalg.solve_triangular(L,np.random.normal(size=D),lower=True) \
                 + mu_n
+        return self
 
     ### Max likelihood
 
@@ -499,20 +520,22 @@ class GaussianFixedCov(_GaussianBase, GibbsSampling, MaxLikelihood):
             n, xbar = self._get_weighted_statistics(data,weights)
 
         self.mu = xbar
+        return self
 
 
-class GaussianFixed(_FixedParams, Gaussian):
+class GaussianFixed(_FixedParamsMixin, Gaussian):
     def __init__(self,mu,sigma):
         self.mu = mu
         self.sigma = sigma
-        self.D = self.mu.shape[0]
 
 
 class GaussianNonConj(_GaussianBase, GibbsSampling):
-    def __init__(self,mu_0,mu_sigma_0,kappa_0,sigma_sigma_0,mu=None,sigma=None):
-        self._sigma_distn = GaussianFixedMean(mu_0,kappa_0,sigma_sigma_0,sigma)
-        self._mu_distn = GaussianFixedCov(self._sigma_distn.sigma,mu_0,mu_sigma_0,mu)
-        self.D = mu_0.shape[0]
+    def __init__(self,mu=None,sigma=None,
+            mu_0=None,mu_sigma_0=None,kappa_0=None,sigma_sigma_0=None):
+        self._sigma_distn = GaussianFixedMean(mu_0=mu_0,kappa_0=kappa_0,
+                sigma_0=sigma_sigma_0,sigma=sigma)
+        self._mu_distn = GaussianFixedCov(sigma=self._sigma_distn.sigma,
+                mu_0=mu_0,sigma_0=mu_sigma_0,mu=mu)
 
     @property
     def mu(self):
@@ -537,6 +560,8 @@ class GaussianNonConj(_GaussianBase, GibbsSampling):
             self._sigma_distn.mu = self._mu_distn.mu
             self._sigma_distn.resample(data)
 
+        return self
+
 
 # TODO collapsed, meanfield, max_likelihood
 class DiagonalGaussian(_GaussianBase,GibbsSampling):
@@ -555,37 +580,40 @@ class DiagonalGaussian(_GaussianBase,GibbsSampling):
     def sigma(self):
         return np.diag(self.sigmas)
 
-    def __init__(self,mu_0,nus_0,alphas_0,betas_0,mu=None,sigmas=None):
-        D = self.D = mu_0.shape[0]
-        self.mu_0 = mu_0
-
+    def __init__(self,mu=None,sigmas=None,mu_0=None,nus_0=None,alphas_0=None,betas_0=None):
         # all the s's refer to the fact that these are vectors of length
         # len(mu_0) OR scalars
-        if isinstance(nus_0,int) or isinstance(nus_0,float):
-            nus_0 = nus_0*np.ones(D)
-        if isinstance(alphas_0,int) or isinstance(alphas_0,float):
-            alphas_0 = alphas_0*np.ones(D)
-        if isinstance(betas_0,int) or isinstance(betas_0,float):
-            betas_0 = betas_0*np.ones(D)
+        if mu_0 is not None:
+            D = mu_0.shape[0]
+            if nus_0 is not None and \
+                    (isinstance(nus_0,int) or isinstance(nus_0,float)):
+                nus_0 = nus_0*np.ones(D)
+            if alphas_0 is not None and \
+                    (isinstance(alphas_0,int) or isinstance(alphas_0,float)):
+                alphas_0 = alphas_0*np.ones(D)
+            if betas_0 is not None and \
+                    (isinstance(betas_0,int) or isinstance(betas_0,float)):
+                betas_0 = betas_0*np.ones(D)
 
+        self.mu_0 = mu_0
         self.nus_0 = nus_0
         self.alphas_0 = alphas_0
         self.betas_0 = betas_0
 
-        if mu is None or sigmas is None:
-            self.resample()
-        else:
-            assert sigmas.ndim == 1
-            self.mu = mu
-            self.sigmas = sigmas
+        self.mu = mu
+        self.sigmas = sigmas
+
+        if (mu,sigmas) == (None,None) and None not in (mu_0,nus_0,alphas_0,betas_0):
+            self.resample() # intialize from prior
 
     def rvs(self,size=None):
         size = np.array(size,ndmin=1)
-        return np.sqrt(self.sigmas)*np.random.normal(size=np.concatenate((size,self.mu.shape))) + self.mu
+        return np.sqrt(self.sigmas)*\
+                np.random.normal(size=np.concatenate((size,self.mu.shape))) + self.mu
 
     def log_likelihood(self,x):
-        mu, sigmas = self.mu, self.sigmas
-        x = np.reshape(x,(-1,self.D))
+        mu, sigmas, D = self.mu, self.sigmas, self.mu.shape[0]
+        x = np.reshape(x,(-1,D))
         return (-0.5*((x-mu)**2/sigmas) - np.log(np.sqrt(2*np.pi*sigmas))).sum(1)
 
     def _posterior_hypparams(self,n,xbar,sumsq):
@@ -606,14 +634,16 @@ class DiagonalGaussian(_GaussianBase,GibbsSampling):
 
     def resample(self,data=[]):
         mu_n, nus_n, alphas_n, betas_n = self._posterior_hypparams(*self._get_statistics(data))
+        D = mu_n.shape[0]
         self.sigmas = 1/np.random.gamma(alphas_n,scale=1/betas_n)
-        self.mu = np.sqrt(self.sigmas/nus_n)*np.random.randn(self.D) + mu_n
+        self.mu = np.sqrt(self.sigmas/nus_n)*np.random.randn(D) + mu_n
         assert self.sigmas.ndim == 1
+        return self
 
-    def _get_statistics(self,data):
-        D = self.D
+    def _get_statistics(self,data,D=None):
         n = getdatasize(data)
         if n > 0:
+            D = getdatadimension(data) if D is None else D
             if isinstance(data,np.ndarray):
                 data = np.reshape(data,(-1,D))
                 xbar = data.mean(0)
@@ -641,31 +671,29 @@ class IsotropicGaussian(GibbsSampling):
         mu | sigma ~ N(mu_0,sigma/nu_0 * I)
     '''
 
-    def __init__(self,mu_0,nu_0,alpha_0,beta_0,mu=None,sigma=None):
+    def __init__(self,mu=None,sigma=None,mu_0=None,nu_0=None,alpha_0=None,beta_0=None):
+        self.mu = mu
+        self.sigma = sigma
+
         self.mu_0 = mu_0
         self.nu_0 = nu_0
         self.alpha_0 = alpha_0
         self.beta_0 = beta_0
 
-        self.D = mu_0.shape[0]
-
-        if mu is None or sigma is None:
-            self.resample()
-        else:
-            self.mu = mu
-            self.sigma = sigma
+        if (mu,sigma) == (None,None) and None not in (mu_0,nu_0,alpha_0,beta_0):
+            self.resample() # intialize from prior
 
     def rvs(self,size=None):
         return np.sqrt(self.sigma)*np.random.normal(size=tuple(size)+self.mu.shape) + self.mu
 
     def log_likelihood(self,x):
-        mu, sigma, D = self.mu, self.sigma, self.D
+        mu, sigma, D = self.mu, self.sigma, self.mu.shape[0]
         x = np.reshape(x,(-1,D))
         return (-0.5*((x-mu)**2).sum(1)/sigma - D*np.log(np.sqrt(2*np.pi*sigma)))
 
     def _posterior_hypparams(self,n,xbar,sumsq):
-        D = self.D
         mu_0, nu_0, alpha_0, beta_0 = self.mu_0, self.nu_0, self.alpha_0, self.beta_0
+        D = mu_0.shape[0]
         if n > 0:
             nu_n = D*n + nu_0
             alpha_n = alpha_0 + D*n/2
@@ -680,16 +708,15 @@ class IsotropicGaussian(GibbsSampling):
 
     def resample(self,data=[]):
         mu_n, nu_n, alpha_n, beta_n = self._posterior_hypparams(*self._get_statistics(data))
+        D = mu_n.shape[0]
         self.sigma = 1/np.random.gamma(alpha_n,scale=1/beta_n)
-        self.mu = np.sqrt(self.sigma/nu_n)*np.random.randn(self.D)+mu_n
+        self.mu = np.sqrt(self.sigma/nu_n)*np.random.randn(D)+mu_n
+        return self
 
     def _get_statistics(self,data):
-        assert isinstance(data,np.ndarray) or \
-                (isinstance(data,list) and all(isinstance(d,np.ndarray) for d in data))
-
-        D = self.D
         n = getdatasize(data)
         if n > 0:
+            D = getdatadimension(data)
             if isinstance(data,np.ndarray):
                 data = np.reshape(data,(-1,D))
                 xbar = data.mean(0)
@@ -745,16 +772,17 @@ class ScalarGaussianNIX(ScalarGaussian, GibbsSampling, Collapsed):
     Conjugate Normal-(Scaled-)Inverse-ChiSquared prior. (Another parameterization is the
     Normal-Inverse-Gamma.)
     '''
-    def __init__(self,mu_0,kappa_0,sigmasq_0,nu_0,mubin=None,sigmasqbin=None):
+    def __init__(self,mu=None,sigmasq=None,mu_0=None,kappa_0=None,sigmasq_0=None,nu_0=None):
+        self.mu = mu
+        self.sigmasq = sigmasq
+
         self.mu_0 = mu_0
         self.kappa_0 = kappa_0
         self.sigmasq_0 = sigmasq_0
         self.nu_0 = nu_0
 
-        self.mubin = mubin
-        self.sigmasqbin = sigmasqbin
-
-        self.resample()
+        if (mu,sigmasq) == (None,None) and None not in (mu_0,kappa_0,sigmasq_0,nu_0):
+            self.resample() # intialize from prior
 
     def _posterior_hypparams(self,n,ybar,sumsqc):
         mu_0, kappa_0, sigmasq_0, nu_0 = self.mu_0, self.kappa_0, self.sigmasq_0, self.nu_0
@@ -772,13 +800,9 @@ class ScalarGaussianNIX(ScalarGaussian, GibbsSampling, Collapsed):
 
     def resample(self,data=[]):
         mu_n, kappa_n, sigmasq_n, nu_n = self._posterior_hypparams(*self._get_statistics(data))
-
         self.sigmasq = nu_n * sigmasq_n / np.random.chisquare(nu_n)
         self.mu = np.sqrt(self.sigmasq / kappa_n) * np.random.randn() + mu_n
-
-        if self.mubin is not None and self.sigmasqbin is not None:
-            self.mubin[...] = self.mu
-            self.sigmasqbin[...] = self.sigmasq
+        return self
 
     def _get_statistics(self,data):
         assert isinstance(data,np.ndarray) or \
@@ -827,24 +851,16 @@ class ScalarGaussianNonconjNIX(ScalarGaussian, GibbsSampling):
     mu ~ Normal(mu_0,tausq_0)
     sigmasq ~ (Scaled-)Inverse-ChiSquared(sigmasq_0,nu_0)
     '''
-    def __init__(self,mu_0,tausq_0,sigmasq_0,nu_0,niter=20,
-            mu=None,sigmasq=None,mubin=None,sigmasqbin=None):
+    def __init__(self,mu=None,sigmasq=None,mu_0=None,tausq_0=None,sigmasq_0=None,nu_0=None,
+            niter=20):
+        self.mu, self.sigmasq = mu, sigmasq
         self.mu_0, self.tausq_0 = mu_0, tausq_0
         self.sigmasq_0, self.nu_0 = sigmasq_0, nu_0
 
         self.niter = niter
 
-        self.mubin = mubin
-        self.sigmasqbin = sigmasqbin
-
-        if mu is None or sigmasq is None:
-            self.resample()
-        else:
-            self.mu = mu
-            self.sigmasq = sigmasq
-            if mubin is not None and sigmasqbin is not None:
-                self.mubin[...] = mu
-                self.sigmasqbin[...] = sigmasq
+        if (mu,sigmasq) == (None,None) and None not in (mu_0, tausq_0, sigmasq_0, nu_0):
+            self.resample() # intialize from prior
 
     def resample(self,data=[],niter=None):
         n = getdatasize(data)
@@ -865,9 +881,7 @@ class ScalarGaussianNonconjNIX(ScalarGaussian, GibbsSampling):
             self.mu = np.sqrt(self.tausq_0) * np.random.normal() + self.mu_0
             self.sigmasq = self.sigmasq_0*self.nu_0/np.random.chisquare(self.nu_0)
 
-        if self.mubin is not None and self.sigmasqbin is not None:
-            self.mubin[...] = self.mu
-            self.sigmasqbin[...] = self.sigmasq
+        return self
 
 
 class ScalarGaussianFixedvar(ScalarGaussian, GibbsSampling):
@@ -877,21 +891,16 @@ class ScalarGaussianFixedvar(ScalarGaussian, GibbsSampling):
     def __repr__(self):
         return 'ScalarGaussianFixedvar(mu=%0.2f)' % (self.mu,)
 
-    def __init__(self,mu_0,tausq_0,sigmasq,mu=None,mubin=None,sigmasqbin=None):
+    def __init__(self,mu=None,sigmasq=None,mu_0=None,tausq_0=None):
+        self.mu = mu
+
+        self.sigmasq = sigmasq
+
         self.mu_0 = mu_0
         self.tausq_0 = tausq_0
-        self.sigmasq = sigmasq
-        self.mubin = mubin
 
-        # set only once
-        if sigmasqbin is not None:
-            sigmasqbin[...] = sigmasq
-        if mu is None:
-            self.resample()
-        else:
-            self.mu = mu
-            if mubin is not None:
-                mubin[...] = mu
+        if mu is None and None not in (mu_0,tausq_0):
+            self.resample() # intialize from prior
 
     def _posterior_hypparams(self,n,xbar):
         mu_0, tausq_0 = self.mu_0, self.tausq_0
@@ -907,9 +916,7 @@ class ScalarGaussianFixedvar(ScalarGaussian, GibbsSampling):
     def resample(self,data=[]):
         mu_n, tausq_n = self._posterior_hypparams(*self._get_statistics(data))
         self.mu = np.sqrt(tausq_n)*np.random.randn()+mu_n
-
-        if self.mubin is not None:
-            self.mubin[...] = self.mu
+        return self
 
     def _get_statistics(self,data):
         assert isinstance(data,np.ndarray) or \
@@ -955,22 +962,19 @@ class Categorical(GibbsSampling, MeanField, MaxLikelihood, MAP):
     def __repr__(self):
         return '%s(weights=%s)' % (self.__class__.__name__,self.weights)
 
-    def __init__(self,weights=None,alpha_0=None,K=None,alphav_0=None):
-        assert (isinstance(alphav_0,np.ndarray) and alphav_0.ndim == 1) ^ \
-                (K is not None and alpha_0 is not None)
-
+    def __init__(self,weights=None,alpha_0=None,K=None,alphav_0=None,alpha_mf=None):
         if alphav_0 is not None:
-            self.alphav_0 = alphav_0
             self.K = alphav_0.shape[0]
+            self.alphav_0 = alphav_0
         else:
             self.K = K
-            self.alphav_0 = np.repeat(alpha_0/K,K)
+            if alpha_0 is not None:
+                self.alphav_0 = np.repeat(alpha_0/K,K)
 
-        if weights is not None:
-            self.weights = weights
-        else:
-            self.resample()
-        self._alpha_mf = self.weights * self.alphav_0.sum()
+        self.weights = weights
+
+        if weights is None and hasattr(self,'alphav_0'):
+            self.resample() # intialize from prior
 
     def num_parameters(self):
         return self.K
@@ -990,6 +994,8 @@ class Categorical(GibbsSampling, MeanField, MaxLikelihood, MAP):
         'data is an array of indices (i.e. labels) or a list of such arrays'
         hypparams = self._posterior_hypparams(*self._get_statistics(data,self.K))
         self.weights = np.random.dirichlet(np.where(hypparams>1e-2,hypparams,1e-2))
+        self._alpha_mf = self.weights * self.alphav_0.sum()
+        return self
 
     @staticmethod
     def _get_statistics(data,K):
@@ -1005,6 +1011,7 @@ class Categorical(GibbsSampling, MeanField, MaxLikelihood, MAP):
         # update
         self._alpha_mf = self._posterior_hypparams(*self._get_weighted_statistics(data,weights))
         self.weights = self._alpha_mf / self._alpha_mf.sum() # for plotting
+        return self
 
     def get_vlb(self):
         # return avg energy plus entropy, our contribution to the vlb
@@ -1044,6 +1051,7 @@ class Categorical(GibbsSampling, MeanField, MaxLikelihood, MAP):
             counts, = self._get_weighted_statistics(data,weights)
 
         self.weights = counts/counts.sum()
+        return self
 
     def MAP(self,data,weights=None):
         K = self.K
@@ -1053,6 +1061,7 @@ class Categorical(GibbsSampling, MeanField, MaxLikelihood, MAP):
             counts, = self._get_weighted_statistics(data,weights)
 
         self.weights = counts/counts.sum()
+        return self
 
 
 class CategoricalAndConcentration(Categorical):
@@ -1075,14 +1084,14 @@ class CategoricalAndConcentration(Categorical):
         counts, = self._get_statistics(data,self.K)
         self.concentration.resample(counts)
         self.alphav_0 = np.repeat(self.concentration.concentration/self.K,self.K)
-        super(CategoricalAndConcentration,self).resample(data)
+        return super(CategoricalAndConcentration,self).resample(data)
 
     def resample_just_weights(self,data=[]):
-        super(CategoricalAndConcentration,self).resample(data)
+        return super(CategoricalAndConcentration,self).resample(data)
 
     def meanfieldupdate(self,*args,**kwargs): # TODO
         warn('MeanField not implemented for %s; concentration parameter will stay fixed')
-        super(CategoricalAndConcentration,self).meanfieldupdate(*args,**kwargs)
+        return super(CategoricalAndConcentration,self).meanfieldupdate(*args,**kwargs)
 
     def max_likelihood(self,*args,**kwargs):
         raise NotImplementedError, "max_likelihood doesn't make sense on this object"
@@ -1109,7 +1118,7 @@ class Multinomial(Categorical):
         'data is an array of counts or a list of such arrays)'
         # resample is implemented by hooking into the parent's calls to
         # _get_statistics (see below)
-        super(Multinomial,self).resample(data)
+        return super(Multinomial,self).resample(data)
 
     @staticmethod
     def _get_statistics(data,K):
@@ -1147,13 +1156,14 @@ class Geometric(GibbsSampling, Collapsed):
     def __repr__(self):
         return '%s(p=%0.2f)' % (self.__class__.__name__,self.p,)
 
-    def __init__(self,alpha_0,beta_0,p=None):
+    def __init__(self,p=None,alpha_0=None,beta_0=None):
+        self.p = p
+
         self.alpha_0 = alpha_0
         self.beta_0 = beta_0
-        if p is not None:
-            self.p = p
-        else:
-            self.resample()
+
+        if p is None and None not in (alpha_0,beta_0):
+            self.resample() # intialize from prior
 
     def _posterior_hypparams(self,n,tot):
         return self.alpha_0 + n, self.beta_0 + tot
@@ -1178,6 +1188,7 @@ class Geometric(GibbsSampling, Collapsed):
 
     def resample(self,data=[]):
         self.p = np.random.beta(*self._posterior_hypparams(*self._get_statistics(data)))
+        return self
 
     def _get_statistics(self,data):
         if isinstance(data,np.ndarray):
@@ -1217,17 +1228,17 @@ class Poisson(GibbsSampling, Collapsed):
     def __repr__(self):
         return 'Poisson(lmbda=%0.2f)' % (self.lmbda,)
 
-    def log_sf(self,x):
-        return stats.poisson.logsf(x,self.lmbda)
+    def __init__(self,lmbda=None,alpha_0=None,beta_0=None):
+        self.lmbda = lmbda
 
-    def __init__(self,alpha_0,beta_0,lmbda=None):
         self.alpha_0 = alpha_0
         self.beta_0 = beta_0
 
-        if lmbda is not None:
-            self.lmbda = lmbda
-        else:
-            self.resample()
+        if lmbda is None and None not in (alpha_0,beta_0):
+            self.resample() # intialize from prior
+
+    def log_sf(self,x):
+        return stats.poisson.logsf(x,self.lmbda)
 
     def _posterior_hypparams(self,n,tot):
         return self.alpha_0 + tot, self.beta_0 + n
@@ -1248,6 +1259,7 @@ class Poisson(GibbsSampling, Collapsed):
     def resample(self,data=[]):
         alpha_n, beta_n = self._posterior_hypparams(*self._get_statistics(data))
         self.lmbda = np.random.gamma(alpha_n,1/beta_n)
+        return self
 
     def _get_statistics(self,data):
         if isinstance(data,np.ndarray):
@@ -1321,21 +1333,21 @@ class _NegativeBinomialBase(Distribution):
     def __repr__(self):
         return '%s(r=%0.2f,p=%0.2f)' % (self.__class__.__name__,self.r,self.p)
 
-    def __init__(self,k_0,theta_0,alpha_0,beta_0,r=None,p=None):
+    def __init__(self,r=None,p=None,k_0=None,theta_0=None,alpha_0=None,beta_0=None):
+        self.r = r
+        self.p = p
+
         self.k_0 = k_0
         self.theta_0 = theta_0
         self.alpha_0 = alpha_0
         self.beta_0 = beta_0
 
-        if r is None or p is None:
-            self.resample()
-        else:
-            self.r = r
-            self.p = p
+        if (r,p) == (None,None) and None not in (k_0,theta_0,alpha_0,beta_0):
+            self.resample() # intialize from prior
 
     def log_likelihood(self,x,r=None,p=None):
-        if r is None or p is None:
-            r,p = self.r, self.p
+        r = r if r is not None else self.r
+        p = p if p is not None else self.p
         x = np.array(x,ndmin=1)
 
         if self.p > 0:
@@ -1391,6 +1403,7 @@ class NegativeBinomial(_NegativeBinomialBase, GibbsSampling):
                 self.r = np.random.gamma(self.k_0 + msum, 1/(1/self.theta_0 - N*np.log(1-self.p)))
                 ### resample p
                 self.p = np.random.beta(self.alpha_0 + data.sum(), self.beta_0 + N*self.r)
+        return self
 
     def resample_python(self,data=[],niter=20):
         if getdatasize(data) == 0:
@@ -1407,6 +1420,7 @@ class NegativeBinomial(_NegativeBinomialBase, GibbsSampling):
                 self.r = np.random.gamma(self.k_0 + msum, 1/(1/self.theta_0 - N*np.log(1-self.p)))
                 ### resample p
                 self.p = np.random.beta(self.alpha_0 + data.sum(), self.beta_0 + N*self.r)
+        return self
 
     ### OLD unused alternatives
 
@@ -1426,6 +1440,7 @@ class NegativeBinomial(_NegativeBinomialBase, GibbsSampling):
                 L_i[data > 0] = sample_discrete_from_log(logR[data_nz-1,:data_nz.max()],axis=1)+1
                 self.r = np.random.gamma(self.k_0 + L_i.sum(), 1/(1/self.theta_0 - np.log(1-self.p)*N))
                 self.p = np.random.beta(self.alpha_0 + data.sum(), self.beta_0 + N*self.r)
+        return self
 
     @classmethod
     def _set_up_logF(cls):
@@ -1444,15 +1459,17 @@ class NegativeBinomial(_NegativeBinomialBase, GibbsSampling):
 
 
 class NegativeBinomialFixedR(_NegativeBinomialBase, GibbsSampling, MaxLikelihood):
-    def __init__(self,r,alpha_0,beta_0,p=None):
+    def __init__(self,r=None,p=None,alpha_0=None,beta_0=None):
+        self.p = p
+
         self.r = r
+
         self.alpha_0 = alpha_0
         self.beta_0 = beta_0
 
-        if p is None:
-            self.resample()
-        else:
-            self.p = p
+        if p is None and None not in (alpha_0,beta_0):
+            self.resample() # intialize from prior
+
 
     def resample(self,data=[]):
         # TODO TODO this should call self._get_statistics
@@ -1462,6 +1479,7 @@ class NegativeBinomialFixedR(_NegativeBinomialBase, GibbsSampling, MaxLikelihood
             data = flattendata(data)
             N = len(data)
             self.p = np.random.beta(self.alpha_0 + data.sum(), self.beta_0 + N*self.r)
+        return self
 
     # TODO test
     def max_likelihood(self,data,weights=None):
@@ -1471,6 +1489,7 @@ class NegativeBinomialFixedR(_NegativeBinomialBase, GibbsSampling, MaxLikelihood
             n, tot = self._get_weighted_statistics(data,weights)
 
         self.p = (tot/n) / (self.r + tot/n)
+        return self
 
     def _get_statistics(self,data):
         if getdatasize(data) == 0:
@@ -1503,25 +1522,28 @@ class NegativeBinomialIntegerR(NegativeBinomialFixedR, GibbsSampling, MaxLikelih
     Nonconjugate Discrete+Beta prior
     r_discrete_distribution is an array where index i is p(r=i+1)
     '''
-    def __init__(self,r_discrete_distn,alpha_0,beta_0,r=None,p=None):
-        # TODO let r distn be passed in by support/vals
-
-        r_discrete_distn = np.asarray(r_discrete_distn,dtype=np.float)
-        r_support, = np.where(r_discrete_distn)
-        r_probs = r_discrete_distn[r_support]
-        r_probs /= r_probs.sum()
-        r_support += 1 # r_probs[0] corresponds to r=1
-
+    def __init__(self,r=None,p=None,r_discrete_distn=None,r_support=None,
+            alpha_0=None,beta_0=None):
         self.r_support = r_support
-        self.r_probs = r_probs
+        self.r_discrete_distn = r_discrete_distn
         self.alpha_0 = alpha_0
         self.beta_0 = beta_0
 
-        if r is None or p is None:
-            self.resample()
-        else:
-            self.r = r
-            self.p = p
+        if (r,p) == (None,None) and None not in (r_discrete_distn,alpha_0,beta_0):
+            self.resample() # intialize from prior
+
+    def set_r_discrete_distn(self,r_discrete_distn):
+        if r_discrete_distn is not None:
+            r_discrete_distn = np.asarray(r_discrete_distn,dtype=np.float)
+            r_support, = np.where(r_discrete_distn)
+            r_probs = r_discrete_distn[r_support]
+            r_probs /= r_probs.sum()
+            r_support += 1 # r_probs[0] corresponds to r=1
+
+            self.r_support = r_support
+            self.r_probs = r_probs
+
+    r_discrete_distn = property(None,set_r_discrete_distn)
 
     def rvs(self,size=None):
         out = np.random.geometric(1-self.p,size=size)-1
@@ -1550,6 +1572,7 @@ class NegativeBinomialIntegerR(NegativeBinomialFixedR, GibbsSampling, MaxLikelih
 
             self.r = self.r_support[sample_discrete(marg_probs)]
             self.p = np.random.beta(self.alpha_0 + data_sum, self.beta_0 + N*self.r)
+        return self
 
     def max_likelihood(self,data,weights=None):
         if weights is None:
@@ -1575,6 +1598,7 @@ class NegativeBinomialIntegerR(NegativeBinomialFixedR, GibbsSampling, MaxLikelih
 
             self.r = rmin + likelihoods.argmax()
             self.p = ps[likelihoods.argmax()]
+        return self
 
 class _NegativeBinomialFixedRVariant(NegativeBinomialFixedR):
     def resample(self,data=[]):
@@ -1584,7 +1608,7 @@ class _NegativeBinomialFixedRVariant(NegativeBinomialFixedR):
         else:
             assert all((d >= self.r).all() for d in data)
             data = [d-self.r for d in data]
-        super(_NegativeBinomialFixedRVariant,self).resample(data)
+        return super(_NegativeBinomialFixedRVariant,self).resample(data)
 
 class _NegativeBinomialIntegerRVariant(NegativeBinomialIntegerR):
         def resample(self,data=[]):
@@ -1612,6 +1636,7 @@ class _NegativeBinomialIntegerRVariant(NegativeBinomialIntegerR):
 
                 self.r = r_support[sample_discrete(marg_probs)]
                 self.p = np.random.beta(self.alpha_0 + data_sum - N*self.r, self.beta_0 + N*self.r)
+            return self
 
 class _StartAtRMixin(object):
     def log_likelihood(self,x,**kwargs):
@@ -1715,6 +1740,7 @@ class CRP(GibbsSampling):
             return self.a_0 + total_num_distinct-svec.sum(), (self.b_0 - np.log(wvec).sum())
         else:
             return self.a_0, self.b_0
+        return self
 
     def _get_statistics(self,data):
         assert isinstance(data,list)
@@ -1781,9 +1807,9 @@ class GammaCompoundDirichlet(CRP):
             size = 0
 
         if size > 0:
-            super(GammaCompoundDirichlet,self).resample(data,niter=niter)
+            return super(GammaCompoundDirichlet,self).resample(data,niter=niter)
         else:
-            super(GammaCompoundDirichlet,self).resample(data,niter=1)
+            return super(GammaCompoundDirichlet,self).resample(data,niter=1)
 
     def _get_statistics(self,data):
         # NOTE: this is a stochastic function: it samples auxiliary variables

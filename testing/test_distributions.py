@@ -49,7 +49,7 @@ class TestNegativeBinomialFixedR(BigDataGibbsTester,GewekeGibbsTester):
         return (dict(r=5,alpha_0=1,beta_0=9),)
 
     def params_close(self,d1,d2):
-        return np.allclose(d1.p,d2.p,rtol=0.05)
+        return np.allclose(d1.p,d2.p,rtol=0.1)
 
     def geweke_statistics(self,d,data):
         return d.p
@@ -173,7 +173,7 @@ class TestCRP(BigDataGibbsTester):
         return [50]*200
 
     def params_close(self,d1,d2):
-        return np.abs(d1.concentration - d2.concentration) < 0.5
+        return np.abs(d1.concentration - d2.concentration) < 1.0
 
 @attr('GammaCompoundDirichlet')
 class TestDirichletCompoundGamma(object):

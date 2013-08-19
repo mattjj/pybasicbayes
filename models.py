@@ -73,7 +73,7 @@ class Mixture(ModelGibbsSampling, ModelMeanField, ModelEM):
         assert all(isinstance(c,GibbsSampling) for c in self.components), \
                 'Components must implement GibbsSampling'
         for idx, c in enumerate(self.components):
-            c.resample(data=[(l.data[l.z == idx] if (l.z == idx).any() else []) for l in self.labels_list]) # numpy issue #2587, np.array([]).reshape((0,2))[[]]
+            c.resample(data=[l.data[l.z == idx] for l in self.labels_list])
 
         self.weights.resample([l.z for l in self.labels_list])
 
