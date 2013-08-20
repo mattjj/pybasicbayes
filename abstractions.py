@@ -33,13 +33,13 @@ class Distribution(object):
         pass
 
     def __repr__(self):
-        return '%s(params: {%s})' % (self.__class__.__name__,self._formatparams(self.params))
+        return '%s(params={%s})' % (self.__class__.__name__,self._formatparams(self.params))
 
     @staticmethod
     def _formatparams(dct):
-        return ','.join(('{}={:3.3G}' if isinstance(val,(int,long,float,complex))
-                                        else '{}={}').format(name,val)
-                    for name,val in dct.iteritems()).replace('\n','')
+        return ','.join(('{}:{:3.3G}' if isinstance(val,(int,long,float,complex))
+                                        else '{}:{}').format(name,val)
+                    for name,val in dct.iteritems()).replace('\n','').replace(',',', ')
 
 class BayesianDistribution(Distribution):
     __metaclass__ = abc.ABCMeta
@@ -49,9 +49,16 @@ class BayesianDistribution(Distribution):
         'hyperparameters define a prior distribution over parameters'
         pass
 
+    def empirical_bayes(self,data):
+        '''
+        (optional) set hyperparameters via empirical bayes
+        e.g. treat argument as a pseudo-dataset for exponential family
+        '''
+        raise NotImplementedError
+
     def __repr__(self):
         if not all(v is None for v in self.hypparams.itervalues()):
-            return '%s(params: {%s}, hypparams: {%s})' % (self.__class__.__name__,
+            return '%s(\nparams={%s},\nhypparams={%s})' % (self.__class__.__name__,
                     self._formatparams(self.params),self._formatparams(self.hypparams))
         else:
             return super(BayesianDistribution,self).__repr__()
