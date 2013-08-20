@@ -14,6 +14,11 @@ from util.stats import combinedata
 class Distribution(object):
     __metaclass__ = abc.ABCMeta
 
+    @abc.abstractproperty
+    def params(self):
+        'distribution parameters'
+        pass
+
     @abc.abstractmethod
     def rvs(self,size=[]):
         'random variates (samples)'
@@ -27,11 +32,35 @@ class Distribution(object):
         '''
         pass
 
+    def __repr__(self):
+        return '%s(params: {%s})' % (self.__class__.__name__,self._formatparams(self.params))
+
+    @staticmethod
+    def _formatparams(dct):
+        return ','.join(('{}={:3.3G}' if isinstance(val,(int,long,float,complex))
+                                        else '{}={}').format(name,val)
+                    for name,val in dct.iteritems()).replace('\n','')
+
+class BayesianDistribution(Distribution):
+    __metaclass__ = abc.ABCMeta
+
+    @abc.abstractproperty
+    def hypparams(self):
+        'hyperparameters define a prior distribution over parameters'
+        pass
+
+    def __repr__(self):
+        if not all(v is None for v in self.hypparams.itervalues()):
+            return '%s(params: {%s}, hypparams: {%s})' % (self.__class__.__name__,
+                    self._formatparams(self.params),self._formatparams(self.hypparams))
+        else:
+            return super(BayesianDistribution,self).__repr__()
+
 #########################################################
 #  Algorithm interfaces for inference in distributions  #
 #########################################################
 
-class GibbsSampling(Distribution):
+class GibbsSampling(BayesianDistribution):
     __metaclass__ = abc.ABCMeta
 
     @abc.abstractmethod
@@ -49,7 +78,7 @@ class GibbsSampling(Distribution):
         self.resample()
         return self.copy_sample()
 
-class MeanField(Distribution):
+class MeanField(BayesianDistribution):
     __metaclass__ = abc.ABCMeta
 
     @abc.abstractmethod
@@ -63,7 +92,7 @@ class MeanField(Distribution):
     def get_vlb(self):
         raise NotImplementedError
 
-class Collapsed(Distribution):
+class Collapsed(BayesianDistribution):
     __metaclass__ = abc.ABCMeta
 
     @abc.abstractmethod
@@ -88,21 +117,18 @@ class MaxLikelihood(Distribution):
         '''
         pass
 
-    def max_likelihood_constructor(cls,data,weights=None):
-        '''
-        creates a new instance with the parameters set to their maximum
-        likelihood values
-        '''
+    @property
+    def num_parameters(self):
         raise NotImplementedError
 
-class MAP(Distribution):
+class MAP(BayesianDistribution):
     __metaclass__ = abc.ABCMeta
 
     @abc.abstractmethod
     def MAP(self,data,weights=None):
         '''
         sets the parameters to their MAP values given the (weighted) data
-        analogous to max_likelihood but includes pseudocounts
+        analogous to max_likelihood but includes hyperparameters
         '''
         pass
 
@@ -110,9 +136,9 @@ class MAP(Distribution):
 #  Models  #
 ############
 
-# what differentiates a "model" from a "distribution" in this code is latent
-# state over data: a model attaches a latent variable (like a label or state
-# sequence) to data, and so it 'holds onto' data. Hence the add_data method.
+# a "model" is differentiated from a "distribution" in this code by latent state
+# over data: a model attaches a latent variable (like a label or state sequence)
+# to data, and so it 'holds onto' data. Hence the add_data method.
 
 class Model(object):
     __metaclass__ = abc.ABCMeta
@@ -159,8 +185,18 @@ class ModelMeanField(Model):
 
     @abc.abstractmethod
     def meanfield_coordinate_descent_step(self):
-        # returns variational lower bound after update
+        # returns variational lower bound after update, if available
         pass
+
+    def meanfield_coordinate_descent(self,tol=1e-1,maxiter=250):
+        scores = []
+        for itr in xrange(maxiter):
+            scores.append(self.meanfield_coordinate_descent_step())
+            if scores[-1] is not None and len(scores) > 1:
+                if np.abs(scores[-1]-scores[-2]) < tol:
+                    return scores
+        print 'WARNING: meanfield_coordinate_descent hit maxiter of %d' % maxiter
+        return scores
 
 class _EMBase(Model):
     __metaclass__ = abc.ABCMeta
@@ -177,10 +213,10 @@ class _EMBase(Model):
             method()
             likes.append(self.log_likelihood())
             if len(likes) > 1:
-                if np.abs(likes[-1]-likes[-2]) < tol:
+                if likes[-1]-likes[-2] < tol:
                     return likes
-                elif likes[-1]-likes[-2] < tol:
-                    # oscillation, do one more
+                elif likes[-1] < likes[-2]:
+                    # probably oscillation, do one more
                     method()
                     likes.append(self.log_likelihood())
                     return likes

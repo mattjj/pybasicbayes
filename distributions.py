@@ -11,8 +11,8 @@ import abc
 import copy
 from warnings import warn
 
-from abstractions import Distribution, GibbsSampling,\
-        MeanField, Collapsed, MaxLikelihood, MAP
+from abstractions import Distribution, BayesianDistribution, \
+        GibbsSampling, MeanField, Collapsed, MaxLikelihood, MAP
 from util.stats import sample_niw, sample_invwishart, invwishart_entropy,\
         invwishart_log_partitionfunction, sample_discrete,\
         sample_discrete_from_log, getdatasize, flattendata,\
@@ -25,6 +25,7 @@ from util.stats import sample_niw, sample_invwishart, invwishart_entropy,\
 ##########
 
 class _FixedParamsMixin(Distribution):
+    @property
     def num_parameters(self):
         return 0
 
@@ -44,11 +45,10 @@ class _FixedParamsMixin(Distribution):
 #  Continuous  #
 ################
 
-class _GaussianBase(Distribution):
-    __metaclass__ = abc.ABCMeta
-
-    def __repr__(self):
-        return '%s(\nmu=\n%s,\nsigma=\n%s\n)' % (self.__class__.__name__,self.mu,self.sigma)
+class _GaussianBase(object):
+    @property
+    def params(self):
+        return dict(mu=self.mu,sigma=self.sigma)
 
     ### internals
 
@@ -122,7 +122,7 @@ class _GaussianBase(Distribution):
                 'theta':theta}
 
 
-class Gaussian(_GaussianBase, GibbsSampling, MeanField, Collapsed, MaxLikelihood, MAP):
+class Gaussian(_GaussianBase, GibbsSampling, MeanField, Collapsed, MAP, MaxLikelihood):
     '''
     Multivariate Gaussian distribution class.
 
@@ -157,6 +157,11 @@ class Gaussian(_GaussianBase, GibbsSampling, MeanField, Collapsed, MaxLikelihood
         if (mu,sigma) == (None,None) and None not in (mu_0,sigma_0,kappa_0,nu_0):
             self.resample() # initialize from prior
 
+    @property
+    def hypparams(self):
+        return dict(mu_0=self.mu_0,sigma_0=self.sigma_0,kappa_0=self.kappa_0,nu_0=self.nu_0)
+
+    @property
     def num_parameters(self):
         D = len(self.mu)
         return D*(D+1)/2
@@ -368,6 +373,11 @@ class GaussianFixedMean(_GaussianBase, GibbsSampling, MaxLikelihood):
         if sigma is None and None not in (kappa_0,sigma_0):
             self.resample() # initialize from prior
 
+    @property
+    def hypparams(self):
+        return dict(kappa_0=self.kappa_0,sigma_0=self.sigma_0)
+
+    @property
     def num_parameters(self):
         D = len(self.mu)
         return D*(D+1)/2
@@ -450,6 +460,10 @@ class GaussianFixedCov(_GaussianBase, GibbsSampling, MaxLikelihood):
             self.resample()
 
     @property
+    def hypparams(self):
+        return dict(mu_0=self.mu_0,lmbda_0=self.lmbda_0)
+
+    @property
     def sigma_inv(self):
         if not hasattr(self,'_sigma_inv'):
             self._sigma_inv = np.linalg.inv(self.sigma)
@@ -461,6 +475,7 @@ class GaussianFixedCov(_GaussianBase, GibbsSampling, MaxLikelihood):
             self._lmbda_inv_0 = np.linalg.inv(self.lmbda_0)
         return self._lmbda_inv_0
 
+    @property
     def num_parameters(self):
         return len(self.mu)
 
@@ -538,6 +553,12 @@ class GaussianNonConj(_GaussianBase, GibbsSampling):
                 mu_0=mu_0,sigma_0=mu_sigma_0,mu=mu)
 
     @property
+    def hypparams(self):
+        d = self._mu_distn.hypparams
+        d.update(**self._sigma_distn.hypparams)
+        return d
+
+    @property
     def mu(self):
         return self._mu_distn.mu
 
@@ -576,10 +597,6 @@ class DiagonalGaussian(_GaussianBase,GibbsSampling):
     It allows placing different prior hyperparameters on different components.
     '''
 
-    @property
-    def sigma(self):
-        return np.diag(self.sigmas)
-
     def __init__(self,mu=None,sigmas=None,mu_0=None,nus_0=None,alphas_0=None,betas_0=None):
         # all the s's refer to the fact that these are vectors of length
         # len(mu_0) OR scalars
@@ -605,6 +622,15 @@ class DiagonalGaussian(_GaussianBase,GibbsSampling):
 
         if (mu,sigmas) == (None,None) and None not in (mu_0,nus_0,alphas_0,betas_0):
             self.resample() # intialize from prior
+
+    @property
+    def sigma(self):
+        return np.diag(self.sigmas)
+
+    @property
+    def hypparams(self):
+        return dict(mu_0=self.mu_0,nus_0=self.nus_0,
+                alphas_0=self.alphas_0,betas_0=self.betas_0)
 
     def rvs(self,size=None):
         size = np.array(size,ndmin=1)
@@ -683,6 +709,10 @@ class IsotropicGaussian(GibbsSampling):
         if (mu,sigma) == (None,None) and None not in (mu_0,nu_0,alpha_0,beta_0):
             self.resample() # intialize from prior
 
+    @property
+    def hypparams(self):
+        return dict(mu_0=self.mu_0,nu_0=self.nu_0,alpha_0=self.alpha_0,beta_0=self.beta_0)
+
     def rvs(self,size=None):
         return np.sqrt(self.sigma)*np.random.normal(size=tuple(size)+self.mu.shape) + self.mu
 
@@ -729,11 +759,10 @@ class IsotropicGaussian(GibbsSampling):
         return n, xbar, sumsq
 
 
-class ScalarGaussian(Distribution):
-    '''
-    Abstract class for all scalar Gaussians.
-    '''
-    __metaclass__ = abc.ABCMeta
+class _ScalarGaussianBase(object):
+    @property
+    def params(self):
+        return dict(mu=self.mu,sigmasq=self.sigmasq)
 
     def rvs(self,size=None):
         return np.sqrt(self.sigmasq)*np.random.normal(size=size)+self.mu
@@ -767,7 +796,7 @@ class ScalarGaussian(Distribution):
 
 
 # TODO meanfield, max_likelihood
-class ScalarGaussianNIX(ScalarGaussian, GibbsSampling, Collapsed):
+class ScalarGaussianNIX(_ScalarGaussianBase, GibbsSampling, Collapsed):
     '''
     Conjugate Normal-(Scaled-)Inverse-ChiSquared prior. (Another parameterization is the
     Normal-Inverse-Gamma.)
@@ -783,6 +812,11 @@ class ScalarGaussianNIX(ScalarGaussian, GibbsSampling, Collapsed):
 
         if (mu,sigmasq) == (None,None) and None not in (mu_0,kappa_0,sigmasq_0,nu_0):
             self.resample() # intialize from prior
+
+    @property
+    def hypparams(self):
+        return dict(mu_0=self.mu_0,kappa_0=self.kappa_0,
+                sigmasq_0=self.sigmasq_0,nu_0=self.nu_0)
 
     def _posterior_hypparams(self,n,ybar,sumsqc):
         mu_0, kappa_0, sigmasq_0, nu_0 = self.mu_0, self.kappa_0, self.sigmasq_0, self.nu_0
@@ -845,7 +879,7 @@ class ScalarGaussianNIX(ScalarGaussian, GibbsSampling, Collapsed):
         return stats.t.logpdf(y,nu_n,loc=mu_n,scale=np.sqrt((1+kappa_n)*sigmasq_n/kappa_n))
 
 
-class ScalarGaussianNonconjNIX(ScalarGaussian, GibbsSampling):
+class ScalarGaussianNonconjNIX(_ScalarGaussianBase, GibbsSampling):
     '''
     Non-conjugate separate priors on mean and variance parameters, via
     mu ~ Normal(mu_0,tausq_0)
@@ -861,6 +895,11 @@ class ScalarGaussianNonconjNIX(ScalarGaussian, GibbsSampling):
 
         if (mu,sigmasq) == (None,None) and None not in (mu_0, tausq_0, sigmasq_0, nu_0):
             self.resample() # intialize from prior
+
+    @property
+    def hypparams(self):
+        return dict(mu_0=self.mu_0,tausq_0=self.tausq_0,
+                sigmasq_0=self.sigmasq_0,nu_0=self.nu_0)
 
     def resample(self,data=[],niter=None):
         n = getdatasize(data)
@@ -884,13 +923,10 @@ class ScalarGaussianNonconjNIX(ScalarGaussian, GibbsSampling):
         return self
 
 
-class ScalarGaussianFixedvar(ScalarGaussian, GibbsSampling):
+class ScalarGaussianFixedvar(_ScalarGaussianBase, GibbsSampling):
     '''
     Conjugate normal prior on mean.
     '''
-    def __repr__(self):
-        return 'ScalarGaussianFixedvar(mu=%0.2f)' % (self.mu,)
-
     def __init__(self,mu=None,sigmasq=None,mu_0=None,tausq_0=None):
         self.mu = mu
 
@@ -901,6 +937,10 @@ class ScalarGaussianFixedvar(ScalarGaussian, GibbsSampling):
 
         if mu is None and None not in (mu_0,tausq_0):
             self.resample() # intialize from prior
+
+    @property
+    def hypparams(self):
+        return dict(mu_0=self.mu_0,tausq_0=self.tausq_0)
 
     def _posterior_hypparams(self,n,xbar):
         mu_0, tausq_0 = self.mu_0, self.tausq_0
@@ -959,9 +999,6 @@ class Categorical(GibbsSampling, MeanField, MaxLikelihood, MAP):
     Parameters:
         weights, a vector encoding a finite pmf
     '''
-    def __repr__(self):
-        return '%s(weights=%s)' % (self.__class__.__name__,self.weights)
-
     def __init__(self,weights=None,alpha_0=None,K=None,alphav_0=None,alpha_mf=None):
         if alphav_0 is not None:
             self.K = alphav_0.shape[0]
@@ -976,6 +1013,15 @@ class Categorical(GibbsSampling, MeanField, MaxLikelihood, MAP):
         if weights is None and hasattr(self,'alphav_0'):
             self.resample() # intialize from prior
 
+    @property
+    def params(self):
+        return dict(weights=self.weights)
+
+    @property
+    def hypparams(self):
+        return dict(alphav_0=self.alphav_0)
+
+    @property
     def num_parameters(self):
         return self.K
 
@@ -1080,6 +1126,14 @@ class CategoricalAndConcentration(Categorical):
         super(CategoricalAndConcentration,self).__init__(alpha_0=self.concentration.concentration,
                 K=K,weights=weights)
 
+    @property
+    def params(self):
+        return dict(concentration=self.concentration,weights=self.weights)
+
+    @property
+    def hypparams(self):
+        return dict(a_0=self.a_0,b_0=self.b_0,K=self.K)
+
     def resample(self,data=[]):
         counts, = self._get_statistics(data,self.K)
         self.concentration.resample(counts)
@@ -1153,9 +1207,6 @@ class Geometric(GibbsSampling, Collapsed):
     Parameter is the success probability:
         p
     '''
-    def __repr__(self):
-        return '%s(p=%0.2f)' % (self.__class__.__name__,self.p,)
-
     def __init__(self,p=None,alpha_0=None,beta_0=None):
         self.p = p
 
@@ -1164,6 +1215,14 @@ class Geometric(GibbsSampling, Collapsed):
 
         if p is None and None not in (alpha_0,beta_0):
             self.resample() # intialize from prior
+
+    @property
+    def params(self):
+        return dict(p=self.p)
+
+    @property
+    def hypparams(self):
+        return dict(alpha_0=self.alpha_0,beta_0=self.beta_0)
 
     def _posterior_hypparams(self,n,tot):
         return self.alpha_0 + n, self.beta_0 + tot
@@ -1225,9 +1284,6 @@ class Poisson(GibbsSampling, Collapsed):
     Parameter is the mean/variance parameter:
         lmbda
     '''
-    def __repr__(self):
-        return 'Poisson(lmbda=%0.2f)' % (self.lmbda,)
-
     def __init__(self,lmbda=None,alpha_0=None,beta_0=None):
         self.lmbda = lmbda
 
@@ -1236,6 +1292,14 @@ class Poisson(GibbsSampling, Collapsed):
 
         if lmbda is None and None not in (alpha_0,beta_0):
             self.resample() # intialize from prior
+
+    @property
+    def params(self):
+        return dict(lmbda=self.lmbda)
+
+    @property
+    def hypparams(self):
+        return dict(alpha_0=self.alpha_0,beta_0=self.beta_0)
 
     def log_sf(self,x):
         return stats.poisson.logsf(x,self.lmbda)
@@ -1330,9 +1394,6 @@ class _NegativeBinomialBase(Distribution):
         r
         p
     '''
-    def __repr__(self):
-        return '%s(r=%0.2f,p=%0.2f)' % (self.__class__.__name__,self.r,self.p)
-
     def __init__(self,r=None,p=None,k_0=None,theta_0=None,alpha_0=None,beta_0=None):
         self.r = r
         self.p = p
@@ -1345,6 +1406,15 @@ class _NegativeBinomialBase(Distribution):
         if (r,p) == (None,None) and None not in (k_0,theta_0,alpha_0,beta_0):
             self.resample() # intialize from prior
 
+    @property
+    def params(self):
+        return dict(r=self.r,p=self.p)
+
+    @property
+    def hypparams(self):
+        return dict(k_0=self.k_0,theta_0=self.theta_0,
+                alpha_0=self.alpha_0,beta_0=self.beta_0)
+
     def log_likelihood(self,x,r=None,p=None):
         r = r if r is not None else self.r
         p = p if p is not None else self.p
@@ -1353,8 +1423,8 @@ class _NegativeBinomialBase(Distribution):
         if self.p > 0:
             xnn = x[x >= 0]
             raw = np.empty(x.shape)
-            raw[x>=0] = special.gammaln(r + xnn) - special.gammaln(r) - special.gammaln(xnn+1)\
-                    + r*np.log(1-p) + xnn*np.log(p)
+            raw[x>=0] = special.gammaln(r + xnn) - special.gammaln(r) \
+                    - special.gammaln(xnn+1) + r*np.log(1-p) + xnn*np.log(p)
             raw[x<0] = -np.inf
             return raw if isinstance(x,np.ndarray) else raw[0]
         else:
@@ -1470,6 +1540,9 @@ class NegativeBinomialFixedR(_NegativeBinomialBase, GibbsSampling, MaxLikelihood
         if p is None and None not in (alpha_0,beta_0):
             self.resample() # intialize from prior
 
+    @property
+    def hypprams(self):
+        return dict(alpha_0=self.alpha_0,beta_0=self.beta_0)
 
     def resample(self,data=[]):
         # TODO TODO this should call self._get_statistics
@@ -1532,6 +1605,14 @@ class NegativeBinomialIntegerR(NegativeBinomialFixedR, GibbsSampling, MaxLikelih
         if (r,p) == (None,None) and None not in (r_discrete_distn,alpha_0,beta_0):
             self.resample() # intialize from prior
 
+    @property
+    def hypparams(self):
+        return dict(r_discrete_distn=self.r_discrete_distn,
+                alpha_0=self.alpha_0,beta_0=self.beta_0)
+
+    def get_r_discrete_distn(self):
+        return self._r_discrete_distn
+
     def set_r_discrete_distn(self,r_discrete_distn):
         if r_discrete_distn is not None:
             r_discrete_distn = np.asarray(r_discrete_distn,dtype=np.float)
@@ -1542,8 +1623,9 @@ class NegativeBinomialIntegerR(NegativeBinomialFixedR, GibbsSampling, MaxLikelih
 
             self.r_support = r_support
             self.r_probs = r_probs
+            self._r_discrete_distn = r_discrete_distn
 
-    r_discrete_distn = property(None,set_r_discrete_distn)
+    r_discrete_distn = property(get_r_discrete_distn,set_r_discrete_distn)
 
     def rvs(self,size=None):
         out = np.random.geometric(1-self.p,size=size)-1
@@ -1675,9 +1757,6 @@ class CRP(GibbsSampling):
     restaurant), which has a Gamma prior.
     '''
 
-    def __repr__(self):
-        return '%s(concentration=%0.2f)' % (self.__class__.__name__,self.concentration)
-
     def __init__(self,a_0,b_0,concentration=None):
         self.a_0 = a_0
         self.b_0 = b_0
@@ -1686,6 +1765,14 @@ class CRP(GibbsSampling):
             self.concentration = concentration
         else:
             self.resample(niter=1)
+
+    @property
+    def params(self):
+        return dict(concentration=self.concentration)
+
+    @property
+    def hypparams(self):
+        return dict(a_0=self.a_0,b_0=self.b_0)
 
     def rvs(self,customer_counts):
         # could replace this with one of the faster C versions I have lying
@@ -1772,15 +1859,18 @@ class GammaCompoundDirichlet(CRP):
     sampled data) everything starts to act like a DP; K is just the size of the
     size of the mesh projection.
     '''
-
-    def __repr__(self):
-        return '%s(concentration=%0.2f,K=%d)' % (self.__class__.__name__,
-                self.concentration,self.K)
-
     def __init__(self,K,a_0,b_0,concentration=None):
         self.K = K
         super(GammaCompoundDirichlet,self).__init__(a_0=a_0,b_0=b_0,
                 concentration=concentration)
+
+    @property
+    def params(self):
+        return dict(concentration=self.concentration)
+
+    @property
+    def hypparams(self):
+        return dict(a_0=self.a_0,b_0=self.b_0,K=self.K)
 
     def rvs(self,sample_counts):
         if isinstance(sample_counts,int):

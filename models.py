@@ -27,7 +27,8 @@ class Mixture(ModelGibbsSampling, ModelMeanField, ModelEM):
         if alpha_0 is not None:
             self.weights = Categorical(alpha_0=alpha_0,K=len(components),weights=weights)
         else:
-            self.weights = CategoricalAndConcentration(a_0=a_0,b_0=b_0,K=len(components),weights=weights)
+            self.weights = CategoricalAndConcentration(
+                    a_0=a_0,b_0=b_0,K=len(components),weights=weights)
 
         self.labels_list = []
 
@@ -37,7 +38,7 @@ class Mixture(ModelGibbsSampling, ModelMeanField, ModelEM):
             **kwargs))
 
     def generate(self,N,keep=True):
-        templabels = Labels(components=self.components,weights=self.weights,N=N) # this samples labels
+        templabels = Labels(components=self.components,weights=self.weights,N=N)
 
         out = np.empty(self.components[0].rvs(N).shape)
         counts = np.bincount(templabels.z,minlength=len(self.components))
@@ -158,10 +159,11 @@ class Mixture(ModelGibbsSampling, ModelMeanField, ModelEM):
         self.weights.max_likelihood(np.arange(len(self.components)),
                 [l.expectations for l in self.labels_list])
 
+    @property
     def num_parameters(self):
         # NOTE: scikit.learn's gmm.py doesn't count the weights in the number of
         # parameters, but I don't know why they wouldn't. Some convention?
-        return sum(c.num_parameters() for c in self.components) + self.weights.num_parameters()
+        return sum(c.num_parameters for c in self.components) + self.weights.num_parameters
 
     def BIC(self,data=None):
         '''
@@ -175,16 +177,16 @@ class Mixture(ModelGibbsSampling, ModelMeanField, ModelEM):
             assert len(self.labels_list) > 0, \
                     "If not passing in data, the class must already have it. Use the method add_data()"
             return -2*sum(self.log_likelihood(l.data) for l in self.labels_list) + \
-                        self.num_parameters() * np.log(sum(l.data.shape[0] for l in self.labels_list))
+                        self.num_parameters * np.log(sum(l.data.shape[0] for l in self.labels_list))
         else:
-            return -2*self.log_likelihood(data) + self.num_parameters() * np.log(data.shape[0])
+            return -2*self.log_likelihood(data) + self.num_parameters * np.log(data.shape[0])
 
     def AIC(self):
         # NOTE: in principle this method computes the AIC only after finding the
         # maximum likelihood parameters (or, of course, an EM fixed-point as an
         # approximation!)
         assert len(self.labels_list) > 0, 'Must have data to get AIC'
-        return 2*self.num_parameters() - 2*sum(self.log_likelihood(l.data) for l in self.labels_list)
+        return 2*self.num_parameters - 2*sum(self.log_likelihood(l.data) for l in self.labels_list)
 
     ### Misc.
 
