@@ -58,7 +58,7 @@ class GewekeGibbsTester(DistributionTester):
 
     @property
     def geweke_nsamples(self):
-        return 20000
+        return 30000
 
     @property
     def geweke_data_size(self):
@@ -74,7 +74,7 @@ class GewekeGibbsTester(DistributionTester):
 
     @property
     def geweke_num_statistic_fails_to_tolerate(self):
-        return 0
+        return 1
 
 
     @attr('slow')

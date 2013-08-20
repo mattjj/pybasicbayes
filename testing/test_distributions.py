@@ -22,6 +22,10 @@ class TestGeometric(BigDataGibbsTester,GewekeGibbsTester):
     def geweke_statistics(self,d,data):
         return d.p
 
+    @property
+    def geweke_pval(self):
+        return 0.1
+
 @attr('poisson')
 class TestPoisson(BigDataGibbsTester,GewekeGibbsTester):
     @property
@@ -108,7 +112,7 @@ class TestCategorical(BigDataGibbsTester,GewekeGibbsTester):
 
     @property
     def geweke_pval(self):
-        return 0.01
+        return 0.05
 
 @attr('gaussian')
 class TestGaussian(BigDataGibbsTester,GewekeGibbsTester):
@@ -132,7 +136,11 @@ class TestGaussian(BigDataGibbsTester,GewekeGibbsTester):
 
     @property
     def geweke_data_size(self):
-        return 20
+        return 10
+
+    @property
+    def geweke_pval(self):
+        return 0.1
 
 @attr('diagonalgaussian')
 class TestDiagonalGaussian(BigDataGibbsTester,GewekeGibbsTester):
@@ -156,7 +164,11 @@ class TestDiagonalGaussian(BigDataGibbsTester,GewekeGibbsTester):
 
     @property
     def geweke_data_size(self):
-        return 20
+        return 10
+
+    @property
+    def geweke_pval(self):
+        return 0.1
 
 @attr('CRP')
 class TestCRP(BigDataGibbsTester):
