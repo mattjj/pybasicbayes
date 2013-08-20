@@ -62,7 +62,7 @@ class GewekeGibbsTester(DistributionTester):
 
     @property
     def geweke_data_size(self):
-        return 5 # NOTE: more data usually means slower mixing
+        return 1 # NOTE: more data usually means slower mixing
 
     @property
     def geweke_ntrials(self):
@@ -71,6 +71,9 @@ class GewekeGibbsTester(DistributionTester):
     @property
     def geweke_pval(self):
         return 0.05
+
+    def geweke_numerical_slice(self,setting_idx):
+        return slice(None)
 
     @property
     def geweke_num_statistic_fails_to_tolerate(self):
@@ -87,6 +90,7 @@ class GewekeGibbsTester(DistributionTester):
                             self.__class__.__name__,'setting_%d.pdf' % setting_idx)
 
     def check_geweke(self,setting_idx,hypparam_dict):
+        import os
         from matplotlib import pyplot as plt
         plt.ioff()
         fig = plt.figure()
@@ -117,12 +121,17 @@ class GewekeGibbsTester(DistributionTester):
 
             testing.populations_eq_quantile_plot(forward_statistics,gibbs_statistics,fig=fig)
             try:
-                testing.assert_populations_eq_moments(forward_statistics,gibbs_statistics,pval=self.geweke_pval)
+                sl = self.geweke_numerical_slice(setting_idx)
+                testing.assert_populations_eq_moments(
+                        forward_statistics[...,sl],gibbs_statistics[...,sl],
+                        pval=self.geweke_pval)
             except AssertionError:
+                datapath = os.path.join(os.path.dirname(__file__),'figures',
+                        self.__class__.__name__,'setting_%d_trial_%d.pdf' % (setting_idx,trial))
+                np.savez(datapath,fwd=forward_statistics,gibbs=gibbs_statistics)
                 example_violating_means = forward_statistics.mean(0), gibbs_statistics.mean(0)
                 num_statistic_fails += 1
 
-        import os
         figpath = self.geweke_figure_filepath(setting_idx)
         mkdir(os.path.dirname(figpath))
         plt.savefig(figpath)
