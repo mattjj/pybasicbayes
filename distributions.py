@@ -1013,18 +1013,28 @@ class Categorical(GibbsSampling, MeanField, MaxLikelihood, MAP):
         weights, a vector encoding a finite pmf
     '''
     def __init__(self,weights=None,alpha_0=None,K=None,alphav_0=None,alpha_mf=None):
-        if alphav_0 is not None:
-            self.K = alphav_0.shape[0]
-            self.alphav_0 = alphav_0
-        else:
-            self.K = K
-            if alpha_0 is not None:
-                self.alphav_0 = np.repeat(alpha_0/K,K)
+        self.K = K
+        self.alpha_0 = alpha_0
+        self.alphav_0 = alphav_0
 
         self.weights = weights
 
-        if weights is None and hasattr(self,'alphav_0'):
+        if weights is None and self.alphav_0 is not None:
             self.resample() # intialize from prior
+
+    def _get_alphav_0(self):
+        return self._alphav_0
+
+    def _set_alphav_0(self,alphav_0):
+        if alphav_0 is not None:
+            self._alphav_0 = alphav_0
+            self.K = len(alphav_0)
+        elif None not in (self.K, self.alpha_0):
+            self._alphav_0 = np.repeat(self.alpha_0/self.K,self.K)
+        else:
+            self._alphav_0 = None
+
+    alphav_0 = property(_get_alphav_0,_set_alphav_0)
 
     @property
     def params(self):
@@ -1036,7 +1046,7 @@ class Categorical(GibbsSampling, MeanField, MaxLikelihood, MAP):
 
     @property
     def num_parameters(self):
-        return self.K
+        return len(self.weights)
 
     def rvs(self,size=None):
         return sample_discrete(self.weights,size)
@@ -1051,7 +1061,7 @@ class Categorical(GibbsSampling, MeanField, MaxLikelihood, MAP):
 
     def resample(self,data=[]):
         'data is an array of indices (i.e. labels) or a list of such arrays'
-        hypparams = self._posterior_hypparams(*self._get_statistics(data,self.K))
+        hypparams = self._posterior_hypparams(*self._get_statistics(data,len(self.alphav_0)))
         self.weights = np.random.dirichlet(np.where(hypparams>1e-2,hypparams,1e-2))
         self._alpha_mf = self.weights * self.alphav_0.sum()
         return self
@@ -1075,7 +1085,7 @@ class Categorical(GibbsSampling, MeanField, MaxLikelihood, MAP):
     def get_vlb(self):
         # return avg energy plus entropy, our contribution to the vlb
         # see Eq. 10.66 in Bishop
-        logpitilde = self.expected_log_likelihood(np.arange(self.K))
+        logpitilde = self.expected_log_likelihood(np.arange(len(self.alphav_0)))
         q_entropy = -1* ((logpitilde*(self._alpha_mf-1)).sum() \
                 + special.gammaln(self._alpha_mf.sum()) - special.gammaln(self._alpha_mf).sum())
         p_avgengy = special.gammaln(self.alphav_0.sum()) - special.gammaln(self.alphav_0).sum() \
@@ -1084,7 +1094,7 @@ class Categorical(GibbsSampling, MeanField, MaxLikelihood, MAP):
         return p_avgengy + q_entropy
 
     def expected_log_likelihood(self,x):
-        # this may only make sense if np.all(x == np.arange(self.K))...
+        # this may only make sense if np.all(x == np.arange(K))...
         return special.digamma(self._alpha_mf[x]) - special.digamma(self._alpha_mf.sum())
 
     @staticmethod
