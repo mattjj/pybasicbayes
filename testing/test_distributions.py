@@ -14,7 +14,7 @@ class TestGeometric(BigDataGibbsTester,GewekeGibbsTester):
 
     @property
     def hyperparameter_settings(self):
-        return (dict(alpha_0=2,beta_0=20),dict(alpha_0=5,beta_0=50))
+        return (dict(alpha_0=2,beta_0=20),dict(alpha_0=5,beta_0=5))
 
     def params_close(self,d1,d2):
         return np.allclose(d1.p,d2.p,rtol=0.05)
@@ -24,7 +24,7 @@ class TestGeometric(BigDataGibbsTester,GewekeGibbsTester):
 
     @property
     def geweke_pval(self):
-        return 0.1
+        return 0.5
 
 @attr('poisson')
 class TestPoisson(BigDataGibbsTester,GewekeGibbsTester):
@@ -136,11 +136,14 @@ class TestGaussian(BigDataGibbsTester,GewekeGibbsTester):
 
     @property
     def geweke_data_size(self):
-        return 10
+        return 1
 
     @property
     def geweke_pval(self):
-        return 0.1
+        return 0.05
+
+    def geweke_numerical_slice(self,setting_idx):
+        return slice(0,2)
 
 @attr('diagonalgaussian')
 class TestDiagonalGaussian(BigDataGibbsTester,GewekeGibbsTester):
@@ -160,15 +163,18 @@ class TestDiagonalGaussian(BigDataGibbsTester,GewekeGibbsTester):
 
     @property
     def geweke_nsamples(self):
-        return 30000
+        return 50000
 
     @property
     def geweke_data_size(self):
-        return 10
+        return 2
 
     @property
     def geweke_pval(self):
-        return 0.1
+        return 0.05
+
+    def geweke_numerical_slice(self,setting_idx):
+        return slice(0,2)
 
 @attr('CRP')
 class TestCRP(BigDataGibbsTester):

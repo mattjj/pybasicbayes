@@ -221,6 +221,19 @@ class Gaussian(_GaussianBase, GibbsSampling, MeanField, Collapsed, MAP, MaxLikel
         else:
             return mu_0, sigma_0, kappa_0, nu_0
 
+    def empirical_bayes(self,data):
+        D = getdatadimension(data)
+        self.kappa_0 = 0
+        self.nu_0 = 0
+        self.mu_0 = np.zeros(D)
+        self.sigma_0 = np.zeros((D,D))
+        self.mu_0, self.sigma_0, self.kappa_0, self.nu_0 = \
+                self._posterior_hypparams(*self._get_statistics(data))
+        if (self.mu,self.sigma) == (None,None):
+            self.resample() # intialize from prior
+
+        return self
+
     ### Gibbs sampling
 
     def resample(self,data=[]):
