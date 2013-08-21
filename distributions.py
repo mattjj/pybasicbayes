@@ -1083,8 +1083,9 @@ class Categorical(GibbsSampling, MeanField, MaxLikelihood, MAP):
 
         return p_avgengy + q_entropy
 
-    def expected_log_likelihood(self,x):
-        # this may only make sense if np.all(x == np.arange(self.K))...
+    def expected_log_likelihood(self,x=None):
+        # usually called when np.all(x == np.arange(self.K))
+        x = x if x is not None else slice(None)
         return special.digamma(self._alpha_mf[x]) - special.digamma(self._alpha_mf.sum())
 
     @staticmethod
@@ -1190,6 +1191,10 @@ class Multinomial(Categorical):
                 return np.zeros(K,dtype=int),
             return np.concatenate(data).sum(0),
 
+    def expected_log_likelihood(self,x=None):
+        if x is not None and (not x.ndim == 2 or not np.all(x == np.eye(x.shape[0]))):
+            raise NotImplementedError # TODO nontrivial expected log likelihood
+        return super(Multinomial,self).expected_log_likelihood()
 
 class Geometric(GibbsSampling, Collapsed):
     '''
