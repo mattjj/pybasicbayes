@@ -1093,17 +1093,15 @@ class Categorical(GibbsSampling, MeanField, MaxLikelihood, MAP):
 
         return p_avgengy + q_entropy
 
-    def expected_log_likelihood(self,x):
-        # this may only make sense if np.all(x == np.arange(K))...
+    def expected_log_likelihood(self,x=None):
+        # usually called when np.all(x == np.arange(self.K))
+        x = x if x is not None else slice(None)
         return special.digamma(self._alpha_mf[x]) - special.digamma(self._alpha_mf.sum())
 
     @staticmethod
     def _get_weighted_statistics(data,weights):
         # data is just a placeholder; technically it should always be
-        # np.arange(K)[na,:].repeat(N,axis=0)
-        assert isinstance(weights,np.ndarray) or \
-                (isinstance(weights,list) and all(isinstance(w,np.ndarray) for w in weights))
-
+        # np.arange(K)[na,:].repeat(N,axis=0), but this code ignores it
         if isinstance(weights,np.ndarray):
             counts = np.atleast_2d(weights).sum(0)
         else:
@@ -1171,15 +1169,18 @@ class CategoricalAndConcentration(Categorical):
         return super(CategoricalAndConcentration,self).meanfieldupdate(*args,**kwargs)
 
     def max_likelihood(self,*args,**kwargs):
-        raise NotImplementedError, "max_likelihood doesn't make sense on this object"
+        raise NotImplementedError
 
 
 class Multinomial(Categorical):
     '''
-    Similar to Categorical, but data are counts.
+    Like Categorical but the data are counts, so _get_statistics is overridden
+    (though _get_weighted_statistics can stay the same!). log_likelihood also
+    changes since, just like for the binomial special case, we sum over all
+    possible orderings.
 
     For example, if K == 3, then a sample with n=5 might be
-        [2,2,1]
+        array([2,2,1])
 
     A Poisson process conditioned on the number of points emitted.
     '''
@@ -1189,35 +1190,21 @@ class Multinomial(Categorical):
                 + special.gammaln(x.sum(1)+1) - special.gammaln(x+1).sum(1)
 
     def rvs(self,size=None):
-        raise NotImplementedError
-
-    def resample(self,data=[]):
-        'data is an array of counts or a list of such arrays)'
-        # resample is implemented by hooking into the parent's calls to
-        # _get_statistics (see below)
-        return super(Multinomial,self).resample(data)
+        return np.bincount(super(Multinomial,self).rvs(size=size),minlength=self.K)
 
     @staticmethod
     def _get_statistics(data,K):
-        # the passed in data should be like Categorical data that's already been
-        # counted (e.g. with np.bincount), so here we just sum things and pass
-        # them to the parent's methods
-        warn('untested')
         if isinstance(data,np.ndarray):
-            assert data.ndim == 2
-            return data.sum(0),
+            return np.atleast_2d(data).sum(0),
         else:
             if len(data) == 0:
                 return np.zeros(K,dtype=int),
             return np.concatenate(data).sum(0),
 
-    @staticmethod
-    def _get_weighted_statistics(data,weights):
-        raise NotImplementedError # TODO
-
-    def max_likelihood(self,counts,weights=None):
-        raise NotImplementedError # TODO
-
+    def expected_log_likelihood(self,x=None):
+        if x is not None and (not x.ndim == 2 or not np.all(x == np.eye(x.shape[0]))):
+            raise NotImplementedError # TODO nontrivial expected log likelihood
+        return super(Multinomial,self).expected_log_likelihood()
 
 class Geometric(GibbsSampling, Collapsed):
     '''
