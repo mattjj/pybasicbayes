@@ -1142,14 +1142,23 @@ class CategoricalAndConcentration(Categorical):
 
         pi ~ Dir(concentration/K)
     '''
-    def __init__(self,a_0,b_0,K,concentration=None,weights=None):
-        self.concentration = GammaCompoundDirichlet(a_0=a_0,b_0=b_0,K=K,concentration=concentration)
-        super(CategoricalAndConcentration,self).__init__(alpha_0=self.concentration.concentration,
+    def __init__(self,a_0,b_0,K,alpha_0=None,weights=None):
+        self.alpha_0_obj = GammaCompoundDirichlet(a_0=a_0,b_0=b_0,K=K,concentration=alpha_0)
+        super(CategoricalAndConcentration,self).__init__(alpha_0=self.alpha_0,
                 K=K,weights=weights)
+
+    def _get_alpha_0(self):
+        return self.alpha_0_obj.concentration
+
+    def _set_alpha_0(self,alpha_0):
+        self.alpha_0_obj.concentration = alpha_0
+        self.alphav_0 = np.repeat(alpha_0/self.K,self.K)
+
+    alpha_0 = property(_get_alpha_0, _set_alpha_0)
 
     @property
     def params(self):
-        return dict(concentration=self.concentration,weights=self.weights)
+        return dict(alpha_0=self.alpha_0,weights=self.weights)
 
     @property
     def hypparams(self):
@@ -1157,8 +1166,8 @@ class CategoricalAndConcentration(Categorical):
 
     def resample(self,data=[]):
         counts, = self._get_statistics(data,self.K)
-        self.concentration.resample(counts)
-        self.alphav_0 = np.repeat(self.concentration.concentration/self.K,self.K)
+        self.alpha_0_obj.resample(counts)
+        self.alpha_0 = self.alpha_0 # for the effect on alphav_0
         return super(CategoricalAndConcentration,self).resample(data)
 
     def resample_just_weights(self,data=[]):
@@ -1205,6 +1214,11 @@ class Multinomial(Categorical):
         if x is not None and (not x.ndim == 2 or not np.all(x == np.eye(x.shape[0]))):
             raise NotImplementedError # TODO nontrivial expected log likelihood
         return super(Multinomial,self).expected_log_likelihood()
+
+
+class MultinomialAndConcentration(CategoricalAndConcentration,Multinomial):
+    pass
+
 
 class Geometric(GibbsSampling, Collapsed):
     '''
