@@ -1025,17 +1025,23 @@ class Categorical(GibbsSampling, MeanField, MaxLikelihood, MAP):
         if weights is None and self.alphav_0 is not None:
             self.resample() # intialize from prior
 
+    def _get_alpha_0(self):
+        return self._alpha_0
+
+    def _set_alpha_0(self,alpha_0):
+        self._alpha_0 = alpha_0
+        if None not in (self.K, self._alpha_0):
+            self.alphav_0 = np.repeat(self._alpha_0/self.K,self.K)
+
+    alpha_0 = property(_get_alpha_0,_set_alpha_0)
+
     def _get_alphav_0(self):
-        return self._alphav_0
+        return self._alphav_0 if hasattr(self,'_alphav_0') else None
 
     def _set_alphav_0(self,alphav_0):
         if alphav_0 is not None:
             self._alphav_0 = alphav_0
             self.K = len(alphav_0)
-        elif None not in (self.K, self.alpha_0):
-            self._alphav_0 = np.repeat(self.alpha_0/self.K,self.K)
-        else:
-            self._alphav_0 = None
 
     alphav_0 = property(_get_alphav_0,_set_alphav_0)
 
