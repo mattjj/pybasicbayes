@@ -256,6 +256,14 @@ class MixtureDistribution(Mixture, GibbsSampling, Distribution):
     This makes a Mixture act like a Distribution for use in other compound models
     '''
 
+    @property
+    def params(self):
+        return dict(weights=self.weights.params,components=[c.params for c in self.components])
+
+    @property
+    def hypparams(self):
+        return dict(weights=self.weights.hypparams,components=[c.hypparams for c in self.components])
+
     def log_likelihood(self,x):
         return self._log_likelihoods(x)
 
