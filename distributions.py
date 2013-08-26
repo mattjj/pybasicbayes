@@ -1628,12 +1628,14 @@ class NegativeBinomialIntegerR(NegativeBinomialFixedR, GibbsSampling, MaxLikelih
     Nonconjugate Discrete+Beta prior
     r_discrete_distribution is an array where index i is p(r=i+1)
     '''
-    def __init__(self,r=None,p=None,r_discrete_distn=None,r_support=None,
-            alpha_0=None,beta_0=None):
+    def __init__(self,r_discrete_distn=None,r_support=None,
+            alpha_0=None,beta_0=None,r=None,p=None):
         self.r_support = r_support
         self.r_discrete_distn = r_discrete_distn
         self.alpha_0 = alpha_0
         self.beta_0 = beta_0
+        self.r = r
+        self.p = p
 
         if (r,p) == (None,None) and None not in (r_discrete_distn,alpha_0,beta_0):
             self.resample() # intialize from prior
