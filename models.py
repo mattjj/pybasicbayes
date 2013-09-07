@@ -18,14 +18,17 @@ class Mixture(ModelGibbsSampling, ModelMeanField, ModelEM):
     '''
     This class is for mixtures of other distributions.
     '''
-    def __init__(self,components,alpha_0=None,a_0=None,b_0=None,weights=None):
+    def __init__(self,components,alpha_0=None,a_0=None,b_0=None,weights=None,weights_obj=None):
         assert len(components) > 0
-        assert (alpha_0 is not None) ^ (a_0 is not None and b_0 is not None)
+        assert (alpha_0 is not None) ^ (a_0 is not None and b_0 is not None) \
+                ^ (weights_obj is not None)
 
         self.components = components
 
         if alpha_0 is not None:
             self.weights = Categorical(alpha_0=alpha_0,K=len(components),weights=weights)
+        elif weights_obj is not None:
+            self.weights = weights_obj
         else:
             self.weights = CategoricalAndConcentration(
                     a_0=a_0,b_0=b_0,K=len(components),weights=weights)
@@ -254,6 +257,14 @@ class MixtureDistribution(Mixture, GibbsSampling, Distribution):
     '''
     This makes a Mixture act like a Distribution for use in other compound models
     '''
+
+    @property
+    def params(self):
+        return dict(weights=self.weights.params,components=[c.params for c in self.components])
+
+    @property
+    def hypparams(self):
+        return dict(weights=self.weights.hypparams,components=[c.hypparams for c in self.components])
 
     def log_likelihood(self,x):
         return self._log_likelihoods(x)

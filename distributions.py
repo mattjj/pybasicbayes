@@ -77,10 +77,13 @@ class _GaussianBase(object):
     def log_likelihood(self,x):
         mu, sigma, D = self.mu, self.sigma, self.mu.shape[0]
         sigma_chol = self.sigma_chol
-        x = np.reshape(x,(-1,D)) - mu
+        bads = np.isnan(np.atleast_2d(x)).any(axis=1)
+        x = np.nan_to_num(x).reshape((-1,D)) - mu
         xs = scipy.linalg.solve_triangular(sigma_chol,x.T,lower=True)
-        return -1./2. * inner1d(xs.T,xs.T) - D/2*np.log(2*np.pi) \
+        out = -1./2. * inner1d(xs.T,xs.T) - D/2*np.log(2*np.pi) \
                 - np.log(sigma_chol.diagonal()).sum()
+        out[bads] = 0
+        return out
 
     ### plotting
 
@@ -1013,18 +1016,34 @@ class Categorical(GibbsSampling, MeanField, MaxLikelihood, MAP):
         weights, a vector encoding a finite pmf
     '''
     def __init__(self,weights=None,alpha_0=None,K=None,alphav_0=None,alpha_mf=None):
-        if alphav_0 is not None:
-            self.K = alphav_0.shape[0]
-            self.alphav_0 = alphav_0
-        else:
-            self.K = K
-            if alpha_0 is not None:
-                self.alphav_0 = np.repeat(alpha_0/K,K)
+        self.K = K
+        self.alpha_0 = alpha_0
+        self.alphav_0 = alphav_0
 
         self.weights = weights
 
-        if weights is None and hasattr(self,'alphav_0'):
+        if weights is None and self.alphav_0 is not None:
             self.resample() # intialize from prior
+
+    def _get_alpha_0(self):
+        return self._alpha_0
+
+    def _set_alpha_0(self,alpha_0):
+        self._alpha_0 = alpha_0
+        if None not in (self.K, self._alpha_0):
+            self.alphav_0 = np.repeat(self._alpha_0/self.K,self.K)
+
+    alpha_0 = property(_get_alpha_0,_set_alpha_0)
+
+    def _get_alphav_0(self):
+        return self._alphav_0 if hasattr(self,'_alphav_0') else None
+
+    def _set_alphav_0(self,alphav_0):
+        if alphav_0 is not None:
+            self._alphav_0 = alphav_0
+            self.K = len(alphav_0)
+
+    alphav_0 = property(_get_alphav_0,_set_alphav_0)
 
     @property
     def params(self):
@@ -1036,7 +1055,7 @@ class Categorical(GibbsSampling, MeanField, MaxLikelihood, MAP):
 
     @property
     def num_parameters(self):
-        return self.K
+        return len(self.weights)
 
     def rvs(self,size=None):
         return sample_discrete(self.weights,size)
@@ -1051,7 +1070,7 @@ class Categorical(GibbsSampling, MeanField, MaxLikelihood, MAP):
 
     def resample(self,data=[]):
         'data is an array of indices (i.e. labels) or a list of such arrays'
-        hypparams = self._posterior_hypparams(*self._get_statistics(data,self.K))
+        hypparams = self._posterior_hypparams(*self._get_statistics(data,len(self.alphav_0)))
         self.weights = np.random.dirichlet(np.where(hypparams>1e-2,hypparams,1e-2))
         self._alpha_mf = self.weights * self.alphav_0.sum()
         return self
@@ -1075,7 +1094,7 @@ class Categorical(GibbsSampling, MeanField, MaxLikelihood, MAP):
     def get_vlb(self):
         # return avg energy plus entropy, our contribution to the vlb
         # see Eq. 10.66 in Bishop
-        logpitilde = self.expected_log_likelihood(np.arange(self.K))
+        logpitilde = self.expected_log_likelihood(np.arange(len(self.alphav_0)))
         q_entropy = -1* ((logpitilde*(self._alpha_mf-1)).sum() \
                 + special.gammaln(self._alpha_mf.sum()) - special.gammaln(self._alpha_mf).sum())
         p_avgengy = special.gammaln(self.alphav_0.sum()) - special.gammaln(self.alphav_0).sum() \
@@ -1083,17 +1102,15 @@ class Categorical(GibbsSampling, MeanField, MaxLikelihood, MAP):
 
         return p_avgengy + q_entropy
 
-    def expected_log_likelihood(self,x):
-        # this may only make sense if np.all(x == np.arange(self.K))...
+    def expected_log_likelihood(self,x=None):
+        # usually called when np.all(x == np.arange(self.K))
+        x = x if x is not None else slice(None)
         return special.digamma(self._alpha_mf[x]) - special.digamma(self._alpha_mf.sum())
 
     @staticmethod
     def _get_weighted_statistics(data,weights):
         # data is just a placeholder; technically it should always be
-        # np.arange(K)[na,:].repeat(N,axis=0)
-        assert isinstance(weights,np.ndarray) or \
-                (isinstance(weights,list) and all(isinstance(w,np.ndarray) for w in weights))
-
+        # np.arange(K)[na,:].repeat(N,axis=0), but this code ignores it
         if isinstance(weights,np.ndarray):
             counts = np.atleast_2d(weights).sum(0)
         else:
@@ -1134,14 +1151,23 @@ class CategoricalAndConcentration(Categorical):
 
         pi ~ Dir(concentration/K)
     '''
-    def __init__(self,a_0,b_0,K,concentration=None,weights=None):
-        self.concentration = GammaCompoundDirichlet(a_0=a_0,b_0=b_0,K=K,concentration=concentration)
-        super(CategoricalAndConcentration,self).__init__(alpha_0=self.concentration.concentration,
+    def __init__(self,a_0,b_0,K,alpha_0=None,weights=None):
+        self.alpha_0_obj = GammaCompoundDirichlet(a_0=a_0,b_0=b_0,K=K,concentration=alpha_0)
+        super(CategoricalAndConcentration,self).__init__(alpha_0=self.alpha_0,
                 K=K,weights=weights)
+
+    def _get_alpha_0(self):
+        return self.alpha_0_obj.concentration
+
+    def _set_alpha_0(self,alpha_0):
+        self.alpha_0_obj.concentration = alpha_0
+        self.alphav_0 = np.repeat(alpha_0/self.K,self.K)
+
+    alpha_0 = property(_get_alpha_0, _set_alpha_0)
 
     @property
     def params(self):
-        return dict(concentration=self.concentration,weights=self.weights)
+        return dict(alpha_0=self.alpha_0,weights=self.weights)
 
     @property
     def hypparams(self):
@@ -1149,8 +1175,8 @@ class CategoricalAndConcentration(Categorical):
 
     def resample(self,data=[]):
         counts, = self._get_statistics(data,self.K)
-        self.concentration.resample(counts)
-        self.alphav_0 = np.repeat(self.concentration.concentration/self.K,self.K)
+        self.alpha_0_obj.resample(counts)
+        self.alpha_0 = self.alpha_0 # for the effect on alphav_0
         return super(CategoricalAndConcentration,self).resample(data)
 
     def resample_just_weights(self,data=[]):
@@ -1161,15 +1187,18 @@ class CategoricalAndConcentration(Categorical):
         return super(CategoricalAndConcentration,self).meanfieldupdate(*args,**kwargs)
 
     def max_likelihood(self,*args,**kwargs):
-        raise NotImplementedError, "max_likelihood doesn't make sense on this object"
+        raise NotImplementedError
 
 
 class Multinomial(Categorical):
     '''
-    Similar to Categorical, but data are counts.
+    Like Categorical but the data are counts, so _get_statistics is overridden
+    (though _get_weighted_statistics can stay the same!). log_likelihood also
+    changes since, just like for the binomial special case, we sum over all
+    possible orderings.
 
     For example, if K == 3, then a sample with n=5 might be
-        [2,2,1]
+        array([2,2,1])
 
     A Poisson process conditioned on the number of points emitted.
     '''
@@ -1179,34 +1208,25 @@ class Multinomial(Categorical):
                 + special.gammaln(x.sum(1)+1) - special.gammaln(x+1).sum(1)
 
     def rvs(self,size=None):
-        raise NotImplementedError
-
-    def resample(self,data=[]):
-        'data is an array of counts or a list of such arrays)'
-        # resample is implemented by hooking into the parent's calls to
-        # _get_statistics (see below)
-        return super(Multinomial,self).resample(data)
+        return np.bincount(super(Multinomial,self).rvs(size=size),minlength=self.K)
 
     @staticmethod
     def _get_statistics(data,K):
-        # the passed in data should be like Categorical data that's already been
-        # counted (e.g. with np.bincount), so here we just sum things and pass
-        # them to the parent's methods
-        warn('untested')
         if isinstance(data,np.ndarray):
-            assert data.ndim == 2
-            return data.sum(0),
+            return np.atleast_2d(data).sum(0),
         else:
             if len(data) == 0:
                 return np.zeros(K,dtype=int),
             return np.concatenate(data).sum(0),
 
-    @staticmethod
-    def _get_weighted_statistics(data,weights):
-        raise NotImplementedError # TODO
+    def expected_log_likelihood(self,x=None):
+        if x is not None and (not x.ndim == 2 or not np.all(x == np.eye(x.shape[0]))):
+            raise NotImplementedError # TODO nontrivial expected log likelihood
+        return super(Multinomial,self).expected_log_likelihood()
 
-    def max_likelihood(self,counts,weights=None):
-        raise NotImplementedError # TODO
+
+class MultinomialAndConcentration(CategoricalAndConcentration,Multinomial):
+    pass
 
 
 class Geometric(GibbsSampling, Collapsed):
@@ -1608,12 +1628,14 @@ class NegativeBinomialIntegerR(NegativeBinomialFixedR, GibbsSampling, MaxLikelih
     Nonconjugate Discrete+Beta prior
     r_discrete_distribution is an array where index i is p(r=i+1)
     '''
-    def __init__(self,r=None,p=None,r_discrete_distn=None,r_support=None,
-            alpha_0=None,beta_0=None):
+    def __init__(self,r_discrete_distn=None,r_support=None,
+            alpha_0=None,beta_0=None,r=None,p=None):
         self.r_support = r_support
         self.r_discrete_distn = r_discrete_distn
         self.alpha_0 = alpha_0
         self.beta_0 = beta_0
+        self.r = r
+        self.p = p
 
         if (r,p) == (None,None) and None not in (r_discrete_distn,alpha_0,beta_0):
             self.resample() # intialize from prior
