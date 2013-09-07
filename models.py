@@ -132,8 +132,7 @@ class Mixture(ModelGibbsSampling, ModelMeanField, ModelEM):
                                 for c,r in zip(self.components, l.r.T)])
 
         # add in symmetry factor (if we're actually symmetric)
-        if len(set(self.weights.weights)) == 1 and \
-                len(set(type(c) for c in self.components)) == 1:
+        if len(set(type(c) for c in self.components)) == 1:
             vlb += special.gammaln(len(self.components)+1)
 
         return vlb
