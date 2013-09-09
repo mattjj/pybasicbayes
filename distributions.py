@@ -1094,7 +1094,7 @@ class Categorical(GibbsSampling, MeanField, MaxLikelihood, MAP):
     def get_vlb(self):
         # return avg energy plus entropy, our contribution to the vlb
         # see Eq. 10.66 in Bishop
-        logpitilde = self.expected_log_likelihood(np.arange(len(self.alphav_0)))
+        logpitilde = self.expected_log_likelihood() # default is on np.arange(self.K)
         q_entropy = -1* ((logpitilde*(self._alpha_mf-1)).sum() \
                 + special.gammaln(self._alpha_mf.sum()) - special.gammaln(self._alpha_mf).sum())
         p_avgengy = special.gammaln(self.alphav_0.sum()) - special.gammaln(self.alphav_0).sum() \
