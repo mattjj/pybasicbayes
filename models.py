@@ -18,14 +18,17 @@ class Mixture(ModelGibbsSampling, ModelMeanField, ModelEM):
     '''
     This class is for mixtures of other distributions.
     '''
-    def __init__(self,components,alpha_0=None,a_0=None,b_0=None,weights=None):
+    def __init__(self,components,alpha_0=None,a_0=None,b_0=None,weights=None,weights_obj=None):
         assert len(components) > 0
-        assert (alpha_0 is not None) ^ (a_0 is not None and b_0 is not None)
+        assert (alpha_0 is not None) ^ (a_0 is not None and b_0 is not None) \
+                ^ (weights_obj is not None)
 
         self.components = components
 
         if alpha_0 is not None:
             self.weights = Categorical(alpha_0=alpha_0,K=len(components),weights=weights)
+        elif weights_obj is not None:
+            self.weights = weights_obj
         else:
             self.weights = CategoricalAndConcentration(
                     a_0=a_0,b_0=b_0,K=len(components),weights=weights)
@@ -132,8 +135,7 @@ class Mixture(ModelGibbsSampling, ModelMeanField, ModelEM):
                                 for c,r in zip(self.components, l.r.T)])
 
         # add in symmetry factor (if we're actually symmetric)
-        if len(set(self.weights.weights)) == 1 and \
-                len(set(type(c) for c in self.components)) == 1:
+        if len(set(type(c) for c in self.components)) == 1:
             vlb += special.gammaln(len(self.components)+1)
 
         return vlb
