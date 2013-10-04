@@ -421,7 +421,7 @@ class GaussianFixedMean(_GaussianBase, GibbsSampling, MaxLikelihood):
         else:
             neff = sum(w.sum() for w in weights)
             if neff > 0:
-                sumsq = sum((d-self.mu).T.dot(w[:,na]*(d-self.mu)) for w,d in zip(weights,data)) / neff
+                sumsq = sum((d-self.mu).T.dot(w[:,na]*(d-self.mu)) for w,d in zip(weights,data))
             else:
                 sumsq = None
 
