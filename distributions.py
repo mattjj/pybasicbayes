@@ -1468,7 +1468,9 @@ class _NegativeBinomialBase(Distribution):
     def log_sf(self,x):
         scalar = not isinstance(x,np.ndarray)
         x = np.atleast_1d(x)
+        errs = np.seterr(divide='ignore')
         ret = np.log(special.betainc(x+1,self.r,self.p))
+        np.seterr(**errs)
         ret[x < 0] = np.log(1.)
         if scalar:
             return ret[0]
