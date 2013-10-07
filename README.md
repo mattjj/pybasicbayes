@@ -59,7 +59,7 @@ inference algorithms, we can use both together in a hybrid algorithm.
 
 ```python
 import copy
-from pybasicbayes.util import progprint_xrange
+from pybasicbayes.util.text import progprint_xrange
 
 allscores = [] # variational lower bounds on the marginal data log likelihood
 allmodels = []
