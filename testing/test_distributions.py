@@ -232,20 +232,40 @@ class TestGaussianFixedCov(BigDataGibbsTester,GewekeGibbsTester):
     def geweke_pval(self):
         return 0.05
 
-# @attr('gaussiannonconj')
-# class TestGaussianNonConj(BigDataGibbsTester):
-#     @property
-#     def distribution_class(self):
-#         return distributions.GaussianNonConj
+@attr('gaussiannonconj')
+class TestGaussianNonConj(BigDataGibbsTester,GewekeGibbsTester):
+    @property
+    def distribution_class(self):
+        return distributions.GaussianNonConj
 
-#     @property
-#     def hyperparameter_settings(self):
-#         return (dict(mu_0=np.zeros(2),mu_sigma_0=2*np.eye(2),nu_0=5,sigma_lmbda_0=np.eye(2)),)
+    @property
+    def hyperparameter_settings(self):
+        return (dict(mu_0=np.zeros(2),mu_lmbda_0=2*np.eye(2),nu_0=5,sigma_lmbda_0=np.eye(2)),)
 
-#     def params_close(self,d1,d2):
-#         return np.linalg.norm(d1.mu-d2.mu) < 0.1 and np.linalg.norm(d1.sigma-d2.sigma) < 0.25
+    def params_close(self,d1,d2):
+        return np.linalg.norm(d1.mu-d2.mu) < 0.1 and np.linalg.norm(d1.sigma-d2.sigma) < 0.25
 
-#     # TODO geweke
+    def geweke_statistics(self,d,data):
+        return np.concatenate((d.mu,np.diag(d.sigma)))
+
+    @property
+    def geweke_nsamples(self):
+        return 30000
+
+    @property
+    def geweke_data_size(self):
+        return 1
+
+    @property
+    def geweke_pval(self):
+        return 0.05
+
+    def geweke_numerical_slice(self,d,setting_idx):
+        return slice(0,d.mu.shape[0])
+
+    @property
+    def resample_kwargs(self):
+        return dict(niter=10)
 
 @attr('CRP')
 class TestCRP(BigDataGibbsTester):

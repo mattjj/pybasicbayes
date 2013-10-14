@@ -76,6 +76,10 @@ class GewekeGibbsTester(DistributionTester):
         return slice(None)
 
     @property
+    def resample_kwargs(self):
+        return {}
+
+    @property
     def geweke_num_statistic_fails_to_tolerate(self):
         return 1
 
@@ -117,7 +121,7 @@ class GewekeGibbsTester(DistributionTester):
             d = self.distribution_class(**hypparam_dict)
             data = d.rvs(data_size)
             for i in xrange(nsamples):
-                d.resample(data)
+                d.resample(data,**self.resample_kwargs)
                 data = d.rvs(data_size)
                 gibbs_statistics[i] = self.geweke_statistics(d,data)
 
@@ -137,7 +141,7 @@ class GewekeGibbsTester(DistributionTester):
         plt.savefig(figpath)
 
         assert num_statistic_fails <= self.geweke_num_statistic_fails_to_tolerate, \
-                'Geweke may have failed, check figures in %s (e.g. %s vs %s)' \
+                'Geweke MAY have failed, check FIGURES in %s (e.g. %s vs %s)' \
                 % ((os.path.dirname(figpath),) + example_violating_means)
 
 
