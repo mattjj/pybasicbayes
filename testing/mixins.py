@@ -72,7 +72,7 @@ class GewekeGibbsTester(DistributionTester):
     def geweke_pval(self):
         return 0.05
 
-    def geweke_numerical_slice(self,setting_idx):
+    def geweke_numerical_slice(self,distn,setting_idx):
         return slice(None)
 
     @property
@@ -94,6 +94,8 @@ class GewekeGibbsTester(DistributionTester):
         from matplotlib import pyplot as plt
         plt.ioff()
         fig = plt.figure()
+        figpath = self.geweke_figure_filepath(setting_idx)
+        mkdir(os.path.dirname(figpath))
 
         nsamples, data_size, ntrials = self.geweke_nsamples, \
                 self.geweke_data_size, self.geweke_ntrials
@@ -121,7 +123,7 @@ class GewekeGibbsTester(DistributionTester):
 
             testing.populations_eq_quantile_plot(forward_statistics,gibbs_statistics,fig=fig)
             try:
-                sl = self.geweke_numerical_slice(setting_idx)
+                sl = self.geweke_numerical_slice(d,setting_idx)
                 testing.assert_populations_eq_moments(
                         forward_statistics[...,sl],gibbs_statistics[...,sl],
                         pval=self.geweke_pval)
@@ -132,8 +134,6 @@ class GewekeGibbsTester(DistributionTester):
                 example_violating_means = forward_statistics.mean(0), gibbs_statistics.mean(0)
                 num_statistic_fails += 1
 
-        figpath = self.geweke_figure_filepath(setting_idx)
-        mkdir(os.path.dirname(figpath))
         plt.savefig(figpath)
 
         assert num_statistic_fails <= self.geweke_num_statistic_fails_to_tolerate, \
