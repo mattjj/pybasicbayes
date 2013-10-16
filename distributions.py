@@ -63,8 +63,8 @@ class _GaussianBase(object):
 
     @property
     def sigma_chol(self):
-        if self._sigma_chol is None:
-            self._sigma_chol = np.linalg.cholesky(self._sigma)
+        if not hasattr(self,'_sigma_chol') or self._sigma_chol is None:
+            self._sigma_chol = np.linalg.cholesky(self.sigma)
         return self._sigma_chol
 
     ### distribution stuff
@@ -378,20 +378,20 @@ class Gaussian(_GaussianBase, GibbsSampling, MeanField, Collapsed, MAP, MaxLikel
 
 
 class GaussianFixedMean(_GaussianBase, GibbsSampling, MaxLikelihood):
-    def __init__(self,mu=None,sigma=None,kappa_0=None,sigma_0=None):
+    def __init__(self,mu=None,sigma=None,nu_0=None,lmbda_0=None):
         self.sigma = sigma
 
         self.mu = mu
 
-        self.kappa_0 = kappa_0
-        self.sigma_0 = sigma_0
+        self.nu_0 = nu_0
+        self.lmbda_0 = lmbda_0
 
-        if sigma is None and None not in (kappa_0,sigma_0):
+        if sigma is None and None not in (nu_0,lmbda_0):
             self.resample() # initialize from prior
 
     @property
     def hypparams(self):
-        return dict(kappa_0=self.kappa_0,sigma_0=self.sigma_0)
+        return dict(nu_0=self.nu_0,lmbda_0=self.lmbda_0)
 
     @property
     def num_parameters(self):
@@ -428,13 +428,13 @@ class GaussianFixedMean(_GaussianBase, GibbsSampling, MaxLikelihood):
         return neff, sumsq
 
     def _posterior_hypparams(self,n,sumsq):
-        kappa_0, sigma_0 = self.kappa_0, self.sigma_0
+        nu_0, lmbda_0 = self.nu_0, self.lmbda_0
         if n > 0:
-            kappa_n = kappa_0 + n
-            sigma_n = self.sigma_0 + sumsq
-            return sigma_n, kappa_n
+            nu_0 = nu_0 + n
+            sigma_n = self.lmbda_0 + sumsq
+            return sigma_n, nu_0
         else:
-            return sigma_0, kappa_0
+            return lmbda_0, nu_0
 
     ### Gibbs sampling
 
@@ -559,14 +559,14 @@ class GaussianFixed(_FixedParamsMixin, Gaussian):
         self.mu = mu
         self.sigma = sigma
 
-
 class GaussianNonConj(_GaussianBase, GibbsSampling):
     def __init__(self,mu=None,sigma=None,
-            mu_0=None,mu_sigma_0=None,kappa_0=None,sigma_sigma_0=None):
-        self._sigma_distn = GaussianFixedMean(mu_0=mu_0,kappa_0=kappa_0,
-                sigma_0=sigma_sigma_0,sigma=sigma)
+            mu_0=None,mu_lmbda_0=None,nu_0=None,sigma_lmbda_0=None):
+        self._sigma_distn = GaussianFixedMean(mu=mu,
+                nu_0=nu_0,lmbda_0=sigma_lmbda_0,sigma=sigma)
         self._mu_distn = GaussianFixedCov(sigma=self._sigma_distn.sigma,
-                mu_0=mu_0,sigma_0=mu_sigma_0,mu=mu)
+                mu_0=mu_0,lmbda_0=mu_lmbda_0,mu=mu)
+        self._sigma_distn.mu = self._mu_distn.mu
 
     @property
     def hypparams(self):
@@ -574,17 +574,27 @@ class GaussianNonConj(_GaussianBase, GibbsSampling):
         d.update(**self._sigma_distn.hypparams)
         return d
 
-    @property
-    def mu(self):
+    def _get_mu(self):
         return self._mu_distn.mu
 
-    @property
-    def sigma(self):
+    def _set_mu(self,val):
+        self._mu_distn.mu = val
+        self._sigma_distn.mu = val
+
+    mu = property(_get_mu,_set_mu)
+
+    def _get_sigma(self):
         return self._sigma_distn.sigma
+
+    def _set_sigma(self,val):
+        self._sigma_distn.sigma = val
+        self._mu_distn.sigma = val
+
+    sigma = property(_get_sigma,_set_sigma)
 
     ### Gibbs sampling
 
-    def resample(self,data=[],niter=30):
+    def resample(self,data=[],niter=5):
         if getdatasize(data) == 0:
             niter = 1
 
