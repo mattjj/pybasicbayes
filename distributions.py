@@ -1750,10 +1750,10 @@ class _NegativeBinomialIntegerRVariant(NegativeBinomialIntegerR):
                 N = data.shape[0]
                 data_sum = data.sum()
                 feasible = self.r_support <= data.min()
-                if np.any(feasible):
+                if not np.any(feasible):
                     print 'WARNING: %s: data has zero probability under the model, ignoring' \
                             % self.__class__.__name__
-                    data = data[data >= self.r_support.min()]
+                    return self.resample(data=data[data > self.r_support.min()])
                 r_probs = self.r_probs[feasible]
                 r_support = self.r_support[feasible]
                 log_marg_likelihoods = special.betaln(self.alpha_0 + data_sum - N*r_support,
