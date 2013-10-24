@@ -18,8 +18,6 @@ from util.stats import sample_niw, sample_invwishart, invwishart_entropy,\
         sample_discrete_from_log, getdatasize, flattendata,\
         getdatadimension, combinedata, multivariate_t_loglik
 
-# TODO reduce reallocation of parameters
-
 ##########
 #  Meta  #
 ##########
@@ -1239,7 +1237,7 @@ class MultinomialAndConcentration(CategoricalAndConcentration,Multinomial):
     pass
 
 
-class Geometric(GibbsSampling, Collapsed):
+class Geometric(GibbsSampling, Collapsed, MaxLikelihood):
     '''
     Geometric distribution with a conjugate beta prior.
     NOTE: the support is {1,2,3,...}
@@ -1300,10 +1298,35 @@ class Geometric(GibbsSampling, Collapsed):
             n = sum(d.shape[0] for d in data)
             tot = sum(d.sum() for d in data) - n
         else:
-            assert isinstance(data,int)
+            assert np.isscalar(data)
             n = 1
             tot = data-1
         return n, tot
+
+    def _get_weighted_statistics(self,data,weights):
+        if isinstance(data,np.ndarray):
+             n = weights.sum()
+             tot = weights.dot(data) - n
+        elif isinstance(data,list):
+            n = sum(w.sum() for w in weights)
+            tot = sum(w.dot(d) for w,d in zip(weights,data)) - n
+        else:
+            assert np.isscalar(data) and np.isscalar(weights)
+            n = weights
+            tot = weights*data - 1
+
+        return n, tot
+
+    ### Max likelihood
+
+    def max_likelihood(self,data,weights=None):
+        if weights is None:
+            n, tot = self._get_statistics(data)
+        else:
+            n, tot = self._get_weighted_statistics(data,weights)
+
+        self.p = n/tot
+
 
     ### Collapsed
 
@@ -1315,7 +1338,7 @@ class Geometric(GibbsSampling, Collapsed):
         return special.betaln(alpha,beta)
 
 
-class Poisson(GibbsSampling, Collapsed):
+class Poisson(GibbsSampling, Collapsed, MaxLikelihood):
     '''
     Poisson distribution with a conjugate Gamma prior.
 
@@ -1376,13 +1399,25 @@ class Poisson(GibbsSampling, Collapsed):
             n = sum(d.shape[0] for d in data)
             tot = sum(d.sum() for d in data)
         else:
-            assert isinstance(data,int)
+            assert np.isscalar(data)
             n = 1
             tot = data
+
         return n, tot
 
     def _get_weighted_statistics(self,data,weights):
-        pass # TODO
+        if isinstance(data,np.ndarray):
+            n = weights.sum()
+            tot = weights.dot(data)
+        elif isinstance(data,list):
+            n = sum(w.sum() for w in weights)
+            tot = sum(w.dot(d) for w,d in zip(weights,data))
+        else:
+            assert np.isscalar(data) and np.isscalar(weights)
+            n = weights
+            tot = weights*data
+
+        return n, tot
 
     ### Collapsed
 
@@ -1590,16 +1625,8 @@ class NegativeBinomialFixedR(_NegativeBinomialBase, GibbsSampling, MaxLikelihood
         return dict(alpha_0=self.alpha_0,beta_0=self.beta_0)
 
     def resample(self,data=[]):
-        # TODO TODO this should call self._get_statistics
-        if getdatasize(data) == 0:
-            self.p = np.random.beta(self.alpha_0,self.beta_0)
-        else:
-            data = flattendata(data)
-            N = len(data)
-            self.p = np.random.beta(self.alpha_0 + data.sum(), self.beta_0 + N*self.r)
-        return self
+        self.p = np.random.beta(*self._posterior_hypparams(*self._get_statistics(data)))
 
-    # TODO test
     def max_likelihood(self,data,weights=None):
         if weights is None:
             n, tot = self._get_statistics(data)
@@ -1616,14 +1643,17 @@ class NegativeBinomialFixedR(_NegativeBinomialBase, GibbsSampling, MaxLikelihood
             assert np.all(data >= 0)
             data = np.atleast_1d(data)
             n, tot = data.shape[0], data.sum()
-        else:
+        elif isinstance(data,list):
             assert all(np.all(d >= 0) for d in data)
             n = sum(d.shape[0] for d in data)
             tot = sum(d.sum() for d in data)
+        else:
+            assert np.isscalar(data)
+            n = 1
+            tot = data
 
         return n, tot
 
-    # TODO test
     def _get_weighted_statistics(self,data,weights):
         if isinstance(weights,np.ndarray):
             assert np.all(data >= 0)
@@ -1634,6 +1664,9 @@ class NegativeBinomialFixedR(_NegativeBinomialBase, GibbsSampling, MaxLikelihood
             tot = sum((d*w).sum() for d,w in zip(data,weights))
 
         return n, tot
+
+    def _posterior_hypparams(self,n,tot):
+        return self.alpha_0 + tot, self.beta_0 + n*self.r
 
 class NegativeBinomialIntegerR(NegativeBinomialFixedR, GibbsSampling, MaxLikelihood):
     '''
@@ -1679,6 +1712,8 @@ class NegativeBinomialIntegerR(NegativeBinomialFixedR, GibbsSampling, MaxLikelih
         for i in xrange(self.r-1):
             out += np.random.geometric(1-self.p,size=size)-1
         return out
+
+    # TODO rewrite this as conjugate prior
 
     def resample(self,data=[]):
         if getdatasize(data) == 0:
@@ -1731,6 +1766,7 @@ class NegativeBinomialIntegerR(NegativeBinomialFixedR, GibbsSampling, MaxLikelih
 
 class _NegativeBinomialFixedRVariant(NegativeBinomialFixedR):
     def resample(self,data=[]):
+        # TODO override get_statistics instead?
         if isinstance(data,np.ndarray):
             assert (data >= self.r).all()
             data = data-self.r
