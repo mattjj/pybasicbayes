@@ -1713,36 +1713,66 @@ class NegativeBinomialIntegerR(NegativeBinomialFixedR, GibbsSampling, MaxLikelih
             out += np.random.geometric(1-self.p,size=size)-1
         return out
 
-    # TODO rewrite this as conjugate prior
-
     def resample(self,data=[]):
-        if getdatasize(data) == 0:
-            self.p = np.random.beta(self.alpha_0,self.beta_0)
-            self.r = self.r_support[sample_discrete(self.r_probs)]
-        else:
-            # directly marginalize beta to sample r | data
-            data = flattendata(data)
-            N = data.shape[0]
-            data_sum = data.sum()
-            log_marg_likelihoods = special.betaln(self.alpha_0 + data_sum,
-                                                        self.beta_0 + self.r_support*N) \
-                                    - special.betaln(self.alpha_0, self.beta_0) \
-                                    + (special.gammaln(data[:,na]+self.r_support)
-                                            - special.gammaln(data[:,na]+1)
-                                            - special.gammaln(self.r_support)).sum(0)
-            log_marg_probs = np.log(self.r_probs) + log_marg_likelihoods
-            log_marg_probs -= log_marg_probs.max()
-            marg_probs = np.exp(log_marg_probs)
+        alpha_n, betas_n, posterior_discrete = self._posterior_hypparams(
+                *self._get_statistics(data))
 
-            self.r = self.r_support[sample_discrete(marg_probs)]
-            self.p = np.random.beta(self.alpha_0 + data_sum, self.beta_0 + N*self.r)
-        return self
+        r_idx = sample_discrete(posterior_discrete)
+        self.r = self.r_support[r_idx]
+        self.p = np.random.beta(alpha_n, betas_n[r_idx])
+
+    # NOTE: this class has a conjugate prior even though it's not in the
+    # exponential family, so I wrote _get_statistics and _get_weighted_statistics
+    # (which integrate out p) for the resample() and meanfield_update() methods,
+    # though these aren't statistics in the exponential family sense (e.g.
+    #  max_likelihood can't just call _get_weighted_statistics)
+
+    def _get_statistics(self,data):
+        n, tot = super(NegativeBinomialIntegerR,self)._get_statistics(data)
+        if n > 0:
+            # NOTE: form posterior hyperparameters for the p parameters here so
+            # we can integrate them out and get the statistics for r
+            alpha_n, betas_n = self.alpha_0 + tot, self.beta_0 + self.r_support*n
+            data = flattendata(data)
+            log_marg_likelihoods = \
+                    special.betaln(alpha_n, betas_n) \
+                        - special.betaln(self.alpha_0, self.beta_0) \
+                    + (special.gammaln(data[:,na]+self.r_support)
+                        - special.gammaln(data[:,na]+1) \
+                        - special.gammaln(self.r_support)).sum(0)
+        else:
+            log_marg_likelihoods = np.zeros_like(self.r_support)
+
+        return n, tot, log_marg_likelihoods
+
+    def _get_weighted_statistics(self,data,weights):
+        n, tot = super(NegativeBinomialIntegerR,self)._get_weighted_statistics(data,weights)
+        if n > 0:
+            alpha_n, betas_n = self.alpha_0 + tot, self.beta_0 + self.r_support*n
+            data, weights = flattendata(data), flattendata(weights)
+            log_marg_likelihoods = \
+                    special.betaln(alpha_n, betas_n) \
+                        - special.betaln(self.alpha_0, self.beta_0) \
+                    + (special.gammaln(data[:,na]+self.r_support)
+                        - special.gammaln(data[:,na]+1) \
+                        - special.gammaln(self.r_support)).dot(weights)
+        else:
+            log_marg_likelihoods = np.zeros_like(self.r_support)
+
+        return n, tot, log_marg_likelihoods
+
+    def _posterior_hypparams(self,n,tot,log_marg_likelihoods):
+        alpha_n = self.alpha_0 + tot
+        betas_n = self.beta_0 + n*self.r_support
+        log_posterior_discrete = np.log(self.r_probs) + log_marg_likelihoods
+        posterior_discrete = np.exp(log_posterior_discrete - log_posterior_discrete.max())
+        return alpha_n, betas_n, posterior_discrete
 
     def max_likelihood(self,data,weights=None):
         if weights is None:
-            n, tot = self._get_statistics(data)
+            n, tot = super(NegativeBinomialIntegerR,self)._get_statistics(data)
         else:
-            n, tot = self._get_weighted_statistics(data,weights)
+            n, tot = super(NegativeBinomialIntegerR,self)._get_weighted_statistics(data,weights)
 
         if n > 0:
             # NOTE: uses r_support for feasible region
