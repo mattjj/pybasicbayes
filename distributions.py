@@ -309,7 +309,7 @@ class Gaussian(_GaussianBase, GibbsSampling, MeanField, Collapsed, MAP, MaxLikel
         # see Eq. 10.65 in Bishop
         D = len(self.mu_0)
         chol = self.sigma_mf_chol
-        return special.digamma((self.nu_mf-np.arange(D))/2).sum() \
+        return special.digamma((self.nu_mf-np.arange(D))/2.).sum() \
                 + D*np.log(2) - 2*np.log(chol.diagonal()).sum()
 
     ### Collapsed
