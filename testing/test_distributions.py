@@ -4,7 +4,7 @@ import numpy as np
 from nose.plugins.attrib import attr
 
 from .. import distributions as distributions
-from mixins import BigDataGibbsTester, GewekeGibbsTester
+from mixins import BigDataGibbsTester, GewekeGibbsTester, mkdir
 
 @attr('geometric')
 class TestGeometric(BigDataGibbsTester,GewekeGibbsTester):
@@ -309,7 +309,6 @@ class TestDirichletCompoundGamma(object):
         import os
         figpath = os.path.join(os.path.dirname(__file__),'figures',
                 self.__class__.__name__,'weaklimittest.pdf')
-        if not os.path.exists(os.path.dirname(figpath)):
-            os.mkdir(os.path.dirname(figpath))
+        mkdir(os.path.dirname(figpath))
         plt.savefig(figpath)
 
