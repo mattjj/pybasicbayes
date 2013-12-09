@@ -33,9 +33,13 @@ class BigDataGibbsTester(DistributionTester):
     def big_data_repeats_per_setting(self):
         return 1
 
+    @property
+    def big_data_hyperparameter_settings(self):
+        return self.hyperparameter_settings
+
 
     def big_data_tests(self):
-        for setting_idx, hypparam_dict in enumerate(self.hyperparameter_settings):
+        for setting_idx, hypparam_dict in enumerate(self.big_data_hyperparameter_settings):
             for i in range(self.big_data_repeats_per_setting):
                 yield self.check_big_data, setting_idx, hypparam_dict
 
@@ -72,6 +76,10 @@ class GewekeGibbsTester(DistributionTester):
     def geweke_pval(self):
         return 0.05
 
+    @property
+    def geweke_hyperparameter_settings(self):
+        return self.hyperparameter_settings
+
     def geweke_numerical_slice(self,distn,setting_idx):
         return slice(None)
 
@@ -86,7 +94,7 @@ class GewekeGibbsTester(DistributionTester):
 
     @attr('slow')
     def geweke_tests(self):
-        for setting_idx, hypparam_dict in enumerate(self.hyperparameter_settings):
+        for setting_idx, hypparam_dict in enumerate(self.geweke_hyperparameter_settings):
             yield self.check_geweke, setting_idx, hypparam_dict
 
     def geweke_figure_filepath(self,setting_idx):
