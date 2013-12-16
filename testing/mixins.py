@@ -141,7 +141,7 @@ class GewekeGibbsTester(DistributionTester):
                         pval=self.geweke_pval)
             except AssertionError:
                 datapath = os.path.join(os.path.dirname(__file__),'figures',
-                        self.__class__.__name__,'setting_%d_trial_%d.pdf' % (setting_idx,trial))
+                        self.__class__.__name__,'setting_%d_trial_%d.npz' % (setting_idx,trial))
                 np.savez(datapath,fwd=forward_statistics,gibbs=gibbs_statistics)
                 example_violating_means = forward_statistics.mean(0), gibbs_statistics.mean(0)
                 num_statistic_fails += 1
