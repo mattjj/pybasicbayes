@@ -592,7 +592,7 @@ class GaussianNonConj(_GaussianBase, GibbsSampling):
 
     ### Gibbs sampling
 
-    def resample(self,data=[],niter=5):
+    def resample(self,data=[],niter=1):
         if getdatasize(data) == 0:
             niter = 1
 
