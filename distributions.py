@@ -41,6 +41,62 @@ class _FixedParamsMixin(Distribution):
     def copy_sample(self):
         return self
 
+class ProductDistribution(GibbsSampling,MaxLikelihood):
+    # TODO make a better __repr__
+
+    def __init__(self,distns,slices=None):
+        self._distns = distns
+        self._slices = slices if slices is not None else \
+                [slice(i,i+1) for i in xrange(len(distns))]
+
+    @property
+    def params(self):
+        return {idx:distn.params for idx,distn in enumerate(self._distns)}
+
+    @property
+    def hypparams(self):
+        return {idx:distn.hypparams for idx,distn in enumerate(self._distns)}
+
+    @staticmethod
+    def atleast_2d(data):
+        # NOTE: can't use np.atleast_2d because if it's 1D we want axis 1 to be
+        # the singleton
+        if data.ndim == 1:
+            return data.reshape((-1,1))
+        return data
+
+    def rvs(self,size=[]):
+        return np.concatenate([self.atleast_2d(distn.rvs(size=size))
+            for distn in self._distns],axis=-1)
+
+    def log_likelihood(self,x):
+        return sum(distn.log_likelihood(x[...,sl])
+                for distn,sl in zip(self._distns,self._slices))
+
+    def resample(self,data=[]):
+        assert isinstance(data,(np.ndarray,list))
+        if isinstance(data,np.ndarray):
+            for distn,sl in zip(self._distns,self._slices):
+                distn.resample(data[...,sl])
+        else:
+            for distn,sl in zip(self._distns,self._slices):
+                distn.resample([d[...,sl] for d in data])
+        return self
+
+    def max_likelihood(self,data,weights=None):
+        assert isinstance(data,(np.ndarray,list))
+        if isinstance(data,np.ndarray):
+            for distn,sl in zip(self._distns,self._slices):
+                distn.max_likelihood(data[...,sl],weights=weights)
+        else:
+            for distn,sl in zip(self._distns,self._slices):
+                distn.max_likelihood([d[...,sl] for d in data],weights=weights)
+        return self
+
+    @property
+    def num_parameters(self):
+        return sum(d.num_parameters for d in self._distns)
+
 ################
 #  Continuous  #
 ################
