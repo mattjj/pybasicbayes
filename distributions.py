@@ -14,7 +14,7 @@ from warnings import warn
 from abstractions import Distribution, BayesianDistribution, \
         GibbsSampling, MeanField, Collapsed, MaxLikelihood, MAP
 from util.stats import sample_niw, sample_invwishart, invwishart_entropy,\
-        invwishart_log_partitionfunction, sample_discrete,\
+        invwishart_log_partitionfunction, sample_discrete, sample_pareto,\
         sample_discrete_from_log, getdatasize, flattendata,\
         getdatadimension, combinedata, multivariate_t_loglik
 
@@ -1053,6 +1053,60 @@ class ScalarGaussianFixedvar(_ScalarGaussianBase, GibbsSampling):
         else:
             xbar = None
         return n, xbar
+
+class UniformOneSided(GibbsSampling):
+    '''
+    Models a uniform distribution over [low,theta] for some parameter theta.
+    The default low is 0.
+
+    Likelihood is x ~ U[low,theta]
+    Prior is theta ~ Pareto(x_m,alpha) following Wikipedia's notation
+    '''
+    def __init__(self,theta=None,x_m=None,alpha=None,low=0.):
+        self.theta = theta
+
+        self.x_m = x_m
+        self.alpha = alpha
+
+        self.low = low
+
+        if theta is None and None not in (x_m,alpha):
+            self.resample() # intialize from prior
+
+    @property
+    def params(self):
+        return {'theta':self.theta}
+
+    @property
+    def hypparams(self):
+        return dict(x_m=self.x_m,alpha=self.alpha,low=self.low)
+
+    def log_likelihood(self,x):
+        x = np.atleast_1d(x)
+        raw = np.where((self.low <= x) & (x < self.theta),
+                -np.log(self.theta - self.low),-np.inf)
+        return raw if isinstance(x,np.ndarray) else raw[0]
+
+    def rvs(self,size=[]):
+        return np.random.uniform(low=self.low,high=self.alpha,size=size)
+
+    def resample(self,data=[]):
+        self.theta = sample_pareto(
+                *self._posterior_hypparams(*self._get_statistics(data)))
+        return self
+
+    def _get_statistics(self,data):
+        if isinstance(data,np.ndarray):
+            n = data.shape[0]
+            datamax = data.max()
+        else:
+            n = sum(d.shape[0] for d in data)
+            datamax = max(d.max() for d in data) \
+                    if n > 0 else -np.inf
+        return n, datamax
+
+    def _posterior_hypparams(self,n,datamax):
+        return max(datamax,self.x_m) - self.low, n + self.alpha
 
 ##############
 #  Discrete  #
