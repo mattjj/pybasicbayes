@@ -410,10 +410,9 @@ class Gaussian(_GaussianBase, GibbsSampling, MeanField, Collapsed, MAP, MaxLikel
         # this SVD is necessary to check if the max likelihood solution is
         # degenerate, which can happen in the EM algorithm
         if n < D or (np.linalg.svd(sumsq,compute_uv=False) > 1e-6).sum() < D:
-            # broken!
+            self.broken = True
             self.mu = 99999999*np.ones(D)
             self.sigma = np.eye(D)
-            self.broken = True
         else:
             self.mu = muhat
             self.sigma = sumsq/n
@@ -664,8 +663,8 @@ class GaussianNonConj(_GaussianBase, GibbsSampling):
         return self
 
 
-# TODO collapsed, meanfield, max_likelihood
-class DiagonalGaussian(_GaussianBase,GibbsSampling):
+# TODO collapsed, meanfield
+class DiagonalGaussian(_GaussianBase,GibbsSampling,MaxLikelihood):
     '''
     Product of normal-inverse-gamma priors over mu (mean vector) and sigmas
     (vector of scalar variances).
@@ -753,17 +752,48 @@ class DiagonalGaussian(_GaussianBase,GibbsSampling):
             if isinstance(data,np.ndarray):
                 data = np.reshape(data,(-1,D))
                 xbar = data.mean(0)
-                centered = data - xbar
-                sumsq = np.diag(np.dot(centered.T,centered))
+                sumsq = np.sum((data - xbar)**2,axis=0)
             else:
                 xbar = sum(np.reshape(d,(-1,D)).sum(0) for d in data) / n
-                sumsq = sum(((np.reshape(d,(-1,D)) - xbar)**2).sum(0) for d in data)
+                sumsq = sum(np.sum((np.reshape(d,(-1,D))-xbar)**2,axis=0) for d in data)
             assert sumsq.ndim == 1
         else:
             xbar, sumsq = None, None
 
         return n, xbar, sumsq
 
+    def _get_weighted_statistics(self,data,weights,D=None):
+        if isinstance(data,np.ndarray):
+            neff = weights.sum()
+            if neff > 0:
+                D = getdatadimension(data) if D is None else D
+                data = np.reshape(data,(-1,D))
+                xbar = weights.dot(data) / neff
+                sumsq = weights.dot((data-xbar)**2)
+            else:
+                xbar, sumsq = None, None
+        else:
+            neff = sum(w.sum() for w in weights)
+            if neff > 0:
+                D = getdatadimension(data) if D is None else D
+                xbar = sum(w.dot(np.reshape(d,(-1,D))) for w,d in zip(weights,data)) / neff
+                sumsq = sum(w.dot((np.reshape(d,(-1,D))-xbar)**2) for w,d in zip(weights,data))
+            else:
+                xbar, sumsq = None, None
+
+        return neff, xbar, sumsq
+
+    def max_likelihood(self,data,weights=None):
+        D = getdatadimension(data)
+        if weights is None:
+            n, muhat, sumsq = self._get_statistics(data)
+        else:
+            n, muhat, sumsq = self._get_weighted_statistics(data,weights)
+
+        self.mu = muhat
+        self.sigmas = sumsq/n
+
+        return self
 
 # TODO collapsed, meanfield, max_likelihood
 class IsotropicGaussian(GibbsSampling):
