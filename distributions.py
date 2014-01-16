@@ -913,11 +913,11 @@ class _ScalarGaussianBase(object):
         if n > 0:
             if isinstance(data,np.ndarray):
                 ybar = data.mean()
-                centered = data - ybar
+                centered = data.ravel() - ybar
                 sumsqc = centered.dot(centered)
             elif isinstance(data,list):
                 ybar = sum(d.sum() for d in data)/n
-                sumsqc = sum((d-ybar).dot(d-ybar) for d in data)
+                sumsqc = sum((d.ravel()-ybar).dot(d.ravel()-ybar) for d in data)
             else:
                 ybar = data
                 sumsqc = 0
