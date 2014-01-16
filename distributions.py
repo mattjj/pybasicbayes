@@ -18,10 +18,6 @@ from util.stats import sample_niw, sample_invwishart, invwishart_entropy,\
         sample_discrete_from_log, getdatasize, flattendata,\
         getdatadimension, combinedata, multivariate_t_loglik, gi
 
-def mask_data(data):
-    return np.ma.masked_array(np.nan_to_num(data),np.isnan(data),fill_value=0.,hard_mask=True)
-
-
 ##########
 #  Meta  #
 ##########
@@ -238,7 +234,6 @@ class Gaussian(_GaussianBase, GibbsSampling, MeanField, Collapsed, MAP, MaxLikel
                 sumsq = np.dot(centered.T,centered)
             else:
                 xbar = sum(np.nansum(np.reshape(d,(-1,D)), axis=0) for d in data) / n
-                # data[0][gi(data[0])]
                 sumsq = sum(np.dot((np.reshape(d[gi(d)],(-1,D))-xbar).T,(np.reshape(d[gi(d)],(-1,D))-xbar))
                         for d in data)
         else:
@@ -300,11 +295,8 @@ class Gaussian(_GaussianBase, GibbsSampling, MeanField, Collapsed, MAP, MaxLikel
 
     def resample(self,data=[]):
         D = len(self.mu_0)
-        n, xbar, sumsq = self._get_statistics(data,D)
-        mu, lmbda, kappa, nu = self._posterior_hypparams(n, xbar, sumsq)
-        mu, lmbda = sample_niw(mu, lmbda, kappa, nu)
-        self.mu_mf, self.sigma_mf = mu, lmbda
-        self.mu, self.sigma = mu, lmbda
+        self.mu_mf, self.sigma_mf = self.mu, self.sigma = \
+                sample_niw(*self._posterior_hypparams(*self._get_statistics(data,D)))
         return self
 
     def copy_sample(self):
