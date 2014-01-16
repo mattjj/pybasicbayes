@@ -660,6 +660,8 @@ class GaussianNonConj(_GaussianBase, GibbsSampling):
         if getdatasize(data) == 0:
             niter = 1
 
+        # TODO this is kinda dumb because it collects statistics over and over
+        # instead of updating them...
         for itr in xrange(niter):
             # resample mu
             self._mu_distn.sigma = self._sigma_distn.sigma
@@ -913,8 +915,68 @@ class _ScalarGaussianBase(object):
             else:
                 plt.plot(indices,[self.mu],color=color,marker='+')
 
+    ### mostly shared statistics gathering
 
-# TODO meanfield, max_likelihood
+    def _get_statistics(self,data):
+        n = getdatasize(data)
+        if n > 0:
+            if isinstance(data,np.ndarray):
+                ybar = data.mean()
+                centered = data - ybar
+                sumsqc = centered.dot(centered)
+            elif isinstance(data,list):
+                ybar = sum(d.sum() for d in data)/n
+                sumsqc = sum((d-ybar).dot(d-ybar) for d in data)
+            else:
+                ybar = data
+                sumsqc = 0
+        else:
+            ybar = None
+            sumsqc = None
+
+        return n, ybar, sumsqc
+
+    def _get_weighted_statistics(self,data,weights):
+        if isinstance(data,np.ndarray):
+            neff = weights.sum()
+            if neff > 0:
+                ybar = weights.dot(data.ravel()) / neff
+                centered = data.ravel() - ybar
+                sumsqc = centered.dot(weights*centered)
+            else:
+                ybar = None
+                sumsqc = None
+        elif isinstance(data,list):
+            neff = sum(w.sum() for w in weights)
+            if neff > 0:
+                ybar = sum(w.dot(d.ravel()) for d,w in zip(data,weights)) / neff
+                sumsqc = sum((d.ravel()-ybar).dot(w*(d.ravel()-ybar))
+                        for d,w in zip(data,weights))
+            else:
+                ybar = None
+                sumsqc = None
+        else:
+            ybar = data
+            sumsqc = 0
+
+        return neff, ybar, sumsqc
+
+    ### max likelihood
+
+    def max_likelihood(self,data,weights=None):
+        if weights is None:
+            n, ybar, sumsqc = self._get_statistics(data)
+        else:
+            n, ybar, sumsqc = self._get_weighted_statistics(data,weights)
+
+        if sumsqc > 0:
+            self.mu = ybar
+            self.sigmasq = sumsqc / n
+        else:
+            self.broken = True
+            self.mu = 999999999.
+            self.sigmsq = 1.
+
 class ScalarGaussianNIX(_ScalarGaussianBase, GibbsSampling, Collapsed):
     '''
     Conjugate Normal-(Scaled-)Inverse-ChiSquared prior. (Another parameterization is the
@@ -956,29 +1018,6 @@ class ScalarGaussianNIX(_ScalarGaussianBase, GibbsSampling, Collapsed):
         self.sigmasq = nu_n * sigmasq_n / np.random.chisquare(nu_n)
         self.mu = np.sqrt(self.sigmasq / kappa_n) * np.random.randn() + mu_n
         return self
-
-    def _get_statistics(self,data):
-        assert isinstance(data,np.ndarray) or \
-                (isinstance(data,list) and all((isinstance(d,np.ndarray))
-                    for d in data)) or \
-                (isinstance(data,int) or isinstance(data,float))
-
-        n = getdatasize(data)
-        if n > 0:
-            if isinstance(data,np.ndarray):
-                ybar = data.mean()
-                sumsqc = ((data-ybar)**2).sum()
-            elif isinstance(data,list):
-                ybar = sum(d.sum() for d in data)/n
-                sumsqc = sum(np.sum((d-ybar)**2) for d in data)
-            else:
-                ybar = data
-                sumsqc = 0
-        else:
-            ybar = None
-            sumsqc = None
-
-        return n, ybar, sumsqc
 
     ### Collapsed
 
@@ -1078,9 +1117,6 @@ class ScalarGaussianFixedvar(_ScalarGaussianBase, GibbsSampling):
         return self
 
     def _get_statistics(self,data):
-        assert isinstance(data,np.ndarray) or \
-                (isinstance(data,list) and all(isinstance(d,np.ndarray) for d in data))
-
         n = getdatasize(data)
         if n > 0:
             if isinstance(data,np.ndarray):
@@ -1090,6 +1126,32 @@ class ScalarGaussianFixedvar(_ScalarGaussianBase, GibbsSampling):
         else:
             xbar = None
         return n, xbar
+
+    def _get_weighted_statistics(self,data,weights):
+        if isinstance(data,np.ndarray):
+            neff = weights.sum()
+        else:
+            neff = sum(w.sum() for w in weights)
+
+        if neff > 0:
+            if isinstance(data,np.ndarray):
+                xbar = data.dot(weights) / neff
+            else:
+                xbar = sum(w.dot(d) for d,w in zip(data,weights)) / neff
+        else:
+            xbar = None
+
+        return neff, xbar
+
+
+    def max_likelihood(self,data,weights=None):
+        if weights is None:
+            _, xbar = self._get_statistics(data)
+        else:
+            _, xbar = self._get_weighted_statistics(data,weights)
+
+        self.mu = xbar
+
 
 class UniformOneSided(GibbsSampling):
     '''
