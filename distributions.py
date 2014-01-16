@@ -16,7 +16,11 @@ from abstractions import Distribution, BayesianDistribution, \
 from util.stats import sample_niw, sample_invwishart, invwishart_entropy,\
         invwishart_log_partitionfunction, sample_discrete, sample_pareto,\
         sample_discrete_from_log, getdatasize, flattendata,\
-        getdatadimension, combinedata, multivariate_t_loglik
+        getdatadimension, combinedata, multivariate_t_loglik, gi
+
+def mask_data(data):
+    return np.ma.masked_array(np.nan_to_num(data),np.isnan(data),fill_value=0.,hard_mask=True)
+
 
 ##########
 #  Meta  #
@@ -233,8 +237,9 @@ class Gaussian(_GaussianBase, GibbsSampling, MeanField, Collapsed, MAP, MaxLikel
                 centered = data - xbar
                 sumsq = np.dot(centered.T,centered)
             else:
-                xbar = sum(np.reshape(d,(-1,D)).sum(0) for d in data) / n
-                sumsq = sum(np.dot((np.reshape(d,(-1,D))-xbar).T,(np.reshape(d,(-1,D))-xbar))
+                xbar = sum(np.nansum(np.reshape(d,(-1,D)), axis=0) for d in data) / n
+                # data[0][gi(data[0])]
+                sumsq = sum(np.dot((np.reshape(d[gi(d)],(-1,D))-xbar).T,(np.reshape(d[gi(d)],(-1,D))-xbar))
                         for d in data)
         else:
             xbar, sumsq = None, None
@@ -295,8 +300,11 @@ class Gaussian(_GaussianBase, GibbsSampling, MeanField, Collapsed, MAP, MaxLikel
 
     def resample(self,data=[]):
         D = len(self.mu_0)
-        self.mu_mf, self.sigma_mf = self.mu, self.sigma = \
-                sample_niw(*self._posterior_hypparams(*self._get_statistics(data,D)))
+        n, xbar, sumsq = self._get_statistics(data,D)
+        mu, lmbda, kappa, nu = self._posterior_hypparams(n, xbar, sumsq)
+        mu, lmbda = sample_niw(mu, lmbda, kappa, nu)
+        self.mu_mf, self.sigma_mf = mu, lmbda
+        self.mu, self.sigma = mu, lmbda
         return self
 
     def copy_sample(self):
@@ -455,10 +463,11 @@ class GaussianFixedMean(_GaussianBase, GibbsSampling, MaxLikelihood):
         n = getdatasize(data)
         if n > 0:
             if isinstance(data,np.ndarray):
-                centered = data - self.mu
+                centered = data[gi(data)] - self.mu
                 sumsq = centered.T.dot(centered)
+                n = len(centered)
             else:
-                sumsq = sum((d-self.mu).T.dot(d-self.mu) for d in data)
+                sumsq = sum((d[gi(d)]-self.mu).T.dot(d[gi(d)]-self.mu) for d in data)
         else:
             sumsq = None
         return n, sumsq
