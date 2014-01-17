@@ -754,11 +754,11 @@ class DiagonalGaussian(_GaussianBase,GibbsSampling,MaxLikelihood):
             D = getdatadimension(data) if D is None else D
             if isinstance(data,np.ndarray):
                 data = np.reshape(data,(-1,D))
-                xbar = data.mean(0)
-                sumsq = np.sum((data - xbar)**2,axis=0)
+                xbar = data[gi(data)].mean(0)
+                sumsq = np.sum((data[gi(data)] - xbar)**2,axis=0)
             else:
-                xbar = sum(np.reshape(d,(-1,D)).sum(0) for d in data) / n
-                sumsq = sum(np.sum((np.reshape(d,(-1,D))-xbar)**2,axis=0) for d in data)
+                xbar = sum(np.nansum(np.reshape(d,(-1,D)), axis=0) for d in data) / n
+                sumsq = sum(np.nansum((np.reshape(d[gi(d)],(-1,D))-xbar)**2,axis=0) for d in data)
             assert sumsq.ndim == 1
         else:
             xbar, sumsq = None, None
@@ -771,16 +771,17 @@ class DiagonalGaussian(_GaussianBase,GibbsSampling,MaxLikelihood):
             if neff > 0:
                 D = getdatadimension(data) if D is None else D
                 data = np.reshape(data,(-1,D))
-                xbar = weights.dot(data) / neff
-                sumsq = weights.dot((data-xbar)**2)
+                xbar = weights.dot(data[gi(data)]) / neff
+                sumsq = weights.dot((data[gi(data)]-xbar)**2)
             else:
                 xbar, sumsq = None, None
         else:
             neff = sum(w.sum() for w in weights)
             if neff > 0:
                 D = getdatadimension(data) if D is None else D
-                xbar = sum(w.dot(np.reshape(d,(-1,D))) for w,d in zip(weights,data)) / neff
-                sumsq = sum(w.dot((np.reshape(d,(-1,D))-xbar)**2) for w,d in zip(weights,data))
+
+                xbar = sum(w[gi(d)].dot(np.reshape(d[gi(d)],(-1,D))) for w,d in zip(weights,data)) / neff
+                sumsq = sum(w[gi(d)].dot((np.reshape(d[gi(d)],(-1,D))-xbar)**2) for w,d in zip(weights,data))
             else:
                 xbar, sumsq = None, None
 
@@ -1056,7 +1057,7 @@ class ScalarGaussianNonconjNIX(_ScalarGaussianBase, GibbsSampling):
         niter = self.niter if niter is None else niter
         if n > 0:
             data = flattendata(data)
-            datasum = data.sum()
+            datasum = data[gi(data)].sum()
             nu_n = self.nu_0 + n
             for itr in range(niter):
                 # resample mean
@@ -1064,7 +1065,7 @@ class ScalarGaussianNonconjNIX(_ScalarGaussianBase, GibbsSampling):
                 mu_n = tausq_n*(self.mu_0/self.tausq_0 + datasum/self.sigmasq)
                 self.mu = np.sqrt(tausq_n)*np.random.normal() + mu_n
                 # resample variance
-                sigmasq_n = (self.nu_0*self.sigmasq_0 + ((data-self.mu)**2).sum())/(nu_n)
+                sigmasq_n = (self.nu_0*self.sigmasq_0 + ((data[gi(data)]-self.mu)**2).sum())/(nu_n)
                 self.sigmasq = sigmasq_n*nu_n/np.random.chisquare(nu_n)
         else:
             self.mu = np.sqrt(self.tausq_0) * np.random.normal() + self.mu_0
