@@ -16,7 +16,7 @@ from abstractions import Distribution, BayesianDistribution, \
 from util.stats import sample_niw, sample_invwishart, invwishart_entropy,\
         invwishart_log_partitionfunction, sample_discrete, sample_pareto,\
         sample_discrete_from_log, getdatasize, flattendata,\
-        getdatadimension, combinedata, multivariate_t_loglik, gi
+        getdatadimension, combinedata, multivariate_t_loglik, gi, atleast_2d
 
 ##########
 #  Meta  #
@@ -55,16 +55,8 @@ class ProductDistribution(GibbsSampling,MaxLikelihood):
     def hypparams(self):
         return {idx:distn.hypparams for idx,distn in enumerate(self._distns)}
 
-    @staticmethod
-    def atleast_2d(data):
-        # NOTE: can't use np.atleast_2d because if it's 1D we want axis 1 to be
-        # the singleton
-        if data.ndim == 1:
-            return data.reshape((-1,1))
-        return data
-
     def rvs(self,size=[]):
-        return np.concatenate([self.atleast_2d(distn.rvs(size=size))
+        return np.concatenate([atleast_2d(distn.rvs(size=size))
             for distn in self._distns],axis=-1)
 
     def log_likelihood(self,x):
@@ -964,11 +956,13 @@ class _ScalarGaussianBase(object):
 
         if sumsqc > 0:
             self.mu = ybar
-            self.sigmasq = sumsqc / n
+            self.sigmasq = sumsqc/n
         else:
             self.broken = True
             self.mu = 999999999.
             self.sigmsq = 1.
+
+        return self
 
 class ScalarGaussianNIX(_ScalarGaussianBase, GibbsSampling, Collapsed):
     '''
