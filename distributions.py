@@ -1031,7 +1031,7 @@ class ScalarGaussianNonconjNIX(_ScalarGaussianBase, GibbsSampling):
     sigmasq ~ (Scaled-)Inverse-ChiSquared(sigmasq_0,nu_0)
     '''
     def __init__(self,mu=None,sigmasq=None,mu_0=None,tausq_0=None,sigmasq_0=None,nu_0=None,
-            niter=20):
+            niter=3):
         self.mu, self.sigmasq = mu, sigmasq
         self.mu_0, self.tausq_0 = mu_0, tausq_0
         self.sigmasq_0, self.nu_0 = sigmasq_0, nu_0
