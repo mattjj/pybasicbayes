@@ -1,4 +1,4 @@
-difrom __future__ import division
+from __future__ import division
 import numpy as np
 na = np.newaxis
 from matplotlib import pyplot as plt
