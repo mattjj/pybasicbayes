@@ -1052,6 +1052,7 @@ class ScalarGaussianNonconjNIX(_ScalarGaussianBase, GibbsSampling):
         if n > 0:
             data = flattendata(data)
             datasum = data[gi(data)].sum()
+            datasqsum = (data[gi(data)]**2).sum()
             nu_n = self.nu_0 + n
             for itr in range(niter):
                 # resample mean
@@ -1059,7 +1060,7 @@ class ScalarGaussianNonconjNIX(_ScalarGaussianBase, GibbsSampling):
                 mu_n = tausq_n*(self.mu_0/self.tausq_0 + datasum/self.sigmasq)
                 self.mu = np.sqrt(tausq_n)*np.random.normal() + mu_n
                 # resample variance
-                sigmasq_n = (self.nu_0*self.sigmasq_0 + ((data[gi(data)]-self.mu)**2).sum())/(nu_n)
+                sigmasq_n = (self.nu_0*self.sigmasq_0 + (datasqsum + n*self.mu**2-2*datasum*self.mu))/nu_n
                 self.sigmasq = sigmasq_n*nu_n/np.random.chisquare(nu_n)
         else:
             self.mu = np.sqrt(self.tausq_0) * np.random.normal() + self.mu_0
