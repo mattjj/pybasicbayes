@@ -1758,6 +1758,7 @@ class _NegativeBinomialBase(Distribution):
                 alpha_0=self.alpha_0,beta_0=self.beta_0)
 
     def log_likelihood(self,x,r=None,p=None):
+        np.seterr(all='ignore'); np.seterr(all='ignore')
         r = r if r is not None else self.r
         p = p if p is not None else self.p
         x = np.array(x,ndmin=1)
