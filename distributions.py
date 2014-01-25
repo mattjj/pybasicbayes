@@ -14,9 +14,9 @@ from warnings import warn
 from abstractions import Distribution, BayesianDistribution, \
         GibbsSampling, MeanField, Collapsed, MaxLikelihood, MAP
 from util.stats import sample_niw, sample_invwishart, invwishart_entropy,\
-        invwishart_log_partitionfunction, sample_discrete,\
+        invwishart_log_partitionfunction, sample_discrete, sample_pareto,\
         sample_discrete_from_log, getdatasize, flattendata,\
-        getdatadimension, combinedata, multivariate_t_loglik
+        getdatadimension, combinedata, multivariate_t_loglik, gi, atleast_2d
 
 # Threshold on weights to perform posterior computation
 weps = 1e-12
@@ -43,6 +43,54 @@ class _FixedParamsMixin(Distribution):
 
     def copy_sample(self):
         return self
+
+class ProductDistribution(GibbsSampling,MaxLikelihood):
+    # TODO make a better __repr__
+
+    def __init__(self,distns,slices=None):
+        self._distns = distns
+        self._slices = slices if slices is not None else \
+                [slice(i,i+1) for i in xrange(len(distns))]
+
+    @property
+    def params(self):
+        return {idx:distn.params for idx,distn in enumerate(self._distns)}
+
+    @property
+    def hypparams(self):
+        return {idx:distn.hypparams for idx,distn in enumerate(self._distns)}
+
+    def rvs(self,size=[]):
+        return np.concatenate([atleast_2d(distn.rvs(size=size))
+            for distn in self._distns],axis=-1)
+
+    def log_likelihood(self,x):
+        return sum(distn.log_likelihood(x[...,sl])
+                for distn,sl in zip(self._distns,self._slices))
+
+    def resample(self,data=[]):
+        assert isinstance(data,(np.ndarray,list))
+        if isinstance(data,np.ndarray):
+            for distn,sl in zip(self._distns,self._slices):
+                distn.resample(data[...,sl])
+        else:
+            for distn,sl in zip(self._distns,self._slices):
+                distn.resample([d[...,sl] for d in data])
+        return self
+
+    def max_likelihood(self,data,weights=None):
+        assert isinstance(data,(np.ndarray,list))
+        if isinstance(data,np.ndarray):
+            for distn,sl in zip(self._distns,self._slices):
+                distn.max_likelihood(data[...,sl],weights=weights)
+        else:
+            for distn,sl in zip(self._distns,self._slices):
+                distn.max_likelihood([d[...,sl] for d in data],weights=weights)
+        return self
+
+    @property
+    def num_parameters(self):
+        return sum(d.num_parameters for d in self._distns)
 
 ################
 #  Continuous  #
@@ -182,8 +230,8 @@ class Gaussian(_GaussianBase, GibbsSampling, MeanField, Collapsed, MAP, MaxLikel
                 centered = data - xbar
                 sumsq = np.dot(centered.T,centered)
             else:
-                xbar = sum(np.reshape(d,(-1,D)).sum(0) for d in data) / n
-                sumsq = sum(np.dot((np.reshape(d,(-1,D))-xbar).T,(np.reshape(d,(-1,D))-xbar))
+                xbar = sum(np.nansum(np.reshape(d,(-1,D)), axis=0) for d in data) / n
+                sumsq = sum(np.dot((np.reshape(d[gi(d)],(-1,D))-xbar).T,(np.reshape(d[gi(d)],(-1,D))-xbar))
                         for d in data)
         else:
             xbar, sumsq = None, None
@@ -314,7 +362,7 @@ class Gaussian(_GaussianBase, GibbsSampling, MeanField, Collapsed, MAP, MaxLikel
         # see Eq. 10.65 in Bishop
         D = len(self.mu_0)
         chol = self.sigma_mf_chol
-        return special.digamma((self.nu_mf-np.arange(D))/2).sum() \
+        return special.digamma((self.nu_mf-np.arange(D))/2.).sum() \
                 + D*np.log(2) - 2*np.log(chol.diagonal()).sum()
 
     ### Collapsed
@@ -359,10 +407,9 @@ class Gaussian(_GaussianBase, GibbsSampling, MeanField, Collapsed, MAP, MaxLikel
         # this SVD is necessary to check if the max likelihood solution is
         # degenerate, which can happen in the EM algorithm
         if n < D or (np.linalg.svd(sumsq,compute_uv=False) > 1e-6).sum() < D:
-            # broken!
+            self.broken = True
             self.mu = 99999999*np.ones(D)
             self.sigma = np.eye(D)
-            self.broken = True
         else:
             self.mu = muhat
             self.sigma = sumsq/n
@@ -405,10 +452,11 @@ class GaussianFixedMean(_GaussianBase, GibbsSampling, MaxLikelihood):
         n = getdatasize(data)
         if n > 0:
             if isinstance(data,np.ndarray):
-                centered = data - self.mu
+                centered = data[gi(data)] - self.mu
                 sumsq = centered.T.dot(centered)
+                n = len(centered)
             else:
-                sumsq = sum((d-self.mu).T.dot(d-self.mu) for d in data)
+                sumsq = sum((d[gi(d)]-self.mu).T.dot(d[gi(d)]-self.mu) for d in data)
         else:
             sumsq = None
         return n, sumsq
@@ -597,10 +645,12 @@ class GaussianNonConj(_GaussianBase, GibbsSampling):
 
     ### Gibbs sampling
 
-    def resample(self,data=[],niter=5):
+    def resample(self,data=[],niter=1):
         if getdatasize(data) == 0:
             niter = 1
 
+        # TODO this is kinda dumb because it collects statistics over and over
+        # instead of updating them...
         for itr in xrange(niter):
             # resample mu
             self._mu_distn.sigma = self._sigma_distn.sigma
@@ -613,8 +663,8 @@ class GaussianNonConj(_GaussianBase, GibbsSampling):
         return self
 
 
-# TODO collapsed, meanfield, max_likelihood
-class DiagonalGaussian(_GaussianBase,GibbsSampling):
+# TODO collapsed, meanfield
+class DiagonalGaussian(_GaussianBase,GibbsSampling,MaxLikelihood):
     '''
     Product of normal-inverse-gamma priors over mu (mean vector) and sigmas
     (vector of scalar variances).
@@ -701,18 +751,50 @@ class DiagonalGaussian(_GaussianBase,GibbsSampling):
             D = getdatadimension(data) if D is None else D
             if isinstance(data,np.ndarray):
                 data = np.reshape(data,(-1,D))
-                xbar = data.mean(0)
-                centered = data - xbar
-                sumsq = np.diag(np.dot(centered.T,centered))
+                xbar = data[gi(data)].mean(0)
+                sumsq = np.sum((data[gi(data)] - xbar)**2,axis=0)
             else:
-                xbar = sum(np.reshape(d,(-1,D)).sum(0) for d in data) / n
-                sumsq = sum(((np.reshape(d,(-1,D)) - xbar)**2).sum(0) for d in data)
+                xbar = sum(np.nansum(np.reshape(d,(-1,D)), axis=0) for d in data) / n
+                sumsq = sum(np.nansum((np.reshape(d[gi(d)],(-1,D))-xbar)**2,axis=0) for d in data)
             assert sumsq.ndim == 1
         else:
             xbar, sumsq = None, None
 
         return n, xbar, sumsq
 
+    def _get_weighted_statistics(self,data,weights,D=None):
+        if isinstance(data,np.ndarray):
+            neff = weights.sum()
+            if neff > 0:
+                D = getdatadimension(data) if D is None else D
+                data = np.reshape(data,(-1,D))
+                xbar = weights.dot(data[gi(data)]) / neff
+                sumsq = weights.dot((data[gi(data)]-xbar)**2)
+            else:
+                xbar, sumsq = None, None
+        else:
+            neff = sum(w.sum() for w in weights)
+            if neff > 0:
+                D = getdatadimension(data) if D is None else D
+
+                xbar = sum(w[gi(d)].dot(np.reshape(d[gi(d)],(-1,D))) for w,d in zip(weights,data)) / neff
+                sumsq = sum(w[gi(d)].dot((np.reshape(d[gi(d)],(-1,D))-xbar)**2) for w,d in zip(weights,data))
+            else:
+                xbar, sumsq = None, None
+
+        return neff, xbar, sumsq
+
+    def max_likelihood(self,data,weights=None):
+        D = getdatadimension(data)
+        if weights is None:
+            n, muhat, sumsq = self._get_statistics(data)
+        else:
+            n, muhat, sumsq = self._get_weighted_statistics(data,weights)
+
+        self.mu = muhat
+        self.sigmas = sumsq/n
+
+        return self
 
 # TODO collapsed, meanfield, max_likelihood
 class IsotropicGaussian(GibbsSampling):
@@ -823,8 +905,70 @@ class _ScalarGaussianBase(object):
             else:
                 plt.plot(indices,[self.mu],color=color,marker='+')
 
+    ### mostly shared statistics gathering
 
-# TODO meanfield, max_likelihood
+    def _get_statistics(self,data):
+        n = getdatasize(data)
+        if n > 0:
+            if isinstance(data,np.ndarray):
+                ybar = data.mean()
+                centered = data.ravel() - ybar
+                sumsqc = centered.dot(centered)
+            elif isinstance(data,list):
+                ybar = sum(d.sum() for d in data)/n
+                sumsqc = sum((d.ravel()-ybar).dot(d.ravel()-ybar) for d in data)
+            else:
+                ybar = data
+                sumsqc = 0
+        else:
+            ybar = None
+            sumsqc = None
+
+        return n, ybar, sumsqc
+
+    def _get_weighted_statistics(self,data,weights):
+        if isinstance(data,np.ndarray):
+            neff = weights.sum()
+            if neff > 0:
+                ybar = weights.dot(data.ravel()) / neff
+                centered = data.ravel() - ybar
+                sumsqc = centered.dot(weights*centered)
+            else:
+                ybar = None
+                sumsqc = None
+        elif isinstance(data,list):
+            neff = sum(w.sum() for w in weights)
+            if neff > 0:
+                ybar = sum(w.dot(d.ravel()) for d,w in zip(data,weights)) / neff
+                sumsqc = sum((d.ravel()-ybar).dot(w*(d.ravel()-ybar))
+                        for d,w in zip(data,weights))
+            else:
+                ybar = None
+                sumsqc = None
+        else:
+            ybar = data
+            sumsqc = 0
+
+        return neff, ybar, sumsqc
+
+    ### max likelihood
+
+    def max_likelihood(self,data,weights=None):
+        if weights is None:
+            n, ybar, sumsqc = self._get_statistics(data)
+        else:
+            n, ybar, sumsqc = self._get_weighted_statistics(data,weights)
+
+        if sumsqc > 0:
+            self.mu = ybar
+            self.sigmasq = sumsqc/n
+        else:
+            self.broken = True
+            self.mu = 999999999.
+            self.sigmsq = 1.
+
+        return self
+
 class ScalarGaussianNIX(_ScalarGaussianBase, GibbsSampling, Collapsed):
     '''
     Conjugate Normal-(Scaled-)Inverse-ChiSquared prior. (Another parameterization is the
@@ -867,29 +1011,6 @@ class ScalarGaussianNIX(_ScalarGaussianBase, GibbsSampling, Collapsed):
         self.mu = np.sqrt(self.sigmasq / kappa_n) * np.random.randn() + mu_n
         return self
 
-    def _get_statistics(self,data):
-        assert isinstance(data,np.ndarray) or \
-                (isinstance(data,list) and all((isinstance(d,np.ndarray))
-                    for d in data)) or \
-                (isinstance(data,int) or isinstance(data,float))
-
-        n = getdatasize(data)
-        if n > 0:
-            if isinstance(data,np.ndarray):
-                ybar = data.mean()
-                sumsqc = ((data-ybar)**2).sum()
-            elif isinstance(data,list):
-                ybar = sum(d.sum() for d in data)/n
-                sumsqc = sum(np.sum((d-ybar)**2) for d in data)
-            else:
-                ybar = data
-                sumsqc = 0
-        else:
-            ybar = None
-            sumsqc = None
-
-        return n, ybar, sumsqc
-
     ### Collapsed
 
     def log_marginal_likelihood(self,data):
@@ -915,7 +1036,7 @@ class ScalarGaussianNonconjNIX(_ScalarGaussianBase, GibbsSampling):
     sigmasq ~ (Scaled-)Inverse-ChiSquared(sigmasq_0,nu_0)
     '''
     def __init__(self,mu=None,sigmasq=None,mu_0=None,tausq_0=None,sigmasq_0=None,nu_0=None,
-            niter=20):
+            niter=3):
         self.mu, self.sigmasq = mu, sigmasq
         self.mu_0, self.tausq_0 = mu_0, tausq_0
         self.sigmasq_0, self.nu_0 = sigmasq_0, nu_0
@@ -935,7 +1056,8 @@ class ScalarGaussianNonconjNIX(_ScalarGaussianBase, GibbsSampling):
         niter = self.niter if niter is None else niter
         if n > 0:
             data = flattendata(data)
-            datasum = data.sum()
+            datasum = data[gi(data)].sum()
+            datasqsum = (data[gi(data)]**2).sum()
             nu_n = self.nu_0 + n
             for itr in range(niter):
                 # resample mean
@@ -943,7 +1065,7 @@ class ScalarGaussianNonconjNIX(_ScalarGaussianBase, GibbsSampling):
                 mu_n = tausq_n*(self.mu_0/self.tausq_0 + datasum/self.sigmasq)
                 self.mu = np.sqrt(tausq_n)*np.random.normal() + mu_n
                 # resample variance
-                sigmasq_n = (self.nu_0*self.sigmasq_0 + ((data-self.mu)**2).sum())/(nu_n)
+                sigmasq_n = (self.nu_0*self.sigmasq_0 + (datasqsum + n*self.mu**2-2*datasum*self.mu))/nu_n
                 self.sigmasq = sigmasq_n*nu_n/np.random.chisquare(nu_n)
         else:
             self.mu = np.sqrt(self.tausq_0) * np.random.normal() + self.mu_0
@@ -988,9 +1110,6 @@ class ScalarGaussianFixedvar(_ScalarGaussianBase, GibbsSampling):
         return self
 
     def _get_statistics(self,data):
-        assert isinstance(data,np.ndarray) or \
-                (isinstance(data,list) and all(isinstance(d,np.ndarray) for d in data))
-
         n = getdatasize(data)
         if n > 0:
             if isinstance(data,np.ndarray):
@@ -1000,6 +1119,152 @@ class ScalarGaussianFixedvar(_ScalarGaussianBase, GibbsSampling):
         else:
             xbar = None
         return n, xbar
+
+    def _get_weighted_statistics(self,data,weights):
+        if isinstance(data,np.ndarray):
+            neff = weights.sum()
+        else:
+            neff = sum(w.sum() for w in weights)
+
+        if neff > 0:
+            if isinstance(data,np.ndarray):
+                xbar = data.dot(weights) / neff
+            else:
+                xbar = sum(w.dot(d) for d,w in zip(data,weights)) / neff
+        else:
+            xbar = None
+
+        return neff, xbar
+
+
+    def max_likelihood(self,data,weights=None):
+        if weights is None:
+            _, xbar = self._get_statistics(data)
+        else:
+            _, xbar = self._get_weighted_statistics(data,weights)
+
+        self.mu = xbar
+
+
+class UniformOneSided(GibbsSampling):
+    '''
+    Models a uniform distribution over [low,high] for a parameter high.
+    Low is a fixed hyperparameter (hence "OneSided"). See the Uniform class for
+    the two-sided version.
+
+    Likelihood is x ~ U[low,high]
+    Prior is high ~ Pareto(x_m,alpha) following Wikipedia's notation
+
+    Hyperparameters:
+        x_m, alpha, low
+
+    Parameters:
+        high
+    '''
+    def __init__(self,high=None,x_m=None,alpha=None,low=0.):
+        self.high = high
+
+        self.x_m = x_m
+        self.alpha = alpha
+        self.low = low
+
+        if high is None and None not in (x_m,alpha):
+            self.resample() # intialize from prior
+
+    @property
+    def params(self):
+        return {'high':self.high}
+
+    @property
+    def hypparams(self):
+        return dict(x_m=self.x_m,alpha=self.alpha,low=self.low)
+
+    def log_likelihood(self,x):
+        x = np.atleast_1d(x)
+        raw = np.where((self.low <= x) & (x < self.high),
+                -np.log(self.high - self.low),-np.inf)
+        return raw if isinstance(x,np.ndarray) else raw[0]
+
+    def rvs(self,size=[]):
+        return np.random.uniform(low=self.low,high=self.high,size=size)
+
+    def resample(self,data=[]):
+        self.high = sample_pareto(
+                *self._posterior_hypparams(*self._get_statistics(data)))
+        return self
+
+    def _get_statistics(self,data):
+        if isinstance(data,np.ndarray):
+            n = data.shape[0]
+            datamax = data.max()
+        else:
+            n = sum(d.shape[0] for d in data)
+            datamax = max(d.max() for d in data) \
+                    if n > 0 else -np.inf
+        return n, datamax
+
+    def _posterior_hypparams(self,n,datamax):
+        return max(datamax,self.x_m), n + self.alpha
+
+class Uniform(UniformOneSided):
+    '''
+    Models a uniform distribution over [low,high] for parameters low and high.
+    The prior is non-conjugate (though it's conditionally conjugate over one
+    parameter at a time).
+
+    Likelihood is x ~ U[low,high]
+    Prior is -low ~ Pareto(x_m_low,alpha_low)-2*x_m_low
+             high ~ Pareto(x_m_high,alpha_high)
+
+    Hyperparameters:
+        x_m_low, alpha_low
+        x_m_high, alpha_high
+
+    Parameters:
+        low, high
+    '''
+    def __init__(self,low=None,high=None,
+            x_m_low=None,alpha_low=None,x_m_high=None,alpha_high=None):
+        self.low = low
+        self.high = high
+
+        self.x_m_low = x_m_low
+        self.alpha_low = alpha_low
+        self.x_m_high = x_m_high
+        self.alpha_high = alpha_high
+
+        if (low,high) == (None,None) and None not in (x_m_low,alpha_low,x_m_high,alpha_high):
+            self.resample() # initialize from prior
+
+    @property
+    def params(self):
+        return dict(low=self.low,high=self.high)
+
+    @property
+    def hypparams(self):
+        return dict(x_m_low=self.x_m_low,alpha_low=self.alpha_low,
+                x_m_high=self.x_m_high,alpha_high=self.alpha_high)
+
+    def resample(self,data=[],niter=5):
+        if len(data) == 0:
+            self.low = -sample_pareto(-self.x_m_low,self.alpha_low)
+            self.high = sample_pareto(self.x_m_high,self.alpha_high)
+        else:
+            for itr in xrange(niter):
+                # resample high, fixing low
+                self.x_m, self.alpha = self.x_m_high, self.alpha_high
+                super(Uniform,self).resample(data)
+                # tricky: flip data and resample 'high' again
+                self.x_m, self.alpha = -self.x_m_low, self.alpha_low
+                self.low, self.high = self.high, self.low
+                super(Uniform,self).resample(self._flip_data(data))
+                self.low, self.high = self.x_m_low - self.high, self.low
+
+    def _flip_data(self,data):
+        if isinstance(data,np.ndarray):
+            return self.x_m_low - data
+        else:
+            return map(self._flip_data,data)
 
 ##############
 #  Discrete  #
@@ -1242,7 +1507,7 @@ class MultinomialAndConcentration(CategoricalAndConcentration,Multinomial):
     pass
 
 
-class Geometric(GibbsSampling, Collapsed):
+class Geometric(GibbsSampling, Collapsed, MaxLikelihood):
     '''
     Geometric distribution with a conjugate beta prior.
     NOTE: the support is {1,2,3,...}
@@ -1303,10 +1568,35 @@ class Geometric(GibbsSampling, Collapsed):
             n = sum(d.shape[0] for d in data)
             tot = sum(d.sum() for d in data) - n
         else:
-            assert isinstance(data,int)
+            assert np.isscalar(data)
             n = 1
             tot = data-1
         return n, tot
+
+    def _get_weighted_statistics(self,data,weights):
+        if isinstance(data,np.ndarray):
+             n = weights.sum()
+             tot = weights.dot(data) - n
+        elif isinstance(data,list):
+            n = sum(w.sum() for w in weights)
+            tot = sum(w.dot(d) for w,d in zip(weights,data)) - n
+        else:
+            assert np.isscalar(data) and np.isscalar(weights)
+            n = weights
+            tot = weights*data - 1
+
+        return n, tot
+
+    ### Max likelihood
+
+    def max_likelihood(self,data,weights=None):
+        if weights is None:
+            n, tot = self._get_statistics(data)
+        else:
+            n, tot = self._get_weighted_statistics(data,weights)
+
+        self.p = n/tot
+
 
     ### Collapsed
 
@@ -1318,7 +1608,7 @@ class Geometric(GibbsSampling, Collapsed):
         return special.betaln(alpha,beta)
 
 
-class Poisson(GibbsSampling, Collapsed):
+class Poisson(GibbsSampling, Collapsed, MaxLikelihood):
     '''
     Poisson distribution with a conjugate Gamma prior.
 
@@ -1379,13 +1669,25 @@ class Poisson(GibbsSampling, Collapsed):
             n = sum(d.shape[0] for d in data)
             tot = sum(d.sum() for d in data)
         else:
-            assert isinstance(data,int)
+            assert np.isscalar(data)
             n = 1
             tot = data
+
         return n, tot
 
     def _get_weighted_statistics(self,data,weights):
-        pass # TODO
+        if isinstance(data,np.ndarray):
+            n = weights.sum()
+            tot = weights.dot(data)
+        elif isinstance(data,list):
+            n = sum(w.sum() for w in weights)
+            tot = sum(w.dot(d) for w,d in zip(weights,data))
+        else:
+            assert np.isscalar(data) and np.isscalar(weights)
+            n = weights
+            tot = weights*data
+
+        return n, tot
 
     ### Collapsed
 
@@ -1593,16 +1895,8 @@ class NegativeBinomialFixedR(_NegativeBinomialBase, GibbsSampling, MaxLikelihood
         return dict(alpha_0=self.alpha_0,beta_0=self.beta_0)
 
     def resample(self,data=[]):
-        # TODO TODO this should call self._get_statistics
-        if getdatasize(data) == 0:
-            self.p = np.random.beta(self.alpha_0,self.beta_0)
-        else:
-            data = flattendata(data)
-            N = len(data)
-            self.p = np.random.beta(self.alpha_0 + data.sum(), self.beta_0 + N*self.r)
-        return self
+        self.p = np.random.beta(*self._posterior_hypparams(*self._get_statistics(data)))
 
-    # TODO test
     def max_likelihood(self,data,weights=None):
         if weights is None:
             n, tot = self._get_statistics(data)
@@ -1619,14 +1913,17 @@ class NegativeBinomialFixedR(_NegativeBinomialBase, GibbsSampling, MaxLikelihood
             assert np.all(data >= 0)
             data = np.atleast_1d(data)
             n, tot = data.shape[0], data.sum()
-        else:
+        elif isinstance(data,list):
             assert all(np.all(d >= 0) for d in data)
             n = sum(d.shape[0] for d in data)
             tot = sum(d.sum() for d in data)
+        else:
+            assert np.isscalar(data)
+            n = 1
+            tot = data
 
         return n, tot
 
-    # TODO test
     def _get_weighted_statistics(self,data,weights):
         if isinstance(weights,np.ndarray):
             assert np.all(data >= 0)
@@ -1637,6 +1934,9 @@ class NegativeBinomialFixedR(_NegativeBinomialBase, GibbsSampling, MaxLikelihood
             tot = sum((d*w).sum() for d,w in zip(data,weights))
 
         return n, tot
+
+    def _posterior_hypparams(self,n,tot):
+        return self.alpha_0 + tot, self.beta_0 + n*self.r
 
 class NegativeBinomialIntegerR(NegativeBinomialFixedR, GibbsSampling, MaxLikelihood):
     '''
@@ -1684,33 +1984,65 @@ class NegativeBinomialIntegerR(NegativeBinomialFixedR, GibbsSampling, MaxLikelih
         return out
 
     def resample(self,data=[]):
-        if getdatasize(data) == 0:
-            self.p = np.random.beta(self.alpha_0,self.beta_0)
-            self.r = self.r_support[sample_discrete(self.r_probs)]
-        else:
-            # directly marginalize beta to sample r | data
-            data = flattendata(data)
-            N = data.shape[0]
-            data_sum = data.sum()
-            log_marg_likelihoods = special.betaln(self.alpha_0 + data_sum,
-                                                        self.beta_0 + self.r_support*N) \
-                                    - special.betaln(self.alpha_0, self.beta_0) \
-                                    + (special.gammaln(data[:,na]+self.r_support)
-                                            - special.gammaln(data[:,na]+1)
-                                            - special.gammaln(self.r_support)).sum(0)
-            log_marg_probs = np.log(self.r_probs) + log_marg_likelihoods
-            log_marg_probs -= log_marg_probs.max()
-            marg_probs = np.exp(log_marg_probs)
+        alpha_n, betas_n, posterior_discrete = self._posterior_hypparams(
+                *self._get_statistics(data))
 
-            self.r = self.r_support[sample_discrete(marg_probs)]
-            self.p = np.random.beta(self.alpha_0 + data_sum, self.beta_0 + N*self.r)
-        return self
+        r_idx = sample_discrete(posterior_discrete)
+        self.r = self.r_support[r_idx]
+        self.p = np.random.beta(alpha_n, betas_n[r_idx])
+
+    # NOTE: this class has a conjugate prior even though it's not in the
+    # exponential family, so I wrote _get_statistics and _get_weighted_statistics
+    # (which integrate out p) for the resample() and meanfield_update() methods,
+    # though these aren't statistics in the exponential family sense (e.g.
+    #  max_likelihood can't just call _get_weighted_statistics)
+
+    def _get_statistics(self,data):
+        n, tot = super(NegativeBinomialIntegerR,self)._get_statistics(data)
+        if n > 0:
+            # NOTE: form posterior hyperparameters for the p parameters here so
+            # we can integrate them out and get the statistics for r
+            alpha_n, betas_n = self.alpha_0 + tot, self.beta_0 + self.r_support*n
+            data = flattendata(data)
+            log_marg_likelihoods = \
+                    special.betaln(alpha_n, betas_n) \
+                        - special.betaln(self.alpha_0, self.beta_0) \
+                    + (special.gammaln(data[:,na]+self.r_support)
+                        - special.gammaln(data[:,na]+1) \
+                        - special.gammaln(self.r_support)).sum(0)
+        else:
+            log_marg_likelihoods = np.zeros_like(self.r_support)
+
+        return n, tot, log_marg_likelihoods
+
+    def _get_weighted_statistics(self,data,weights):
+        n, tot = super(NegativeBinomialIntegerR,self)._get_weighted_statistics(data,weights)
+        if n > 0:
+            alpha_n, betas_n = self.alpha_0 + tot, self.beta_0 + self.r_support*n
+            data, weights = flattendata(data), flattendata(weights)
+            log_marg_likelihoods = \
+                    special.betaln(alpha_n, betas_n) \
+                        - special.betaln(self.alpha_0, self.beta_0) \
+                    + (special.gammaln(data[:,na]+self.r_support)
+                        - special.gammaln(data[:,na]+1) \
+                        - special.gammaln(self.r_support)).dot(weights)
+        else:
+            log_marg_likelihoods = np.zeros_like(self.r_support)
+
+        return n, tot, log_marg_likelihoods
+
+    def _posterior_hypparams(self,n,tot,log_marg_likelihoods):
+        alpha_n = self.alpha_0 + tot
+        betas_n = self.beta_0 + n*self.r_support
+        log_posterior_discrete = np.log(self.r_probs) + log_marg_likelihoods
+        posterior_discrete = np.exp(log_posterior_discrete - log_posterior_discrete.max())
+        return alpha_n, betas_n, posterior_discrete
 
     def max_likelihood(self,data,weights=None):
         if weights is None:
-            n, tot = self._get_statistics(data)
+            n, tot = super(NegativeBinomialIntegerR,self)._get_statistics(data)
         else:
-            n, tot = self._get_weighted_statistics(data,weights)
+            n, tot = super(NegativeBinomialIntegerR,self)._get_weighted_statistics(data,weights)
 
         if n > 0:
             # NOTE: uses r_support for feasible region
@@ -1734,6 +2066,7 @@ class NegativeBinomialIntegerR(NegativeBinomialFixedR, GibbsSampling, MaxLikelih
 
 class _NegativeBinomialFixedRVariant(NegativeBinomialFixedR):
     def resample(self,data=[]):
+        # TODO override get_statistics instead?
         if isinstance(data,np.ndarray):
             assert (data >= self.r).all()
             data = data-self.r
@@ -1754,8 +2087,6 @@ class _NegativeBinomialIntegerRVariant(NegativeBinomialIntegerR):
                 data_sum = data.sum()
                 feasible = self.r_support <= data.min()
                 if not np.any(feasible):
-                    print 'WARNING: %s: data has zero probability under the model, ignoring' \
-                            % self.__class__.__name__
                     return self.resample(data=data[data > self.r_support.min()])
                 r_probs = self.r_probs[feasible]
                 r_support = self.r_support[feasible]

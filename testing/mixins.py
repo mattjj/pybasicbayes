@@ -33,9 +33,13 @@ class BigDataGibbsTester(DistributionTester):
     def big_data_repeats_per_setting(self):
         return 1
 
+    @property
+    def big_data_hyperparameter_settings(self):
+        return self.hyperparameter_settings
+
 
     def big_data_tests(self):
-        for setting_idx, hypparam_dict in enumerate(self.hyperparameter_settings):
+        for setting_idx, hypparam_dict in enumerate(self.big_data_hyperparameter_settings):
             for i in range(self.big_data_repeats_per_setting):
                 yield self.check_big_data, setting_idx, hypparam_dict
 
@@ -72,6 +76,10 @@ class GewekeGibbsTester(DistributionTester):
     def geweke_pval(self):
         return 0.05
 
+    @property
+    def geweke_hyperparameter_settings(self):
+        return self.hyperparameter_settings
+
     def geweke_numerical_slice(self,distn,setting_idx):
         return slice(None)
 
@@ -86,7 +94,7 @@ class GewekeGibbsTester(DistributionTester):
 
     @attr('slow')
     def geweke_tests(self):
-        for setting_idx, hypparam_dict in enumerate(self.hyperparameter_settings):
+        for setting_idx, hypparam_dict in enumerate(self.geweke_hyperparameter_settings):
             yield self.check_geweke, setting_idx, hypparam_dict
 
     def geweke_figure_filepath(self,setting_idx):
@@ -133,7 +141,7 @@ class GewekeGibbsTester(DistributionTester):
                         pval=self.geweke_pval)
             except AssertionError:
                 datapath = os.path.join(os.path.dirname(__file__),'figures',
-                        self.__class__.__name__,'setting_%d_trial_%d.pdf' % (setting_idx,trial))
+                        self.__class__.__name__,'setting_%d_trial_%d.npz' % (setting_idx,trial))
                 np.savez(datapath,fwd=forward_statistics,gibbs=gibbs_statistics)
                 example_violating_means = forward_statistics.mean(0), gibbs_statistics.mean(0)
                 num_statistic_fails += 1
