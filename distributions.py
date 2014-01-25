@@ -19,7 +19,7 @@ from util.stats import sample_niw, sample_invwishart, invwishart_entropy,\
         getdatadimension, combinedata, multivariate_t_loglik
 
 # Threshold on weights to perform posterior computation
-weps = 10*np.finfo(float).eps
+weps = 1e-12
 
 # TODO reduce reallocation of parameters
 
@@ -195,7 +195,6 @@ class Gaussian(_GaussianBase, GibbsSampling, MeanField, Collapsed, MAP, MaxLikel
         # this is kept as a separate method for speed and modularity
         if isinstance(data,np.ndarray):
             neff = weights.sum()
-            #if neff > 0:
             if neff > weps:
                 D = getdatadimension(data) if D is None else D
                 xbar = np.dot(weights,np.reshape(data,(-1,D))) / neff
@@ -205,7 +204,6 @@ class Gaussian(_GaussianBase, GibbsSampling, MeanField, Collapsed, MAP, MaxLikel
                 xbar, sumsq = None, None
         else:
             neff = sum(w.sum() for w in weights)
-            #if neff > 0:
             if neff > weps:
                 D = getdatadimension(data) if D is None else D
                 xbar = sum(np.dot(w,np.reshape(d,(-1,D))) for w,d in zip(weights,data)) / neff
@@ -218,7 +216,6 @@ class Gaussian(_GaussianBase, GibbsSampling, MeanField, Collapsed, MAP, MaxLikel
 
     def _posterior_hypparams(self,n,xbar,sumsq):
         mu_0, sigma_0, kappa_0, nu_0 = self.mu_0, self.sigma_0, self.kappa_0, self.nu_0
-        #if n > 0:
         if n > weps:
             mu_n = self.kappa_0 / (self.kappa_0 + n) * self.mu_0 + n / (self.kappa_0 + n) * xbar
             kappa_n = self.kappa_0 + n
