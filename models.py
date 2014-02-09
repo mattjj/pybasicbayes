@@ -155,8 +155,8 @@ class Mixture(ModelGibbsSampling, ModelMeanField, ModelEM):
     ### EM
 
     def EM_step(self):
-        assert all(isinstance(c,MaxLikelihood) for c in self.components), \
-                'Components must implement MaxLikelihood'
+        # assert all(isinstance(c,MaxLikelihood) for c in self.components), \
+        #         'Components must implement MaxLikelihood'
         assert len(self.labels_list) > 0, 'Must have data to run EM'
 
         ## E step

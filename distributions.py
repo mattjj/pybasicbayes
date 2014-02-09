@@ -16,7 +16,12 @@ from abstractions import Distribution, BayesianDistribution, \
 from util.stats import sample_niw, sample_invwishart, invwishart_entropy,\
         invwishart_log_partitionfunction, sample_discrete, sample_pareto,\
         sample_discrete_from_log, getdatasize, flattendata,\
-        getdatadimension, combinedata, multivariate_t_loglik
+        getdatadimension, combinedata, multivariate_t_loglik, gi, atleast_2d
+
+# Threshold on weights to perform posterior computation
+weps = 1e-12
+
+# TODO reduce reallocation of parameters
 
 ##########
 #  Meta  #
@@ -467,10 +472,11 @@ class GaussianFixedMean(_GaussianBase, GibbsSampling, MaxLikelihood):
         n = getdatasize(data)
         if n > 1e-4:
             if isinstance(data,np.ndarray):
-                centered = data - self.mu
+                centered = data[gi(data)] - self.mu
                 sumsq = centered.T.dot(centered)
+                n = len(centered)
             else:
-                sumsq = sum((d-self.mu).T.dot(d-self.mu) for d in data)
+                sumsq = sum((d[gi(d)]-self.mu).T.dot(d[gi(d)]-self.mu) for d in data)
         else:
             sumsq = None
         return n, sumsq
@@ -663,6 +669,8 @@ class GaussianNonConj(_GaussianBase, GibbsSampling):
         if getdatasize(data) == 0:
             niter = 1
 
+        # TODO this is kinda dumb because it collects statistics over and over
+        # instead of updating them...
         for itr in xrange(niter):
             # resample mu
             self._mu_distn.sigma = self._sigma_distn.sigma
@@ -675,8 +683,8 @@ class GaussianNonConj(_GaussianBase, GibbsSampling):
         return self
 
 
-# TODO collapsed, meanfield, max_likelihood
-class DiagonalGaussian(_GaussianBase,GibbsSampling):
+# TODO collapsed, meanfield
+class DiagonalGaussian(_GaussianBase,GibbsSampling,MaxLikelihood):
     '''
     Product of normal-inverse-gamma priors over mu (mean vector) and sigmas
     (vector of scalar variances).
@@ -763,18 +771,50 @@ class DiagonalGaussian(_GaussianBase,GibbsSampling):
             D = getdatadimension(data) if D is None else D
             if isinstance(data,np.ndarray):
                 data = np.reshape(data,(-1,D))
-                xbar = data.mean(0)
-                centered = data - xbar
-                sumsq = np.diag(np.dot(centered.T,centered))
+                xbar = data[gi(data)].mean(0)
+                sumsq = np.sum((data[gi(data)] - xbar)**2,axis=0)
             else:
-                xbar = sum(np.reshape(d,(-1,D)).sum(0) for d in data) / n
-                sumsq = sum(((np.reshape(d,(-1,D)) - xbar)**2).sum(0) for d in data)
+                xbar = sum(np.nansum(np.reshape(d,(-1,D)), axis=0) for d in data) / n
+                sumsq = sum(np.nansum((np.reshape(d[gi(d)],(-1,D))-xbar)**2,axis=0) for d in data)
             assert sumsq.ndim == 1
         else:
             xbar, sumsq = None, None
 
         return n, xbar, sumsq
 
+    def _get_weighted_statistics(self,data,weights,D=None):
+        if isinstance(data,np.ndarray):
+            neff = weights.sum()
+            if neff > 0:
+                D = getdatadimension(data) if D is None else D
+                data = np.reshape(data,(-1,D))
+                xbar = weights.dot(data[gi(data)]) / neff
+                sumsq = weights.dot((data[gi(data)]-xbar)**2)
+            else:
+                xbar, sumsq = None, None
+        else:
+            neff = sum(w.sum() for w in weights)
+            if neff > 0:
+                D = getdatadimension(data) if D is None else D
+
+                xbar = sum(w[gi(d)].dot(np.reshape(d[gi(d)],(-1,D))) for w,d in zip(weights,data)) / neff
+                sumsq = sum(w[gi(d)].dot((np.reshape(d[gi(d)],(-1,D))-xbar)**2) for w,d in zip(weights,data))
+            else:
+                xbar, sumsq = None, None
+
+        return neff, xbar, sumsq
+
+    def max_likelihood(self,data,weights=None):
+        D = getdatadimension(data)
+        if weights is None:
+            n, muhat, sumsq = self._get_statistics(data)
+        else:
+            n, muhat, sumsq = self._get_weighted_statistics(data,weights)
+
+        self.mu = muhat
+        self.sigmas = sumsq/n
+
+        return self
 
 # TODO collapsed, meanfield, max_likelihood
 class IsotropicGaussian(GibbsSampling):
@@ -949,7 +989,6 @@ class _ScalarGaussianBase(object):
 
         return self
 
-# TODO meanfield, max_likelihood
 class ScalarGaussianNIX(_ScalarGaussianBase, GibbsSampling, Collapsed):
     '''
     Conjugate Normal-(Scaled-)Inverse-ChiSquared prior. (Another parameterization is the
@@ -1037,7 +1076,8 @@ class ScalarGaussianNonconjNIX(_ScalarGaussianBase, GibbsSampling):
         niter = self.niter if niter is None else niter
         if n > 0:
             data = flattendata(data)
-            datasum = data.sum()
+            datasum = data[gi(data)].sum()
+            datasqsum = (data[gi(data)]**2).sum()
             nu_n = self.nu_0 + n
             for itr in range(niter):
                 # resample mean
@@ -1045,7 +1085,7 @@ class ScalarGaussianNonconjNIX(_ScalarGaussianBase, GibbsSampling):
                 mu_n = tausq_n*(self.mu_0/self.tausq_0 + datasum/self.sigmasq)
                 self.mu = np.sqrt(tausq_n)*np.random.normal() + mu_n
                 # resample variance
-                sigmasq_n = (self.nu_0*self.sigmasq_0 + ((data-self.mu)**2).sum())/(nu_n)
+                sigmasq_n = (self.nu_0*self.sigmasq_0 + (datasqsum + n*self.mu**2-2*datasum*self.mu))/nu_n
                 self.sigmasq = sigmasq_n*nu_n/np.random.chisquare(nu_n)
         else:
             self.mu = np.sqrt(self.tausq_0) * np.random.normal() + self.mu_0
@@ -1234,9 +1274,6 @@ class ScalarGaussianFixedvar(_ScalarGaussianBase, GibbsSampling):
         return self
 
     def _get_statistics(self,data):
-        assert isinstance(data,np.ndarray) or \
-                (isinstance(data,list) and all(isinstance(d,np.ndarray) for d in data))
-
         n = getdatasize(data)
         if n > 0:
             if isinstance(data,np.ndarray):
