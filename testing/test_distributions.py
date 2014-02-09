@@ -267,6 +267,68 @@ class TestGaussianNonConj(BigDataGibbsTester,GewekeGibbsTester):
     def resample_kwargs(self):
         return dict(niter=10)
 
+@attr('scalargaussiannix')
+class TestScalarGaussianNIX(BigDataGibbsTester,GewekeGibbsTester):
+    @property
+    def distribution_class(self):
+        return distributions.ScalarGaussianNIX
+
+    @property
+    def hyperparameter_settings(self):
+        return (dict(mu_0=2.7,kappa_0=2.,sigmasq_0=4.,nu_0=2),)
+
+    def params_close(self,d1,d2):
+        return np.abs(d1.mu-d2.mu) < 0.1 and np.abs(d2.sigmasq - d2.sigmasq) < 0.25
+
+    def geweke_statistics(self,d,data):
+        return np.array((d.mu,d.sigmasq))
+
+    @property
+    def geweke_nsamples(self):
+        return 30000
+
+    @property
+    def geweke_data_size(self):
+        return 2
+
+    @property
+    def geweke_pval(self):
+        return 0.05
+
+    def geweke_numerical_slice(self,d,setting_idx):
+        return slice(0,1)
+
+@attr('scalargaussiannonconjnix')
+class TestScalarGaussianNonconjNIX(BigDataGibbsTester,GewekeGibbsTester):
+    @property
+    def distribution_class(self):
+        return distributions.ScalarGaussianNonconjNIX
+
+    @property
+    def hyperparameter_settings(self):
+        return (dict(mu_0=2.7,tausq_0=4.,sigmasq_0=2.,nu_0=2),)
+
+    def params_close(self,d1,d2):
+        return np.abs(d1.mu-d2.mu) < 0.1 and np.abs(d2.sigmasq - d2.sigmasq) < 0.25
+
+    def geweke_statistics(self,d,data):
+        return np.array((d.mu,d.sigmasq))
+
+    @property
+    def geweke_nsamples(self):
+        return 30000
+
+    @property
+    def geweke_data_size(self):
+        return 2
+
+    @property
+    def geweke_pval(self):
+        return 0.05
+
+    def geweke_numerical_slice(self,d,setting_idx):
+        return slice(0,1)
+
 @attr('CRP')
 class TestCRP(BigDataGibbsTester):
     @property

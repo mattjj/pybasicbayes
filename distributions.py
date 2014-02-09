@@ -14,7 +14,7 @@ from warnings import warn
 from abstractions import Distribution, BayesianDistribution, \
         GibbsSampling, MeanField, Collapsed, MaxLikelihood, MAP
 from util.stats import sample_niw, sample_invwishart, invwishart_entropy,\
-        invwishart_log_partitionfunction, sample_discrete,\
+        invwishart_log_partitionfunction, sample_discrete, sample_pareto,\
         sample_discrete_from_log, getdatasize, flattendata,\
         getdatadimension, combinedata, multivariate_t_loglik
 
@@ -38,6 +38,62 @@ class _FixedParamsMixin(Distribution):
 
     def copy_sample(self):
         return self
+
+class ProductDistribution(GibbsSampling,MaxLikelihood):
+    # TODO make a better __repr__
+
+    def __init__(self,distns,slices=None):
+        self._distns = distns
+        self._slices = slices if slices is not None else \
+                [slice(i,i+1) for i in xrange(len(distns))]
+
+    @property
+    def params(self):
+        return {idx:distn.params for idx,distn in enumerate(self._distns)}
+
+    @property
+    def hypparams(self):
+        return {idx:distn.hypparams for idx,distn in enumerate(self._distns)}
+
+    @staticmethod
+    def atleast_2d(data):
+        # NOTE: can't use np.atleast_2d because if it's 1D we want axis 1 to be
+        # the singleton
+        if data.ndim == 1:
+            return data.reshape((-1,1))
+        return data
+
+    def rvs(self,size=[]):
+        return np.concatenate([self.atleast_2d(distn.rvs(size=size))
+            for distn in self._distns],axis=-1)
+
+    def log_likelihood(self,x):
+        return sum(distn.log_likelihood(x[...,sl])
+                for distn,sl in zip(self._distns,self._slices))
+
+    def resample(self,data=[]):
+        assert isinstance(data,(np.ndarray,list))
+        if isinstance(data,np.ndarray):
+            for distn,sl in zip(self._distns,self._slices):
+                distn.resample(data[...,sl])
+        else:
+            for distn,sl in zip(self._distns,self._slices):
+                distn.resample([d[...,sl] for d in data])
+        return self
+
+    def max_likelihood(self,data,weights=None):
+        assert isinstance(data,(np.ndarray,list))
+        if isinstance(data,np.ndarray):
+            for distn,sl in zip(self._distns,self._slices):
+                distn.max_likelihood(data[...,sl],weights=weights)
+        else:
+            for distn,sl in zip(self._distns,self._slices):
+                distn.max_likelihood([d[...,sl] for d in data],weights=weights)
+        return self
+
+    @property
+    def num_parameters(self):
+        return sum(d.num_parameters for d in self._distns)
 
 ################
 #  Continuous  #
@@ -73,19 +129,24 @@ class _GaussianBase(object):
         return self.mu + np.random.normal(size=size).dot(self.sigma_chol.T)
 
     def log_likelihood(self,x):
-        mu, sigma, D = self.mu, self.sigma, self.mu.shape[0]
-        sigma_chol = self.sigma_chol
-        bads = np.isnan(np.atleast_2d(x)).any(axis=1)
-        x = np.nan_to_num(x).reshape((-1,D)) - mu
-        xs = scipy.linalg.solve_triangular(sigma_chol,x.T,lower=True)
-        out = -1./2. * inner1d(xs.T,xs.T) - D/2*np.log(2*np.pi) \
-                - np.log(sigma_chol.diagonal()).sum()
-        out[bads] = 0
-        return out
+        try:
+            mu, sigma, D = self.mu, self.sigma, self.mu.shape[0]
+            sigma_chol = self.sigma_chol
+            bads = np.isnan(np.atleast_2d(x)).any(axis=1)
+            x = np.nan_to_num(x).reshape((-1,D)) - mu
+            xs = scipy.linalg.solve_triangular(sigma_chol,x.T,lower=True)
+            out = -1./2. * inner1d(xs.T,xs.T) - D/2*np.log(2*np.pi) \
+                    - np.log(sigma_chol.diagonal()).sum()
+            out[bads] = 0
+            return out
+        except np.linalg.LinAlgError:
+            # NOTE: degenerate distribution doesn't have a density on the full
+            # space. I need a mechanism for getting the density on a subspace...
+            return np.repeat(-np.inf,x.shape[0])
 
     ### plotting
 
-    def plot(self,data=None,indices=None,color='b',plot_params=True,label=''):
+    def plot(self,data=None,indices=None,color='b',plot_params=True,label='',alpha=1.):
         from util.plot import project_data, plot_gaussian_projection, plot_gaussian_2D
         if data is not None:
             data = flattendata(data)
@@ -109,9 +170,9 @@ class _GaussianBase(object):
         if plot_params:
             if D > 2:
                 plot_gaussian_projection(self.mu,self.sigma,self.plotting_subspace_basis,
-                        color=color,label=label)
+                        color=color,label=label,alpha=alpha)
             else:
-                plot_gaussian_2D(self.mu,self.sigma,color=color,label=label)
+                plot_gaussian_2D(self.mu,self.sigma,color=color,label=label,alpha=alpha)
 
     def to_json_dict(self):
         D = self.mu.shape[0]
@@ -139,21 +200,15 @@ class Gaussian(_GaussianBase, GibbsSampling, MeanField, Collapsed, MAP, MaxLikel
         mu, sigma
     '''
 
-    def __init__(self,mu=None,sigma=None,
-            mu_0=None,sigma_0=None,kappa_0=None,nu_0=None,
-            kappa_mf=None,nu_mf=None):
+    def __init__(self,mu=None,sigma=None,mu_0=None,sigma_0=None,kappa_0=None,nu_0=None):
         self.mu    = mu
         self.sigma = sigma
 
-        self.mu_0    = mu_0
-        self.sigma_0 = sigma_0
-        self.kappa_0 = kappa_0
-        self.nu_0    = nu_0
-
-        self.kappa_mf = kappa_mf if kappa_mf is not None else kappa_0
-        self.nu_mf    = nu_mf if nu_mf is not None else nu_0
-        self.mu_mf    = mu
-        self.sigma_mf = sigma
+        # NOTE: resampling will set mu_mf and sigma_mf
+        self.mu_0    = self.mu_mf    = mu_0
+        self.sigma_0 = self.sigma_mf = sigma_0
+        self.kappa_0 = self.kappa_mf = kappa_0
+        self.nu_0    = self.nu_mf    = nu_0
 
         if (mu,sigma) == (None,None) and None not in (mu_0,sigma_0,kappa_0,nu_0):
             self.resample() # initialize from prior
@@ -163,84 +218,72 @@ class Gaussian(_GaussianBase, GibbsSampling, MeanField, Collapsed, MAP, MaxLikel
         return dict(mu_0=self.mu_0,sigma_0=self.sigma_0,kappa_0=self.kappa_0,nu_0=self.nu_0)
 
     @property
+    def natural_hypparam(self):
+        return self._standard_to_natural(self.mu_0,self.sigma_0,self.kappa_0,self.nu_0)
+
+    @natural_hypparam.setter
+    def natural_hypparam(self,natparam):
+        self.mu_0, self.sigma_0, self.kappa_0, self.nu_0 = self._natural_to_standard(natparam)
+
+    def _standard_to_natural(self,mu_mf,sigma_mf,kappa_mf,nu_mf):
+        D = sigma_mf.shape[0]
+        out = np.zeros((D+2,D+2))
+        out[:D,:D] = sigma_mf + kappa_mf * np.outer(mu_mf,mu_mf)
+        out[:D,-2] = out[-2,:D] = kappa_mf * mu_mf
+        out[-2,-2] = kappa_mf
+        out[-1,-1] = nu_mf
+        return out
+
+    def _natural_to_standard(self,natparam):
+        D = natparam.shape[0]-2
+        A = natparam[:D,:D]
+        b = natparam[:D,-2]
+        c = natparam[-2,-2]
+        d = natparam[-1,-1]
+        return b/c, A - np.outer(b,b)/c, c, d
+
+    @property
     def num_parameters(self):
         D = len(self.mu)
         return D*(D+1)/2
 
-    @staticmethod
-    def _get_statistics(data,D=None):
-        n = getdatasize(data)
-        if n > 0:
-            D = getdatadimension(data) if D is None else D
-            if isinstance(data,np.ndarray):
-                xbar = np.reshape(data,(-1,D)).mean(0)
-                centered = data - xbar
-                sumsq = np.dot(centered.T,centered)
-            else:
-                xbar = sum(np.reshape(d,(-1,D)).sum(0) for d in data) / n
-                sumsq = sum(np.dot((np.reshape(d,(-1,D))-xbar).T,(np.reshape(d,(-1,D))-xbar))
-                        for d in data)
-        else:
-            xbar, sumsq = None, None
-        return n, xbar, sumsq
-
-    @staticmethod
-    def _get_weighted_statistics(data,weights,D=None):
-        # NOTE: _get_statistics is special case with all weights being 1
-        # this is kept as a separate method for speed and modularity
+    def _get_statistics(self,data,D=None):
+        D = getdatadimension(data) if D is None else D
+        out = np.zeros((D+2,D+2))
         if isinstance(data,np.ndarray):
-            neff = weights.sum()
-            if neff > 0:
-                D = getdatadimension(data) if D is None else D
-                xbar = np.dot(weights,np.reshape(data,(-1,D))) / neff
-                centered = np.reshape(data,(-1,D)) - xbar
-                sumsq = np.dot(centered.T,(weights[:,na] * centered))
-            else:
-                xbar, sumsq = None, None
+            out[:D,:D] = data.T.dot(data)
+            out[-2,:D] = out[:D,-2] = data.sum(0)
+            out[-2,-2] = out[-1,-1] = data.shape[0]
+            return out
         else:
-            neff = sum(w.sum() for w in weights)
-            if neff > 0:
-                D = getdatadimension(data) if D is None else D
-                xbar = sum(np.dot(w,np.reshape(d,(-1,D))) for w,d in zip(weights,data)) / neff
-                sumsq = sum(np.dot((np.reshape(d,(-1,D))-xbar).T,w[:,na]*(np.reshape(d,(-1,D))-xbar))
-                        for w,d in zip(weights,data))
-            else:
-                xbar, sumsq = None, None
+            return sum(map(self._get_statistics,data),out)
 
-        return neff, xbar, sumsq
-
-    def _posterior_hypparams(self,n,xbar,sumsq):
-        mu_0, sigma_0, kappa_0, nu_0 = self.mu_0, self.sigma_0, self.kappa_0, self.nu_0
-        if n > 0:
-            mu_n = self.kappa_0 / (self.kappa_0 + n) * self.mu_0 + n / (self.kappa_0 + n) * xbar
-            kappa_n = self.kappa_0 + n
-            nu_n = self.nu_0 + n
-            sigma_n = self.sigma_0 + sumsq + \
-                    self.kappa_0*n/(self.kappa_0+n) * np.outer(xbar-self.mu_0,xbar-self.mu_0)
-
-            return mu_n, sigma_n, kappa_n, nu_n
+    def _get_weighted_statistics(self,data,weights,D=None):
+        D = getdatadimension(data) if D is None else D
+        out = np.zeros((D+2,D+2))
+        if isinstance(data,np.ndarray):
+            out[:D,:D] = data.T.dot(weights[:,na]*data)
+            out[-2,:D] = out[:D,-2] = weights.dot(data)
+            out[-2,-2] = out[-1,-1] = weights.sum()
+            return out
         else:
-            return mu_0, sigma_0, kappa_0, nu_0
+            return sum(map(self._get_weighted_statistics,data,weights),out)
 
     def empirical_bayes(self,data):
-        D = getdatadimension(data)
-        self.kappa_0 = 0
-        self.nu_0 = 0
-        self.mu_0 = np.zeros(D)
-        self.sigma_0 = np.zeros((D,D))
-        self.mu_0, self.sigma_0, self.kappa_0, self.nu_0 = \
-                self._posterior_hypparams(*self._get_statistics(data))
+        self.natural_hypparam = self._get_statistics(data)
         if (self.mu,self.sigma) == (None,None):
             self.resample() # intialize from prior
-
         return self
 
     ### Gibbs sampling
 
     def resample(self,data=[]):
         D = len(self.mu_0)
-        self.mu_mf, self.sigma_mf = self.mu, self.sigma = \
-                sample_niw(*self._posterior_hypparams(*self._get_statistics(data,D)))
+        self.mu, self.sigma = \
+                sample_niw(*self._natural_to_standard(
+                    self.natural_hypparam + self._get_statistics(data,D)))
+        # NOTE: next line is so we can use Gibbs sampling to initialize mean field
+        self.mu_mf, self._sigma_mf = self.mu, self.sigma * (self.nu_mf - D - 1)
         return self
 
     def copy_sample(self):
@@ -251,16 +294,42 @@ class Gaussian(_GaussianBase, GibbsSampling, MeanField, Collapsed, MAP, MaxLikel
 
     ### Mean Field
 
-    # NOTE my sumsq is Bishop's Nk*Sk
+    def _resample_from_mf(self):
+        self.mu, self.sigma = \
+                sample_niw(*self._natural_to_standard(self.mf_natural_hypparam))
+        return self
 
-    def _get_sigma_mf(self):
+    def meanfieldupdate(self,data,weights):
+        D = len(self.mu_0)
+        self.mf_natural_hypparam = \
+                self.natural_hypparam + self._get_weighted_statistics(data,weights,D)
+
+    def meanfield_sgdstep(self,data,weights,minibatchfrac,stepsize):
+        D = len(self.mu_0)
+        self.mf_natural_hypparam = \
+                (1-stepsize) * self.mf_natural_hypparam + stepsize * (
+                        self.natural_hypparam
+                        + 1./minibatchfrac * self._get_weighted_statistics(data,weights,D))
+
+    @property
+    def mf_natural_hypparam(self):
+        return self._standard_to_natural(self.mu_mf,self.sigma_mf,self.kappa_mf,self.nu_mf)
+
+    @mf_natural_hypparam.setter
+    def mf_natural_hypparam(self,natparam):
+        self.mu_mf, self.sigma_mf, self.kappa_mf, self.nu_mf = \
+                self._natural_to_standard(natparam)
+        # NOTE: next line is for plotting
+        self.mu, self.sigma = self.mu_mf, self.sigma_mf/(self.nu_mf - self.mu_mf.shape[0] - 1)
+
+    @property
+    def sigma_mf(self):
         return self._sigma_mf
 
-    def _set_sigma_mf(self,val):
+    @sigma_mf.setter
+    def sigma_mf(self,val):
         self._sigma_mf = val
         self._sigma_mf_chol = None
-
-    sigma_mf = property(_get_sigma_mf,_set_sigma_mf)
 
     @property
     def sigma_mf_chol(self):
@@ -268,16 +337,7 @@ class Gaussian(_GaussianBase, GibbsSampling, MeanField, Collapsed, MAP, MaxLikel
             self._sigma_mf_chol = np.linalg.cholesky(self.sigma_mf)
         return self._sigma_mf_chol
 
-    def meanfieldupdate(self,data,weights):
-        # update
-        D = len(self.mu_0)
-        self.mu_mf, self.sigma_mf, self.kappa_mf, self.nu_mf = \
-                self._posterior_hypparams(*self._get_weighted_statistics(data,weights,D))
-        self.mu, self.sigma = self.mu_mf, self.sigma_mf/(self.nu_mf - D - 1) # for plotting
-
     def get_vlb(self):
-        # return avg energy plus entropy, our contribution to the mean field
-        # variational lower bound
         D = len(self.mu_0)
         loglmbdatilde = self._loglmbdatilde()
 
@@ -316,7 +376,9 @@ class Gaussian(_GaussianBase, GibbsSampling, MeanField, Collapsed, MAP, MaxLikel
 
     def log_marginal_likelihood(self,data):
         n, D = getdatasize(data), len(self.mu_0)
-        return self._log_partition_function(*self._posterior_hypparams(*self._get_statistics(data))) \
+        return self._log_partition_function(
+                *self._natural_to_standard(
+                    self.natural_hypparam + self._get_statistics(data,D))) \
                 - self._log_partition_function(self.mu_0,self.sigma_0,self.kappa_0,self.nu_0) \
                 - n*D/2 * np.log(2*np.pi)
 
@@ -328,50 +390,55 @@ class Gaussian(_GaussianBase, GibbsSampling, MeanField, Collapsed, MAP, MaxLikel
 
     def log_predictive_studentt_datapoints(self,datapoints,olddata):
         D = len(self.mu_0)
-        mu_n, sigma_n, kappa_n, nu_n = self._posterior_hypparams(*self._get_statistics(olddata,D))
-        return multivariate_t_loglik(datapoints,nu_n-D+1,mu_n,(kappa_n+1)/(kappa_n*(nu_n-D+1))*sigma_n)
+        mu_n, sigma_n, kappa_n, nu_n = \
+                self._natural_to_standard(
+                        self.natural_hypparam + self._get_statistics(olddata,D))
+        return multivariate_t_loglik(
+                datapoints,nu_n-D+1,mu_n,(kappa_n+1)/(kappa_n*(nu_n-D+1))*sigma_n)
 
     def log_predictive_studentt(self,newdata,olddata):
         # an alternative computation to the generic log_predictive, which is implemented
-        # in terms of log_marginal_likelihood. mostly for testing, I think
+        # in terms of log_marginal_likelihood. mostly for testing.
         newdata = np.atleast_2d(newdata)
-        return sum(self.log_predictive_studentt_datapoints(d,combinedata((olddata,newdata[:i])))[0]
-                        for i,d in enumerate(newdata))
+        return sum(self.log_predictive_studentt_datapoints(
+            d,combinedata((olddata,newdata[:i])))[0] for i,d in enumerate(newdata))
 
     ### Max likelihood
-
-    # NOTE: could also use sumsq/(n-1) as the covariance estimate, which would
-    # be unbiased but not max likelihood, but if we're in the regime where that
-    # matters we've got bigger problems!
 
     def max_likelihood(self,data,weights=None):
         D = getdatadimension(data)
         if weights is None:
-            n, muhat, sumsq = self._get_statistics(data)
+            statmat = self._get_statistics(data,D)
         else:
-            n, muhat, sumsq = self._get_weighted_statistics(data,weights)
+            statmat = self._get_weighted_statistics(data,weights,D)
+
+        n, x, xxt = statmat[-1,-1], statmat[-2,:D], statmat[:D,:D]
 
         # this SVD is necessary to check if the max likelihood solution is
         # degenerate, which can happen in the EM algorithm
-        if n < D or (np.linalg.svd(sumsq,compute_uv=False) > 1e-6).sum() < D:
-            # broken!
+        if n < D or (np.linalg.svd(xxt,compute_uv=False) > 1e-6).sum() < D:
+            self.broken = True
             self.mu = 99999999*np.ones(D)
             self.sigma = np.eye(D)
-            self.broken = True
         else:
-            self.mu = muhat
-            self.sigma = sumsq/n
+            self.mu = x/n
+            self.sigma = xxt/n - np.outer(self.mu,self.mu)
 
         return self
 
     def MAP(self,data,weights=None):
         # max likelihood with prior pseudocounts included in data
         if weights is None:
-            n, muhat, sumsq = self._get_statistics(data)
+            statmat = self._get_statistics(data)
         else:
-            n, muhat, sumsq = self._get_weighted_statistics(data,weights)
+            statmat = self._get_weighted_statistics(data,weights)
+        statmat += self.natural_hypparam
 
-        self.mu, self.sigma, _, _ = self._posterior_hypparams(n,muhat,sumsq)
+        n, x, xxt = statmat[-1,-1], statmat[-2,:D], statmat[:D,:D]
+
+        self.mu = x/n
+        self.sigma = xxt/n - np.outer(self.mu,self.mu)
+
         return self
 
 
@@ -398,7 +465,7 @@ class GaussianFixedMean(_GaussianBase, GibbsSampling, MaxLikelihood):
 
     def _get_statistics(self,data):
         n = getdatasize(data)
-        if n > 0:
+        if n > 1e-4:
             if isinstance(data,np.ndarray):
                 centered = data - self.mu
                 sumsq = centered.T.dot(centered)
@@ -427,7 +494,7 @@ class GaussianFixedMean(_GaussianBase, GibbsSampling, MaxLikelihood):
 
     def _posterior_hypparams(self,n,sumsq):
         nu_0, lmbda_0 = self.nu_0, self.lmbda_0
-        if n > 0:
+        if n > 1e-4:
             nu_0 = nu_0 + n
             sigma_n = self.lmbda_0 + sumsq
             return sigma_n, nu_0
@@ -818,6 +885,69 @@ class _ScalarGaussianBase(object):
             else:
                 plt.plot(indices,[self.mu],color=color,marker='+')
 
+    ### mostly shared statistics gathering
+
+    def _get_statistics(self,data):
+        n = getdatasize(data)
+        if n > 0:
+            if isinstance(data,np.ndarray):
+                ybar = data.mean()
+                centered = data.ravel() - ybar
+                sumsqc = centered.dot(centered)
+            elif isinstance(data,list):
+                ybar = sum(d.sum() for d in data)/n
+                sumsqc = sum((d.ravel()-ybar).dot(d.ravel()-ybar) for d in data)
+            else:
+                ybar = data
+                sumsqc = 0
+        else:
+            ybar = None
+            sumsqc = None
+
+        return n, ybar, sumsqc
+
+    def _get_weighted_statistics(self,data,weights):
+        if isinstance(data,np.ndarray):
+            neff = weights.sum()
+            if neff > 0:
+                ybar = weights.dot(data.ravel()) / neff
+                centered = data.ravel() - ybar
+                sumsqc = centered.dot(weights*centered)
+            else:
+                ybar = None
+                sumsqc = None
+        elif isinstance(data,list):
+            neff = sum(w.sum() for w in weights)
+            if neff > 0:
+                ybar = sum(w.dot(d.ravel()) for d,w in zip(data,weights)) / neff
+                sumsqc = sum((d.ravel()-ybar).dot(w*(d.ravel()-ybar))
+                        for d,w in zip(data,weights))
+            else:
+                ybar = None
+                sumsqc = None
+        else:
+            ybar = data
+            sumsqc = 0
+
+        return neff, ybar, sumsqc
+
+    ### max likelihood
+
+    def max_likelihood(self,data,weights=None):
+        if weights is None:
+            n, ybar, sumsqc = self._get_statistics(data)
+        else:
+            n, ybar, sumsqc = self._get_weighted_statistics(data,weights)
+
+        if sumsqc > 0:
+            self.mu = ybar
+            self.sigmasq = sumsqc/n
+        else:
+            self.broken = True
+            self.mu = 999999999.
+            self.sigmsq = 1.
+
+        return self
 
 # TODO meanfield, max_likelihood
 class ScalarGaussianNIX(_ScalarGaussianBase, GibbsSampling, Collapsed):
@@ -862,29 +992,6 @@ class ScalarGaussianNIX(_ScalarGaussianBase, GibbsSampling, Collapsed):
         self.mu = np.sqrt(self.sigmasq / kappa_n) * np.random.randn() + mu_n
         return self
 
-    def _get_statistics(self,data):
-        assert isinstance(data,np.ndarray) or \
-                (isinstance(data,list) and all((isinstance(d,np.ndarray))
-                    for d in data)) or \
-                (isinstance(data,int) or isinstance(data,float))
-
-        n = getdatasize(data)
-        if n > 0:
-            if isinstance(data,np.ndarray):
-                ybar = data.mean()
-                sumsqc = ((data-ybar)**2).sum()
-            elif isinstance(data,list):
-                ybar = sum(d.sum() for d in data)/n
-                sumsqc = sum(np.sum((d-ybar)**2) for d in data)
-            else:
-                ybar = data
-                sumsqc = 0
-        else:
-            ybar = None
-            sumsqc = None
-
-        return n, ybar, sumsqc
-
     ### Collapsed
 
     def log_marginal_likelihood(self,data):
@@ -910,7 +1017,7 @@ class ScalarGaussianNonconjNIX(_ScalarGaussianBase, GibbsSampling):
     sigmasq ~ (Scaled-)Inverse-ChiSquared(sigmasq_0,nu_0)
     '''
     def __init__(self,mu=None,sigmasq=None,mu_0=None,tausq_0=None,sigmasq_0=None,nu_0=None,
-            niter=20):
+            niter=1):
         self.mu, self.sigmasq = mu, sigmasq
         self.mu_0, self.tausq_0 = mu_0, tausq_0
         self.sigmasq_0, self.nu_0 = sigmasq_0, nu_0
@@ -945,6 +1052,150 @@ class ScalarGaussianNonconjNIX(_ScalarGaussianBase, GibbsSampling):
             self.sigmasq = self.sigmasq_0*self.nu_0/np.random.chisquare(self.nu_0)
 
         return self
+
+class ScalarGaussianNonconjNIG(_ScalarGaussianBase, MeanField):
+    # NOTE: this is like ScalarGaussianNonconjNiIG except prior is in natural
+    # coordinates
+
+    def __init__(self,h_0,J_0,alpha_0,beta_0,
+            mu=None,sigmasq=None,
+            h_mf=None,J_mf=None,alpha_mf=None,beta_mf=None,niter=1):
+        self.h_0, self.J_0 = h_0, J_0
+        self.alpha_0, self.beta_0 = alpha_0, beta_0
+
+        self.h_mf = h_mf if h_mf is not None else J_0 * np.random.normal(h_0/J_0,1./np.sqrt(J_0))
+        self.J_mf = J_mf if J_mf is not None else J_0
+        self.alpha_mf = alpha_mf if alpha_mf is not None else alpha_0
+        self.beta_mf = beta_mf if beta_mf is not None else beta_0
+
+        self.niter = niter
+
+        self.mu = mu if mu is not None else np.random.normal(h_0/J_0,1./np.sqrt(J_0))
+        self.sigmasq = sigmsq if sigmasq is not None else 1./np.random.gamma(alpha_0,1./beta_0)
+
+    @property
+    def hypparams(self):
+        return dict(h_0=self.h_0,J_0=self.J_0,alpha_0=self.J_0,beta_0=self.beta_0)
+
+    @property
+    def _E_mu(self):
+        # E[mu], E[mu**2]
+        return self.h_mf / self.J_mf, 1./self.J_mf + (self.h_mf / self.J_mf)**2
+
+    @property
+    def _E_sigmasq(self):
+        # E[1/sigmasq], E[ln sigmasq]
+        return self.alpha_mf / self.beta_mf, \
+                np.log(self.beta_mf) - special.digamma(self.alpha_mf)
+
+    @property
+    def natural_hypparam(self):
+        return np.array([self.alpha_0,self.beta_0,self.h_0,self.J_0])
+
+    @natural_hypparam.setter
+    def natural_hypparam(self,natural_hypparam):
+        self.alpha_0, self.beta_0, self.h_0, self.J_0 = natural_hypparam
+
+    @property
+    def mf_natural_hypparam(self):
+        return np.array([self.alpha_mf,self.beta_mf,self.h_mf,self.J_mf])
+
+    @mf_natural_hypparam.setter
+    def mf_natural_hypparam(self,mf_natural_hypparam):
+        self.alpha_mf, self.beta_mf, self.h_mf, self.J_mf = mf_natural_hypparam
+        # set point estimates of (mu, sigmasq) for plotting and stuff
+        self.mu, self.sigmasq = self.h_mf / self.J_mf, self.beta_mf / (self.alpha_mf-1)
+
+    def _resample_from_mf(self):
+        self.mu, self.sigmasq = np.random.normal(self.h_mf/self.J_mf,np.sqrt(1./self.J_mf)), \
+                np.random.gamma(self.alpha_mf,1./self.beta_mf)
+        return self
+
+    def expected_log_likelihood(self,x):
+        (Emu, Emu2), (Esigmasqinv, Elnsigmasq) = self._E_mu, self._E_sigmasq
+        return -1./2 * Esigmasqinv * (x**2 + Emu2 - 2*x*Emu) \
+                - 1./2*Elnsigmasq - 1./2*np.log(2*np.pi)
+
+    def get_vlb(self):
+        # E[ln p(mu) / q(mu)] part
+        h_0, J_0, h_mf, J_mf = self.h_0, self.J_0, self.h_mf, self.J_mf
+        Emu, Emu2 = self._E_mu
+        p_mu_avgengy = -1./2*J_0*Emu2 + h_0*Emu \
+                - 1./2*(h_0**2/J_0) + 1./2*np.log(J_0) - 1./2*np.log(2*np.pi)
+        q_mu_entropy = 1./2*np.log(2*np.pi*np.e/J_mf)
+
+        # E[ln p(sigmasq) / q(sigmasq)] part
+        alpha_0, beta_0, alpha_mf, beta_mf = \
+                self.alpha_0, self.beta_0, self.alpha_mf, self.beta_mf
+        (Esigmasqinv, Elnsigmasq) = self._E_sigmasq
+        p_sigmasq_avgengy = (-alpha_0-1)*Elnsigmasq + (-beta_0)*Esigmasqinv \
+                - (special.gammaln(alpha_0) - alpha_0*np.log(beta_0))
+        q_sigmasq_entropy = alpha_mf + np.log(beta_mf) + special.gammaln(alpha_mf) \
+                - (1+alpha_mf)*special.digamma(alpha_mf)
+
+        return p_mu_avgengy + q_mu_entropy + p_sigmasq_avgengy + q_sigmasq_entropy
+
+    def meanfield_sgdstep(self,data,weights,minibatchfrac,stepsize):
+        # like meanfieldupdate except we step the factors simultaneously
+
+        # NOTE: unlike the fully conjugate case, there are interaction terms, so
+        # we work on the destructured pieces
+        neff, y, ysq = self._get_weighted_statistics(data,weights)
+        Emu, _ = self._E_mu
+        Esigmasqinv, _ = self._E_sigmasq
+
+
+        # form new natural hyperparameters as if doing a batch update
+        alpha_new = self.alpha_0 + 1./minibatchfrac * 1./2*neff
+        beta_new = self.beta_0 + 1./minibatchfrac * 1./2*(ysq + neff*Emu**2 - 2*Emu*y)
+
+        h_new = self.h_0 + 1./minibatchfrac * Esigmasqinv * y
+        J_new = self.J_0 + 1./minibatchfrac * Esigmasqinv * neff
+
+
+        # take a step
+        self.alpha_mf = (1-stepsize)*self.alpha_mf + stepsize*alpha_new
+        self.beta_mf = (1-stepsize)*self.beta_mf + stepsize*beta_new
+
+        self.h_mf = (1-stepsize)*self.h_mf + stepsize*h_new
+        self.J_mf = (1-stepsize)*self.J_mf + stepsize*J_new
+
+        # calling this setter will set point estimates for (mu,sigmasq) for
+        # plotting and sampling and stuff
+        self.mf_natural_hypparam = (self.alpha_mf, self.beta_mf, self.h_mf, self.J_mf)
+
+        return self
+
+    def meanfieldupdate(self,data,weights,niter=None):
+        niter = niter if niter is not None else self.niter
+        neff, y, ysq = self._get_weighted_statistics(data,weights)
+        for niter in xrange(niter):
+            # update q(sigmasq)
+            Emu, _ = self._E_mu
+
+            self.alpha_mf = self.alpha_0 + 1./2*neff
+            self.beta_mf = self.beta_0 + 1./2*(ysq + neff*Emu**2 - 2*Emu*y)
+
+            # update q(mu)
+            Esigmasqinv, _ = self._E_sigmasq
+
+            self.h_mf = self.h_0 + Esigmasqinv * y
+            self.J_mf = self.J_0 + Esigmasqinv * neff
+
+        # calling this setter will set point estimates for (mu,sigmasq) for
+        # plotting and sampling and stuff
+        self.mf_natural_hypparam = (self.alpha_mf, self.beta_mf, self.h_mf, self.J_mf)
+
+        return self
+
+    def _get_weighted_statistics(self,data,weights):
+        if isinstance(data,np.ndarray):
+            neff = weights.sum()
+            y = weights.dot(data)
+            ysq = weights.dot(data**2)
+        else:
+            return sum(self._get_weighted_statistics(d,w) for d,w in zip(data,weights))
+        return np.array([neff,y,ysq])
 
 
 class ScalarGaussianFixedvar(_ScalarGaussianBase, GibbsSampling):
@@ -995,6 +1246,152 @@ class ScalarGaussianFixedvar(_ScalarGaussianBase, GibbsSampling):
         else:
             xbar = None
         return n, xbar
+
+    def _get_weighted_statistics(self,data,weights):
+        if isinstance(data,np.ndarray):
+            neff = weights.sum()
+        else:
+            neff = sum(w.sum() for w in weights)
+
+        if neff > 0:
+            if isinstance(data,np.ndarray):
+                xbar = data.dot(weights) / neff
+            else:
+                xbar = sum(w.dot(d) for d,w in zip(data,weights)) / neff
+        else:
+            xbar = None
+
+        return neff, xbar
+
+
+    def max_likelihood(self,data,weights=None):
+        if weights is None:
+            _, xbar = self._get_statistics(data)
+        else:
+            _, xbar = self._get_weighted_statistics(data,weights)
+
+        self.mu = xbar
+
+
+class UniformOneSided(GibbsSampling):
+    '''
+    Models a uniform distribution over [low,high] for a parameter high.
+    Low is a fixed hyperparameter (hence "OneSided"). See the Uniform class for
+    the two-sided version.
+
+    Likelihood is x ~ U[low,high]
+    Prior is high ~ Pareto(x_m,alpha) following Wikipedia's notation
+
+    Hyperparameters:
+        x_m, alpha, low
+
+    Parameters:
+        high
+    '''
+    def __init__(self,high=None,x_m=None,alpha=None,low=0.):
+        self.high = high
+
+        self.x_m = x_m
+        self.alpha = alpha
+        self.low = low
+
+        if high is None and None not in (x_m,alpha):
+            self.resample() # intialize from prior
+
+    @property
+    def params(self):
+        return {'high':self.high}
+
+    @property
+    def hypparams(self):
+        return dict(x_m=self.x_m,alpha=self.alpha,low=self.low)
+
+    def log_likelihood(self,x):
+        x = np.atleast_1d(x)
+        raw = np.where((self.low <= x) & (x < self.high),
+                -np.log(self.high - self.low),-np.inf)
+        return raw if isinstance(x,np.ndarray) else raw[0]
+
+    def rvs(self,size=[]):
+        return np.random.uniform(low=self.low,high=self.high,size=size)
+
+    def resample(self,data=[]):
+        self.high = sample_pareto(
+                *self._posterior_hypparams(*self._get_statistics(data)))
+        return self
+
+    def _get_statistics(self,data):
+        if isinstance(data,np.ndarray):
+            n = data.shape[0]
+            datamax = data.max()
+        else:
+            n = sum(d.shape[0] for d in data)
+            datamax = max(d.max() for d in data) \
+                    if n > 0 else -np.inf
+        return n, datamax
+
+    def _posterior_hypparams(self,n,datamax):
+        return max(datamax,self.x_m), n + self.alpha
+
+class Uniform(UniformOneSided):
+    '''
+    Models a uniform distribution over [low,high] for parameters low and high.
+    The prior is non-conjugate (though it's conditionally conjugate over one
+    parameter at a time).
+
+    Likelihood is x ~ U[low,high]
+    Prior is -low ~ Pareto(x_m_low,alpha_low)-2*x_m_low
+             high ~ Pareto(x_m_high,alpha_high)
+
+    Hyperparameters:
+        x_m_low, alpha_low
+        x_m_high, alpha_high
+
+    Parameters:
+        low, high
+    '''
+    def __init__(self,low=None,high=None,
+            x_m_low=None,alpha_low=None,x_m_high=None,alpha_high=None):
+        self.low = low
+        self.high = high
+
+        self.x_m_low = x_m_low
+        self.alpha_low = alpha_low
+        self.x_m_high = x_m_high
+        self.alpha_high = alpha_high
+
+        if (low,high) == (None,None) and None not in (x_m_low,alpha_low,x_m_high,alpha_high):
+            self.resample() # initialize from prior
+
+    @property
+    def params(self):
+        return dict(low=self.low,high=self.high)
+
+    @property
+    def hypparams(self):
+        return dict(x_m_low=self.x_m_low,alpha_low=self.alpha_low,
+                x_m_high=self.x_m_high,alpha_high=self.alpha_high)
+
+    def resample(self,data=[],niter=5):
+        if len(data) == 0:
+            self.low = -sample_pareto(-self.x_m_low,self.alpha_low)
+            self.high = sample_pareto(self.x_m_high,self.alpha_high)
+        else:
+            for itr in xrange(niter):
+                # resample high, fixing low
+                self.x_m, self.alpha = self.x_m_high, self.alpha_high
+                super(Uniform,self).resample(data)
+                # tricky: flip data and resample 'high' again
+                self.x_m, self.alpha = -self.x_m_low, self.alpha_low
+                self.low, self.high = self.high, self.low
+                super(Uniform,self).resample(self._flip_data(data))
+                self.low, self.high = self.x_m_low - self.high, self.low
+
+    def _flip_data(self,data):
+        if isinstance(data,np.ndarray):
+            return self.x_m_low - data
+        else:
+            return map(self._flip_data,data)
 
 ##############
 #  Discrete  #
@@ -1071,32 +1468,43 @@ class Categorical(GibbsSampling, MeanField, MaxLikelihood, MAP):
     def log_likelihood(self,x):
         return np.log(self.weights)[x]
 
-    def _posterior_hypparams(self,counts):
-        return self.alphav_0 + counts
-
     ### Gibbs sampling
 
     def resample(self,data=[]):
-        'data is an array of indices (i.e. labels) or a list of such arrays'
-        hypparams = self._posterior_hypparams(*self._get_statistics(data,len(self.alphav_0)))
-        self.weights = np.random.dirichlet(np.where(hypparams>1e-2,hypparams,1e-2))
+        self.weights = np.random.dirichlet(np.maximum(1e-5,
+            self.alphav_0 + self._get_statistics(data,len(self.alphav_0))))
+        # NOTE: next line is so we can use Gibbs sampling to initialize mean field
         self._alpha_mf = self.weights * self.alphav_0.sum()
+        assert (self._alpha_mf >= 0.).all()
         return self
 
     @staticmethod
     def _get_statistics(data,K):
-        if isinstance(data,np.ndarray):
+        if isinstance(data,np.ndarray) or \
+                (isinstance(data,list) and len(data) > 0 \
+                and not isinstance(data[0],(np.ndarray,list))):
             counts = np.bincount(data,minlength=K)
         else:
             counts = sum(np.bincount(d,minlength=K) for d in data)
-        return counts,
+        return counts
+
+    @staticmethod
+    def _get_weighted_statistics(data,weights):
+        # data is just a placeholder; technically it should always be
+        # np.arange(K)[na,:].repeat(N,axis=0), but this code just ignores it
+        if isinstance(weights,np.ndarray):
+            counts = np.atleast_2d(weights).sum(0)
+        else:
+            counts = sum(np.atleast_2d(w).sum(0) for w in weights)
+        return counts
 
     ### Mean Field
 
     def meanfieldupdate(self,data,weights):
         # update
-        self._alpha_mf = self._posterior_hypparams(*self._get_weighted_statistics(data,weights))
+        self._alpha_mf = self.alphav_0 + self._get_weighted_statistics(data,weights)
         self.weights = self._alpha_mf / self._alpha_mf.sum() # for plotting
+        assert (self._alpha_mf > 0.).all()
         return self
 
     def get_vlb(self):
@@ -1115,35 +1523,37 @@ class Categorical(GibbsSampling, MeanField, MaxLikelihood, MAP):
         x = x if x is not None else slice(None)
         return special.digamma(self._alpha_mf[x]) - special.digamma(self._alpha_mf.sum())
 
-    @staticmethod
-    def _get_weighted_statistics(data,weights):
-        # data is just a placeholder; technically it should always be
-        # np.arange(K)[na,:].repeat(N,axis=0), but this code ignores it
-        if isinstance(weights,np.ndarray):
-            counts = np.atleast_2d(weights).sum(0)
-        else:
-            counts = sum(np.atleast_2d(w).sum(0) for w in weights)
-        return counts,
+    ### Mean Field SGD
+
+    def meanfield_sgdstep(self,data,weights,minibatchfrac,stepsize):
+        self._alpha_mf = \
+                (1-stepsize) * self._alpha_mf + stepsize * (
+                        self.alphav_0
+                        + 1./minibatchfrac * self._get_weighted_statistics(data,weights))
+        self.weights = self._alpha_mf / self._alpha_mf.sum() # for plotting
+        return self
+
+    def _resample_from_mf(self):
+        self.weights = np.random.dirichlet(self._alpha_mf)
 
     ### Max likelihood
 
     def max_likelihood(self,data,weights=None):
         K = self.K
         if weights is None:
-            counts, = self._get_statistics(data,K)
+            counts = self._get_statistics(data,K)
         else:
-            counts, = self._get_weighted_statistics(data,weights)
-
+            counts = self._get_weighted_statistics(data,weights)
         self.weights = counts/counts.sum()
         return self
 
     def MAP(self,data,weights=None):
         K = self.K
         if weights is None:
-            counts, = self._get_statistics(data,K)
+            counts = self._get_statistics(data,K)
         else:
-            counts, = self._get_weighted_statistics(data,weights)
-
+            counts = self._get_weighted_statistics(data,weights)
+        counts += self.alphav_0
         self.weights = counts/counts.sum()
         return self
 
@@ -1182,7 +1592,7 @@ class CategoricalAndConcentration(Categorical):
         return dict(a_0=self.a_0,b_0=self.b_0,K=self.K)
 
     def resample(self,data=[]):
-        counts, = self._get_statistics(data,self.K)
+        counts = self._get_statistics(data,self.K)
         self.alpha_0_obj.resample(counts)
         self.alpha_0 = self.alpha_0 # for the effect on alphav_0
         return super(CategoricalAndConcentration,self).resample(data)
@@ -1221,11 +1631,11 @@ class Multinomial(Categorical):
     @staticmethod
     def _get_statistics(data,K):
         if isinstance(data,np.ndarray):
-            return np.atleast_2d(data).sum(0),
+            return np.atleast_2d(data).sum(0)
         else:
             if len(data) == 0:
-                return np.zeros(K,dtype=int),
-            return np.concatenate(data).sum(0),
+                return np.zeros(K,dtype=int)
+            return np.concatenate(data).sum(0)
 
     def expected_log_likelihood(self,x=None):
         if x is not None and (not x.ndim == 2 or not np.all(x == np.eye(x.shape[0]))):
@@ -1446,7 +1856,13 @@ class Poisson(GibbsSampling, Collapsed, MaxLikelihood):
         else:
             n, tot = self._get_weighted_statistics(data,weights)
 
-        self.lmbda = tot/n
+        if n > 1e-2:
+            self.lmbda = tot/n
+            assert self.lmbda > 0
+        else:
+            self.broken = True
+            self.lmbda = 999999
+
 
 
 class _NegativeBinomialBase(Distribution):
@@ -1608,8 +2024,8 @@ class NegativeBinomial(_NegativeBinomialBase, GibbsSampling):
             cls.logF = logF
 
 
-class NegativeBinomialFixedR(_NegativeBinomialBase, GibbsSampling, MaxLikelihood):
-    def __init__(self,r=None,p=None,alpha_0=None,beta_0=None):
+class NegativeBinomialFixedR(_NegativeBinomialBase, GibbsSampling, MeanField, MaxLikelihood):
+    def __init__(self,r=None,p=None,alpha_0=None,beta_0=None,alpha_mf=None,beta_mf=None):
         self.p = p
 
         self.r = r
@@ -1620,12 +2036,79 @@ class NegativeBinomialFixedR(_NegativeBinomialBase, GibbsSampling, MaxLikelihood
         if p is None and None not in (alpha_0,beta_0):
             self.resample() # intialize from prior
 
+        if None not in (alpha_mf,beta_mf):
+            self.alpha_mf = alpha_mf
+            self.beta_mf = beta_mf
+
     @property
-    def hypprams(self):
+    def hypparams(self):
         return dict(alpha_0=self.alpha_0,beta_0=self.beta_0)
+
+    @property
+    def natural_hypparam(self):
+        return np.array([self.alpha_0,self.beta_0]) - 1
+
+    @natural_hypparam.setter
+    def natural_hypparam(self,natparam):
+        self.alpha_0, self.beta_0 = natparam + 1
+
+    ### Mean Field
+
+    def _resample_from_mf(self):
+        self.p = np.random.beta(self.alpha_mf,self.beta_mf)
+        return self
+
+    def meanfieldupdate(self,data,weights):
+        self.alpha_mf, self.beta_mf = \
+                self._posterior_hypparams(*self._get_weighted_statistics(data,weights))
+        self.p = self.alpha_mf / (self.alpha_mf + self.beta_mf)
+
+    def meanfield_sgdstep(self,data,weights,minibatchfrac,stepsize):
+        alpha_new, beta_new = \
+                self._posterior_hypparams(*(
+                    1./minibatchfrac * self._get_weighted_statistics(data,weights)))
+        self.alpha_mf = (1-stepsize)*self.alpha_mf + stepsize*alpha_new
+        self.beta_mf = (1-stepsize)*self.beta_mf + stepsize*beta_new
+        self.p = self.alpha_mf / (self.alpha_mf + self.beta_mf)
+
+    def get_vlb(self):
+        Elnp, Eln1mp = self._mf_expected_statistics()
+        p_avgengy = (self.alpha_0-1)*Elnp + (self.beta_0-1)*Eln1mp \
+                - (special.gammaln(self.alpha_0) + special.gammaln(self.beta_0)
+                        - special.gammaln(self.alpha_0 + self.beta_0))
+        q_entropy = special.betaln(self.alpha_mf,self.beta_mf) \
+                - (self.alpha_mf-1)*special.digamma(self.alpha_mf) \
+                - (self.beta_mf-1)*special.digamma(self.beta_mf) \
+                + (self.alpha_mf+self.beta_mf-2)*special.digamma(self.alpha_mf+self.beta_mf)
+        return p_avgengy + q_entropy
+
+    def _mf_expected_statistics(self):
+        Elnp, Eln1mp = special.digamma([self.alpha_mf,self.beta_mf]) \
+                        - special.digamma(self.alpha_mf + self.beta_mf)
+        return Elnp, Eln1mp
+
+    def expected_log_likelihood(self,x):
+        Elnp, Eln1mp = self._mf_expected_statistics()
+        x = np.atleast_1d(x)
+        errs = np.seterr(invalid='ignore')
+        out = x*Elnp + self.r*Eln1mp + self._log_base_measure(x,self.r)
+        np.seterr(**errs)
+        out[np.isnan(out)] = -np.inf
+        return out if out.shape[0] > 1 else out[0]
+
+    @staticmethod
+    def _log_base_measure(x,r):
+        return special.gammaln(x+r) - special.gammaln(x+1) - special.gammaln(r)
+
+    ### Gibbs
 
     def resample(self,data=[]):
         self.p = np.random.beta(*self._posterior_hypparams(*self._get_statistics(data)))
+        # set mean field params to something reasonable for initialization
+        fakedata = self.rvs(10)
+        self.alpha_mf, self.beta_mf = self._posterior_hypparams(*self._get_statistics(fakedata))
+
+    ### Max likelihood
 
     def max_likelihood(self,data,weights=None):
         if weights is None:
@@ -1635,6 +2118,8 @@ class NegativeBinomialFixedR(_NegativeBinomialBase, GibbsSampling, MaxLikelihood
 
         self.p = (tot/n) / (self.r + tot/n)
         return self
+
+    ### Statistics and posterior hypparams
 
     def _get_statistics(self,data):
         if getdatasize(data) == 0:
@@ -1652,21 +2137,100 @@ class NegativeBinomialFixedR(_NegativeBinomialBase, GibbsSampling, MaxLikelihood
             n = 1
             tot = data
 
-        return n, tot
+        return np.array([n, tot])
 
     def _get_weighted_statistics(self,data,weights):
         if isinstance(weights,np.ndarray):
-            assert np.all(data >= 0)
-            n, tot = weights.sum(), (data*weights).sum()
+            assert np.all(data >= 0) and data.ndim == 1
+            n, tot = weights.sum(), weights.dot(data)
         else:
             assert all(np.all(d >= 0) for d in data)
             n = sum(w.sum() for w in weights)
-            tot = sum((d*w).sum() for d,w in zip(data,weights))
+            tot = sum(w.dot(d) for d,w in zip(data,weights))
 
-        return n, tot
+        return np.array([n, tot])
 
     def _posterior_hypparams(self,n,tot):
-        return self.alpha_0 + tot, self.beta_0 + n*self.r
+        return np.array([self.alpha_0 + tot, self.beta_0 + n*self.r])
+
+class NegativeBinomialIntegerR2(_NegativeBinomialBase,MeanField):
+    # NOTE: this class should replace NegativeBinomialFixedR completely...
+    # TODO add Gibbs sampling
+
+    _fixedr_class = NegativeBinomialFixedR
+
+    def __init__(self,r_support,r_probs,alpha_0,beta_0,r=None,ps=None):
+        self.r_support = r_support
+        self.rho_0 = self.rho_mf = np.log(r_probs)
+        ps = ps if ps is not None else [None]*len(r_support)
+        self._fixedr_distns = \
+            [self._fixedr_class(r=r,p=p,alpha_0=alpha_0,beta_0=beta_0)
+                    for r,p in zip(r_support,ps)]
+
+        # for init
+        self.r = r_support[sample_discrete(r_probs)]
+        self.p = np.random.beta(alpha_0,beta_0)
+
+    def _resample_from_mf(self):
+        lognorm = np.logaddexp.reduce(self.rho_mf)
+        ridx = sample_discrete(np.exp(self.rho_mf - lognorm))
+        self.r = self.r_support[ridx]
+        d = self._fixedr_distns[ridx]
+        self.p = np.random.beta(d.alpha_mf,d.beta_mf)
+
+    def get_vlb(self):
+        return self._r_vlb() + sum(np.exp(rho)*d.get_vlb()
+                for rho,d in zip(self.rho_mf,self._fixedr_distns))
+
+    def _r_vlb(self):
+        return np.exp(self.rho_mf).dot(self.rho_0) \
+                - np.exp(self.rho_mf).dot(self.rho_mf)
+
+    def meanfieldupdate(self,data,weights):
+        for d in self._fixedr_distns:
+            d.meanfieldupdate(data,weights)
+        self._update_rho_mf(data,weights)
+        # for plotting
+        ridx = self.rho_mf.argmax()
+        d = self._fixedr_distns[ridx]
+        self.r = d.r
+        self.p = d.alpha_mf / (d.alpha_mf + d.beta_mf)
+
+    def _update_rho_mf(self,data,weights):
+        self.rho_mf = self.rho_0.copy()
+        for idx, d in enumerate(self._fixedr_distns):
+            n, tot = d._get_weighted_statistics(data,weights)
+            Elnp, Eln1mp = d._mf_expected_statistics()
+            self.rho_mf[idx] += (d.alpha_0-1+tot)*Elnp + (d.beta_0-1+n*d.r)*Eln1mp
+            if isinstance(data,np.ndarray):
+                self.rho_mf[idx] += weights.dot(d._log_base_measure(data,d.r))
+            else:
+                self.rho_mf[idx] += sum(w.dot(d._log_base_measure(dt,d.r))
+                        for dt,w in zip(data,weights))
+
+    def expected_log_likelihood(self,x):
+        lognorm = np.logaddexp.reduce(self.rho_mf)
+        return sum(np.exp(rho-lognorm)*d.expected_log_likelihood(x)
+                for rho,d in zip(self.rho_mf,self._fixedr_distns))
+
+    def meanfield_sgdstep(self,data,weights,minibatchfrac,stepsize):
+        rho_mf_orig = self.rho_mf.copy()
+        if isinstance(data,np.ndarray):
+            self._update_rho_mf(data,minibatchfrac*weights)
+        else:
+            self._update_rho_mf(data,[w*minibatchfrac for w in weights])
+        rho_mf_new = self.rho_mf
+
+        for d in self._fixedr_distns:
+            d.meanfield_sgdstep(data,weights,minibatchfrac,stepsize)
+
+        self.rho_mf = (1-stepsize)*rho_mf_orig + stepsize*rho_mf_new
+
+        # for plotting
+        ridx = self.rho_mf.argmax()
+        d = self._fixedr_distns[ridx]
+        self.r = d.r
+        self.p = d.alpha_mf / (d.alpha_mf + d.beta_mf)
 
 class NegativeBinomialIntegerR(NegativeBinomialFixedR, GibbsSampling, MaxLikelihood):
     '''
@@ -1724,14 +2288,14 @@ class NegativeBinomialIntegerR(NegativeBinomialFixedR, GibbsSampling, MaxLikelih
     # NOTE: this class has a conjugate prior even though it's not in the
     # exponential family, so I wrote _get_statistics and _get_weighted_statistics
     # (which integrate out p) for the resample() and meanfield_update() methods,
-    # though these aren't statistics in the exponential family sense (e.g.
-    #  max_likelihood can't just call _get_weighted_statistics)
+    # though these aren't statistics in the exponential family sense
 
     def _get_statistics(self,data):
+        # NOTE: since this isn't really in exponential family, this method needs
+        # to look at hyperparameters. form posterior hyperparameters for the p
+        # parameters here so we can integrate them out and get the r statistics
         n, tot = super(NegativeBinomialIntegerR,self)._get_statistics(data)
         if n > 0:
-            # NOTE: form posterior hyperparameters for the p parameters here so
-            # we can integrate them out and get the statistics for r
             alpha_n, betas_n = self.alpha_0 + tot, self.beta_0 + self.r_support*n
             data = flattendata(data)
             log_marg_likelihoods = \
@@ -1768,21 +2332,19 @@ class NegativeBinomialIntegerR(NegativeBinomialFixedR, GibbsSampling, MaxLikelih
         posterior_discrete = np.exp(log_posterior_discrete - log_posterior_discrete.max())
         return alpha_n, betas_n, posterior_discrete
 
-    def max_likelihood(self,data,weights=None):
-        if weights is None:
+    def max_likelihood(self,data,weights=None,stats=None):
+        if stats is not None:
+            n, tot = stats
+        elif weights is None:
             n, tot = super(NegativeBinomialIntegerR,self)._get_statistics(data)
         else:
             n, tot = super(NegativeBinomialIntegerR,self)._get_weighted_statistics(data,weights)
 
-        if n > 0:
-            # NOTE: uses r_support for feasible region
-            r_support = self.r_support
-            rmin, rmax = r_support[0], r_support[-1]
+        if n > 1:
+            rs = self.r_support
+            ps = self._max_likelihood_ps(n,tot,rs)
 
-            rs = np.arange(rmin,rmax+1)
-            ps = (tot/n) / (rs + tot/n)
-
-            # TODO make log_likelihood work with array args
+            # TODO TODO this isn't right for weighted data: do weighted sums
             if isinstance(data,np.ndarray):
                 likelihoods = np.array([self.log_likelihood(data,r=r,p=p).sum()
                                             for r,p in zip(rs,ps)])
@@ -1790,78 +2352,106 @@ class NegativeBinomialIntegerR(NegativeBinomialFixedR, GibbsSampling, MaxLikelih
                 likelihoods = np.array([sum(self.log_likelihood(d,r=r,p=p).sum()
                                             for d in data) for r,p in zip(rs,ps)])
 
-            self.r = rmin + likelihoods.argmax()
-            self.p = ps[likelihoods.argmax()]
+            argmax = likelihoods.argmax()
+            self.r = self.r_support[argmax]
+            self.p = ps[argmax]
         return self
 
-class _NegativeBinomialFixedRVariant(NegativeBinomialFixedR):
-    def resample(self,data=[]):
-        # TODO override get_statistics instead?
-        if isinstance(data,np.ndarray):
-            assert (data >= self.r).all()
-            data = data-self.r
-        else:
-            assert all((d >= self.r).all() for d in data)
-            data = [d-self.r for d in data]
-        return super(_NegativeBinomialFixedRVariant,self).resample(data)
+    def _log_base_measure(self,data):
+        return [(special.gammaln(r+data) - special.gammaln(r) - special.gammaln(data+1)).sum()
+                for r in self.r_support]
 
-class _NegativeBinomialIntegerRVariant(NegativeBinomialIntegerR):
-        def resample(self,data=[]):
-            if getdatasize(data) == 0:
-                self.p = np.random.beta(self.alpha_0,self.beta_0)
-                self.r = self.r_support[sample_discrete(self.r_probs)]
-            else:
-                # directly marginalize beta to sample r | data
-                data = flattendata(data)
-                N = data.shape[0]
-                data_sum = data.sum()
-                feasible = self.r_support <= data.min()
-                if not np.any(feasible):
-                    print 'WARNING: %s: data has zero probability under the model, ignoring' \
-                            % self.__class__.__name__
-                    return self.resample(data=data[data > self.r_support.min()])
-                r_probs = self.r_probs[feasible]
-                r_support = self.r_support[feasible]
-                log_marg_likelihoods = special.betaln(self.alpha_0 + data_sum - N*r_support,
-                                                            self.beta_0 + r_support*N) \
-                                        - special.betaln(self.alpha_0, self.beta_0) \
-                                        + (special.gammaln(data[:,na])
-                                                - special.gammaln(data[:,na]-r_support+1)
-                                                - special.gammaln(r_support)).sum(0)
-                log_marg_probs = np.log(r_probs) + log_marg_likelihoods
-                log_marg_probs -= log_marg_probs.max()
-                marg_probs = np.exp(log_marg_probs)
-
-                self.r = r_support[sample_discrete(marg_probs)]
-                self.p = np.random.beta(self.alpha_0 + data_sum - N*self.r, self.beta_0 + N*self.r)
-            return self
+    def _max_likelihood_ps(self,n,tot,rs):
+        ps = (tot/n) / (rs + tot/n)
+        assert (ps >= 0).all()
+        return ps
 
 class _StartAtRMixin(object):
     def log_likelihood(self,x,**kwargs):
         r = kwargs['r'] if 'r' in kwargs else self.r
         return super(_StartAtRMixin,self).log_likelihood(x-r,**kwargs)
 
-    def log_sf(self,x,*args,**kwargs):
-        return super(_StartAtRMixin,self).log_sf(x-self.r)
+    def log_sf(self,x,**kwargs):
+        return super(_StartAtRMixin,self).log_sf(x-self.r,**kwargs)
 
-    def rvs(self,size=None):
+    def expected_log_likelihood(self,x,**kwargs):
+        r = kwargs['r'] if 'r' in kwargs else self.r
+        return super(_StartAtRMixin,self).expected_log_likelihood(x-r,**kwargs)
+
+    def rvs(self,size=[]):
         return super(_StartAtRMixin,self).rvs(size)+self.r
 
-    def max_likelihood(self,data,weights=None,*args,**kwargs):
-        if weights is not None:
-            raise NotImplementedError
+class NegativeBinomialFixedRVariant(_StartAtRMixin,NegativeBinomialFixedR):
+    def _get_statistics(self,data):
+        n, tot = super(NegativeBinomialFixedRVariant,self)._get_statistics(data)
+        n, tot = n, tot-n*self.r
+        assert tot >= 0
+        return np.array([n, tot])
+
+    def _get_weighted_statistics(self,data,weights):
+        n, tot = super(NegativeBinomialFixedRVariant,self)._get_weighted_statistics(data,weights)
+        n, tot = n, tot-n*self.r
+        assert tot >= 0
+        return np.array([n, tot])
+
+class NegativeBinomialIntegerRVariant(NegativeBinomialIntegerR):
+    def resample(self,data=[]):
+        n, alpha_n, posterior_discrete, r_support = self._posterior_hypparams(
+                *self._get_statistics(data)) # NOTE: pass out r_support b/c feasible subset
+        self.r = r_support[sample_discrete(posterior_discrete)]
+        self.p = np.random.beta(alpha_n - n*self.r, self.beta_0 + n*self.r)
+
+    def _get_statistics(self,data):
+        n = getdatasize(data)
+        if n > 0:
+            data = flattendata(data)
+            feasible = self.r_support <= data.min()
+            r_support = self.r_support[feasible]
+            normalizers = (special.gammaln(data[:,na]) - special.gammaln(data[:,na]-r_support+1)
+                    - special.gammaln(r_support)).sum(0)
+            return n, data.sum(), normalizers, feasible
         else:
+            return n, None, None, None
+
+    def _posterior_hypparams(self,n,tot,normalizers,feasible):
+        if n == 0:
+            return n, self.alpha_0, self.r_probs, self.r_support
+        else:
+            r_probs = self.r_probs[feasible]
+            r_support = self.r_support[feasible]
+            log_marg_likelihoods = special.betaln(self.alpha_0 + tot - n*r_support,
+                                                        self.beta_0 + r_support*n) \
+                                    - special.betaln(self.alpha_0, self.beta_0) \
+                                    + normalizers
+            log_marg_probs = np.log(r_probs) + log_marg_likelihoods
+            log_marg_probs -= log_marg_probs.max()
+            marg_probs = np.exp(log_marg_probs)
+
+            return n, self.alpha_0 + tot, marg_probs, r_support
+
+    def _max_likelihood_ps(self,n,tot,rs):
+        ps = 1-(rs*n)/tot
+        assert (ps >= 0).all()
+        return ps
+
+class NegativeBinomialIntegerR2Variant(NegativeBinomialIntegerR2):
+    _fixedr_class = NegativeBinomialFixedRVariant
+
+    def _update_rho_mf(self,data,weights):
+        self.rho_mf = self.rho_0.copy()
+        for idx, d in enumerate(self._fixedr_distns):
+            n, tot = d._get_weighted_statistics(data,weights)
+            Elnp, Eln1mp = d._mf_expected_statistics()
+            self.rho_mf[idx] += (d.alpha_0-1+tot)*Elnp + (d.beta_0-1+n*d.r)*Eln1mp
+            self.rho_mf_temp = self.rho_mf.copy()
+
+            # NOTE: this method only needs to override parent in the base measure
+            # part, i.e. data -> data-r
             if isinstance(data,np.ndarray):
-                return super(_StartAtRMixin,self).max_likelihood(data-self.r,weights=None,*args,**kwargs)
+                self.rho_mf[idx] += weights.dot(d._log_base_measure(data-d.r,d.r))
             else:
-                return super(_StartAtRMixin,self).max_likelihood([d-self.r for d in data],weights=None,*args,**kwargs)
-
-class NegativeBinomialFixedRVariant(_StartAtRMixin,_NegativeBinomialFixedRVariant):
-    pass
-
-class NegativeBinomialIntegerRVariant(_StartAtRMixin,_NegativeBinomialIntegerRVariant):
-    pass
-
+                self.rho_mf[idx] += sum(w.dot(d._log_base_measure(dt-d.r,d.r))
+                        for dt,w in zip(data,weights))
 
 class CRP(GibbsSampling):
     '''

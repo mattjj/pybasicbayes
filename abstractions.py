@@ -7,6 +7,9 @@ from util.stats import combinedata
 # NOTE: data is always a (possibly masked) np.ndarray or list of (possibly
 # masked) np.ndarrays.
 
+# TODO figure out a data abstraction
+# TODO make an exponential family abc to reduce boilerplate
+
 ################
 #  Base class  #
 ################
@@ -98,6 +101,13 @@ class MeanField(BayesianDistribution):
 
     def get_vlb(self):
         raise NotImplementedError
+
+class MeanFieldSVI(BayesianDistribution):
+    __metaclass__ = abc.ABCMeta
+
+    @abc.abstractmethod
+    def meanfield_sgdstep(self,expected_suff_stats,minibatchfrac,stepsize):
+        pass
 
 class Collapsed(BayesianDistribution):
     __metaclass__ = abc.ABCMeta
@@ -204,6 +214,13 @@ class ModelMeanField(Model):
                     return scores
         print 'WARNING: meanfield_coordinate_descent hit maxiter of %d' % maxiter
         return scores
+
+class ModelMeanFieldSVI(Model):
+    __metaclass__ = abc.ABCMeta
+
+    @abc.abstractmethod
+    def meanfield_sgdstep(self,minibatch,minibatchfrac,stepsize):
+        pass
 
 class _EMBase(Model):
     __metaclass__ = abc.ABCMeta

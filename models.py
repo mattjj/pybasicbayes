@@ -110,7 +110,7 @@ class Mixture(ModelGibbsSampling, ModelMeanField, ModelEM):
 
         # pass the weights to pi
         K = len(self.components)
-        self.weights.meanfieldupdate(np.arange(K),[l.r for l in self.labels_list])
+        self.weights.meanfieldupdate(None,[l.r for l in self.labels_list])
 
         # pass the weights to the components
         for idx, c in enumerate(self.components):
@@ -139,6 +139,18 @@ class Mixture(ModelGibbsSampling, ModelMeanField, ModelEM):
             vlb += special.gammaln(len(self.components)+1)
 
         return vlb
+
+    def meanfield_sgdstep(self,data,minibatchfrac,stepsize,**kwargs):
+        l = Labels(data=np.asarray(data),components=self.components,
+                weights=self.weights,**kwargs)
+
+        ## local vb
+        l.meanfieldupdate()
+
+        ## sgd steps on global variables
+        self.weights.meanfield_sgdstep(None,l.r,minibatchfrac,stepsize)
+        for idx, c in enumerate(self.components):
+            c.meanfield_sgdstep(l.data,l.r[:,idx],minibatchfrac,stepsize)
 
     ### EM
 
@@ -192,13 +204,18 @@ class Mixture(ModelGibbsSampling, ModelMeanField, ModelEM):
 
     ### Misc.
 
-    def plot(self,color=None,legend=True):
+    def plot(self,color=None,legend=True,alpha=None,plot_all_components=True):
         cmap = cm.get_cmap()
 
         if len(self.labels_list) > 0:
             label_colors = {}
 
-            used_labels = reduce(set.union,[set(l.z) for l in self.labels_list],set([]))
+            if plot_all_components:
+                assigned_labels = reduce(set.union,[set(l.z) for l in self.labels_list],set([]))
+                used_labels = np.arange(len(self.components))
+            else:
+                used_labels = assigned_labels = \
+                        reduce(set.union,[set(l.z) for l in self.labels_list],set([]))
             num_labels = len(used_labels)
             num_subfig_rows = len(self.labels_list)
 
@@ -209,26 +226,34 @@ class Mixture(ModelGibbsSampling, ModelMeanField, ModelEM):
             for subfigidx,l in enumerate(self.labels_list):
                 # plot the current observation distributions (and obs. if given)
                 plt.subplot(num_subfig_rows,1,1+subfigidx)
-                for label, o in enumerate(self.components):
-                    if label in l.z:
-                        o.plot(color=cmap(label_colors[label]),
-                                data=(l.data[l.z == label] if l.data is not None else None),
-                                label='%d' % label)
+                for label, (weight, o) in enumerate(zip(self.weights.weights,self.components)):
+                    o.plot(color=cmap(label_colors[label]) if color is None else color,
+                            data=(l.data[l.z == label] if l.data is not None else None),
+                            label='%d' % label,
+                            alpha=
+                            0.1*(label in assigned_labels)
+                            +0.9*self.weights.weights[label]/self.weights.weights.max()
+                            if alpha is None else alpha)
 
-            if legend:
+            if legend and color is None:
                 plt.legend(
                         [plt.Rectangle((0,0),1,1,fc=cmap(c))
                             for i,c in label_colors.iteritems() if i in used_labels],
                         [i for i in label_colors if i in used_labels],
-                        loc='best'
+                        loc='best',
+                        ncol=2
                         )
 
         else:
-            top10 = np.array(self.components)[np.argsort(self.weights.weights)][-1:-11:-1]
+            top10indices = np.argsort(self.weights.weights)[-1:-11:-1]
+            top10 = np.array(self.components)[top10indices]
             colors = [cmap(x) for x in np.linspace(0,1,len(top10))] if color is None \
                     else [color]*len(top10)
             for i,(o,c) in enumerate(zip(top10,colors)):
-                o.plot(color=c,label='%d' % i)
+                o.plot(color=c,label='%d' % i,
+                        alpha=
+                        0.05+0.95*self.weights.weights[top10indices[i]]/self.weights.weights[top10indices].max()
+                        if alpha is None else alpha)
 
     def to_json_dict(self):
         assert len(self.labels_list) == 1
