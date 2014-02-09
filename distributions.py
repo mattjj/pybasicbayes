@@ -12,7 +12,7 @@ import copy
 from warnings import warn
 
 from abstractions import Distribution, BayesianDistribution, \
-        GibbsSampling, MeanField, Collapsed, MaxLikelihood, MAP
+        GibbsSampling, MeanField, MeanFieldSVI, Collapsed, MaxLikelihood, MAP
 from util.stats import sample_niw, sample_invwishart, invwishart_entropy,\
         invwishart_log_partitionfunction, sample_discrete, sample_pareto,\
         sample_discrete_from_log, getdatasize, flattendata,\
@@ -184,7 +184,7 @@ class _GaussianBase(object):
                 'theta':theta}
 
 
-class Gaussian(_GaussianBase, GibbsSampling, MeanField, Collapsed, MAP, MaxLikelihood):
+class Gaussian(_GaussianBase, GibbsSampling, MeanField, MeanFieldSVI, Collapsed, MAP, MaxLikelihood):
     '''
     Multivariate Gaussian distribution class.
 
@@ -1053,7 +1053,7 @@ class ScalarGaussianNonconjNIX(_ScalarGaussianBase, GibbsSampling):
 
         return self
 
-class ScalarGaussianNonconjNIG(_ScalarGaussianBase, MeanField):
+class ScalarGaussianNonconjNIG(_ScalarGaussianBase, MeanField, MeanFieldSVI):
     # NOTE: this is like ScalarGaussianNonconjNiIG except prior is in natural
     # coordinates
 
@@ -1397,7 +1397,7 @@ class Uniform(UniformOneSided):
 #  Discrete  #
 ##############
 
-class Categorical(GibbsSampling, MeanField, MaxLikelihood, MAP):
+class Categorical(GibbsSampling, MeanField, MeanFieldSVI, MaxLikelihood, MAP):
     '''
     This class represents a categorical distribution over labels, where the
     parameter is weights and the prior is a Dirichlet distribution.
@@ -2024,7 +2024,7 @@ class NegativeBinomial(_NegativeBinomialBase, GibbsSampling):
             cls.logF = logF
 
 
-class NegativeBinomialFixedR(_NegativeBinomialBase, GibbsSampling, MeanField, MaxLikelihood):
+class NegativeBinomialFixedR(_NegativeBinomialBase, GibbsSampling, MeanField, MeanFieldSVI, MaxLikelihood):
     def __init__(self,r=None,p=None,alpha_0=None,beta_0=None,alpha_mf=None,beta_mf=None):
         self.p = p
 
@@ -2153,7 +2153,7 @@ class NegativeBinomialFixedR(_NegativeBinomialBase, GibbsSampling, MeanField, Ma
     def _posterior_hypparams(self,n,tot):
         return np.array([self.alpha_0 + tot, self.beta_0 + n*self.r])
 
-class NegativeBinomialIntegerR2(_NegativeBinomialBase,MeanField):
+class NegativeBinomialIntegerR2(_NegativeBinomialBase,MeanField, MeanFieldSVI):
     # NOTE: this class should replace NegativeBinomialFixedR completely...
     # TODO add Gibbs sampling
 
