@@ -3,7 +3,7 @@ import numpy as np
 np.seterr(divide='ignore')
 from numpy import newaxis as na
 from numpy.core.umath_tests import inner1d
-import scipy.weave
+import scipy.linalg
 import scipy.stats as stats
 import scipy.special as special
 import matplotlib.pyplot as plt
@@ -17,6 +17,7 @@ from util.stats import sample_niw, sample_invwishart, invwishart_entropy,\
         invwishart_log_partitionfunction, sample_discrete, sample_pareto,\
         sample_discrete_from_log, getdatasize, flattendata,\
         getdatadimension, combinedata, multivariate_t_loglik, gi, atleast_2d
+from util.cstats import sample_crp_tablecounts
 
 # Threshold on weights to perform posterior computation
 weps = 1e-12
@@ -484,14 +485,14 @@ class GaussianFixedMean(_GaussianBase, GibbsSampling, MaxLikelihood):
     def _get_weighted_statistics(self,data,weights):
         if isinstance(data,np.ndarray):
             neff = weights.sum()
-            if neff > 0:
+            if neff > weps:
                 centered = data - self.mu
                 sumsq = centered.T.dot(weights[:,na]*centered)
             else:
                 sumsq = None
         else:
             neff = sum(w.sum() for w in weights)
-            if neff > 0:
+            if neff > weps:
                 sumsq = sum((d-self.mu).T.dot(w[:,na]*(d-self.mu)) for w,d in zip(weights,data))
             else:
                 sumsq = None
@@ -581,13 +582,13 @@ class GaussianFixedCov(_GaussianBase, GibbsSampling, MaxLikelihood):
     def _get_weighted_statistics(self,data,weights):
         if isinstance(data,np.ndarray):
             neff = weights.sum()
-            if neff > 0:
+            if neff > weps:
                 xbar = weights.dot(data) / neff
             else:
                 xbar = None
         else:
             neff = sum(w.sum() for w in weights)
-            if neff > 0:
+            if neff > weps:
                 xbar = sum(w.dot(d) for w,d in zip(weights,data)) / neff
             else:
                 xbar = None
@@ -785,7 +786,7 @@ class DiagonalGaussian(_GaussianBase,GibbsSampling,MaxLikelihood):
     def _get_weighted_statistics(self,data,weights,D=None):
         if isinstance(data,np.ndarray):
             neff = weights.sum()
-            if neff > 0:
+            if neff > weps:
                 D = getdatadimension(data) if D is None else D
                 data = np.reshape(data,(-1,D))
                 xbar = weights.dot(data[gi(data)]) / neff
@@ -794,7 +795,7 @@ class DiagonalGaussian(_GaussianBase,GibbsSampling,MaxLikelihood):
                 xbar, sumsq = None, None
         else:
             neff = sum(w.sum() for w in weights)
-            if neff > 0:
+            if neff > weps:
                 D = getdatadimension(data) if D is None else D
 
                 xbar = sum(w[gi(d)].dot(np.reshape(d[gi(d)],(-1,D))) for w,d in zip(weights,data)) / neff
@@ -949,7 +950,7 @@ class _ScalarGaussianBase(object):
     def _get_weighted_statistics(self,data,weights):
         if isinstance(data,np.ndarray):
             neff = weights.sum()
-            if neff > 0:
+            if neff > weps:
                 ybar = weights.dot(data.ravel()) / neff
                 centered = data.ravel() - ybar
                 sumsqc = centered.dot(weights*centered)
@@ -958,7 +959,7 @@ class _ScalarGaussianBase(object):
                 sumsqc = None
         elif isinstance(data,list):
             neff = sum(w.sum() for w in weights)
-            if neff > 0:
+            if neff > weps:
                 ybar = sum(w.dot(d.ravel()) for d,w in zip(data,weights)) / neff
                 sumsqc = sum((d.ravel()-ybar).dot(w*(d.ravel()-ybar))
                         for d,w in zip(data,weights))
@@ -1290,7 +1291,7 @@ class ScalarGaussianFixedvar(_ScalarGaussianBase, GibbsSampling):
         else:
             neff = sum(w.sum() for w in weights)
 
-        if neff > 0:
+        if neff > weps:
             if isinstance(data,np.ndarray):
                 xbar = data.dot(weights) / neff
             else:
@@ -1985,24 +1986,11 @@ class NegativeBinomial(_NegativeBinomialBase, GibbsSampling):
             self.p = np.random.beta(self.alpha_0,self.beta_0)
             self.r = np.random.gamma(self.k_0,self.theta_0)
         else:
-            data = flattendata(data)
-            N = len(data)
+            data = np.atleast_2d(flattendata(data))
+            ones = np.ones(data.shape[1],dtype=float)
             for itr in range(niter):
                 ### resample r
-                msum = np.array(0.)
-                r = self.r
-                scipy.weave.inline(
-                        '''
-                        int tot = 0;
-                        for (int i=0; i < N; i++) {
-                            for (int j=0; j < data[i]; j++) {
-                                tot += (((float) rand()) / RAND_MAX) < (((float) r)/(j+r));
-                            }
-                        }
-                        *msum = tot;
-                        ''',
-                        ['N','data','r','msum'],
-                        extra_compile_args=['-O3'])
+                msum = sample_crp_tablecounts(float(self.r),data,ones).sum()
                 self.r = np.random.gamma(self.k_0 + msum, 1/(1/self.theta_0 - N*np.log(1-self.p)))
                 ### resample p
                 self.p = np.random.beta(self.alpha_0 + data.sum(), self.beta_0 + N*self.r)
@@ -2652,27 +2640,8 @@ class GammaCompoundDirichlet(CRP):
         if counts.sum() == 0:
             return 0, 0
         else:
-            msum = np.array(0.)
-            weighted_cols = self.weighted_cols
-            concentration = self.concentration
-            N,K = counts.shape
-            scipy.weave.inline(
-                    '''
-                    int tot = 0;
-                    for (int i=0; i < N; i++) {
-                        for (int j=0; j < K; j++) {
-                            for (int c=0; c < counts[i*K + j]; c++) {
-                                tot += ((float) rand()) / RAND_MAX <
-                                    ((float) concentration/K*weighted_cols[j]) /
-                                            (c + concentration/K*weighted_cols[j]);
-                            }
-                        }
-                    }
-                    *msum = tot;
-                    ''',
-                    ['weighted_cols','concentration','N','K','msum','counts'],
-                    extra_compile_args=['-O3'])
-            return counts.sum(1), int(msum)
+            m = sample_crp_tablecounts(self.concentration,counts,self.weighted_cols)
+            return counts.sum(1), m.sum()
 
     def _get_statistics_python(self,data):
         counts = np.array(data,ndmin=2)
