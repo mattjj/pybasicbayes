@@ -2431,7 +2431,7 @@ class NegativeBinomialIntegerRVariant(NegativeBinomialIntegerR):
         if n > 0:
             data = flattendata(data)
             feasible = self.r_support <= data.min()
-            assert len(feasible) > 0
+            assert np.any(feasible)
             r_support = self.r_support[feasible]
             normalizers = (special.gammaln(data[:,na]) - special.gammaln(data[:,na]-r_support+1)
                     - special.gammaln(r_support)).sum(0)
