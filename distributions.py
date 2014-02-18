@@ -61,6 +61,10 @@ class ProductDistribution(GibbsSampling,MaxLikelihood):
     def hypparams(self):
         return {idx:distn.hypparams for idx,distn in enumerate(self._distns)}
 
+    @property
+    def num_parameters(self):
+        return sum(d.num_parameters for d in self._distns)
+
     @staticmethod
     def atleast_2d(data):
         # NOTE: can't use np.atleast_2d because if it's 1D we want axis 1 to be
@@ -77,6 +81,8 @@ class ProductDistribution(GibbsSampling,MaxLikelihood):
         return sum(distn.log_likelihood(x[...,sl])
                 for distn,sl in zip(self._distns,self._slices))
 
+    ### Gibbs
+
     def resample(self,data=[]):
         assert isinstance(data,(np.ndarray,list))
         if isinstance(data,np.ndarray):
@@ -86,6 +92,8 @@ class ProductDistribution(GibbsSampling,MaxLikelihood):
             for distn,sl in zip(self._distns,self._slices):
                 distn.resample([d[...,sl] for d in data])
         return self
+
+    ### Max likelihood
 
     def max_likelihood(self,data,weights=None):
         assert isinstance(data,(np.ndarray,list))
@@ -97,9 +105,36 @@ class ProductDistribution(GibbsSampling,MaxLikelihood):
                 distn.max_likelihood([d[...,sl] for d in data],weights=weights)
         return self
 
-    @property
-    def num_parameters(self):
-        return sum(d.num_parameters for d in self._distns)
+    ### Mean field
+
+    def get_vlb(self):
+        return sum(distn.max_likelihood() for distn in self._distns)
+
+    def expected_log_likelihood(self,x):
+        return sum(distn.expected_log_likelihood(x[...,sl])
+                for distn,sl in zip(self._distns,self._slices))
+
+    def meanfieldupdate(self,data,weights,**kwargs):
+        assert isinstance(data,(np.ndarray,list))
+        if isinstance(data,np.ndarray):
+            for distn,sl in zip(self._distns,self._slices):
+                distn.meanfieldupdate(data[...,sl],weights)
+        else:
+            for distn,sl in zip(self._distns,self._slices):
+                distn.meanfieldupdate([d[...,sl] for d in data],weights=weights)
+        return self
+
+    ### SVI
+
+    def meanfield_sgdstep(self,data,weights,minibatchfrac,stepsize):
+        assert isinstance(data,(np.ndarray,list))
+        if isinstance(data,np.ndarray):
+            for distn,sl in zip(self._distns,self._slices):
+                distn.meanfield_sgdstep(data[...,sl],weights,minibatchfrac,stepsize)
+        else:
+            for distn,sl in zip(self._distns,self._slices):
+                distn.meanfield_sgdstep([d[...,sl] for d in data],weights,minibatchfrac,stepsize)
+        return self
 
 ################
 #  Continuous  #
