@@ -19,7 +19,7 @@ class DistributionTester(object):
 
 class BasicTester(DistributionTester):
     @property
-    def loglike_lists_size(self):
+    def basic_data_size(self):
         return 1000
 
     def loglike_lists_tests(self):
@@ -28,12 +28,29 @@ class BasicTester(DistributionTester):
 
     def check_loglike_lists(self,setting_idx,hypparam_dict):
         dist = self.distribution_class(**hypparam_dict)
-        data = dist.rvs(self.loglike_lists_size)
+        data = dist.rvs(self.basic_data_size)
 
         l1 = dist.log_likelihood(data).sum()
-        l2 = sum(dist.log_likelihood(d) for d in np.array_split(data,self.loglike_lists_size))
+        l2 = sum(dist.log_likelihood(d) for d in np.array_split(data,self.basic_data_size))
 
         assert np.isclose(l1,l2)
+
+    def stats_lists_tests(self):
+        for setting_idx, hypparam_dict in enumerate(self.geweke_hyperparameter_settings):
+            yield self.check_stats_lists, setting_idx, hypparam_dict
+
+    def check_stats_lists(self,setting_idx,hypparam_dict):
+        dist = self.distribution_class(**hypparam_dict)
+        data = dist.rvs(self.basic_data_size)
+
+        if hasattr(dist,'_get_statistics'):
+            s1 = dist._get_statistics(data)
+            s2 = dist._get_statistics([d for d in np.array_split(data,self.basic_data_size)])
+
+            if isinstance(s1,np.ndarray):
+                assert np.allclose(s1,s2)
+            elif isinstance(s1,tuple):
+                assert all(np.allclose(ss1,ss2) for ss1,ss2 in zip(s1,s2))
 
 class BigDataGibbsTester(DistributionTester):
     __metaclass__ = abc.ABCMeta
