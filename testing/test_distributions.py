@@ -4,7 +4,7 @@ import numpy as np
 from nose.plugins.attrib import attr
 
 from .. import distributions as distributions
-from mixins import BigDataGibbsTester, GewekeGibbsTester, mkdir
+from mixins import BigDataGibbsTester, GewekeGibbsTester, BasicTester, mkdir
 
 @attr('geometric')
 class TestGeometric(BigDataGibbsTester,GewekeGibbsTester):
@@ -146,7 +146,7 @@ class TestGaussian(BigDataGibbsTester,GewekeGibbsTester):
         return slice(0,d.mu.shape[0])
 
 @attr('diagonalgaussian')
-class TestDiagonalGaussian(BigDataGibbsTester,GewekeGibbsTester):
+class TestDiagonalGaussian(BigDataGibbsTester,GewekeGibbsTester,BasicTester):
     @property
     def distribution_class(self):
         return distributions.DiagonalGaussian
