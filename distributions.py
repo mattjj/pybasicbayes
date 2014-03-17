@@ -810,8 +810,8 @@ class DiagonalGaussian(_GaussianBase,GibbsSampling,MaxLikelihood):
                 xbar = data[gi(data)].mean(0)
                 sumsq = np.sum((data[gi(data)] - xbar)**2,axis=0)
             else:
-                xbar = sum(np.nansum(np.reshape(d,(-1,D)), axis=0) for d in data) / n
-                sumsq = sum(np.nansum((np.reshape(d[gi(d)],(-1,D))-xbar)**2,axis=0) for d in data)
+                xbar = sum(np.sum(np.reshape(d[gi(d)],(-1,D)),axis=0) for d in data) / n
+                sumsq = sum(np.sum((np.reshape(d[gi(d)],(-1,D))-xbar)**2,axis=0) for d in data)
             assert sumsq.ndim == 1
         else:
             xbar, sumsq = None, None
