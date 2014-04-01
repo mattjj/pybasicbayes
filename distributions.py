@@ -310,6 +310,10 @@ class Gaussian(_GaussianBase, GibbsSampling, MeanField, MeanFieldSVI, Collapsed,
         else:
             return sum(map(self._get_weighted_statistics,data,weights),out)
 
+    def _get_empty_statistics(self, D):
+        out = np.zeros((D+2,D+2))
+        return out
+
     def empirical_bayes(self,data):
         self.natural_hypparam = self._get_statistics(data)
         if (self.mu,self.sigma) == (None,None):
