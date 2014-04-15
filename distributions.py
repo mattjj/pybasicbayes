@@ -328,7 +328,8 @@ class Gaussian(_GaussianBase, GibbsSampling, MeanField, MeanFieldSVI, Collapsed,
                 sample_niw(*self._natural_to_standard(
                     self.natural_hypparam + self._get_statistics(data,D)))
         # NOTE: next line is so we can use Gibbs sampling to initialize mean field
-        self.mu_mf, self._sigma_mf = self.mu, self.sigma * (self.nu_0 - D - 1)
+        self.mu_mf, self._sigma_mf = \
+            self.mu, self.sigma * ((self.nu_mf if hasattr(self,'nu_mf') else self.nu_0) - D - 1)
         return self
 
     def copy_sample(self):
