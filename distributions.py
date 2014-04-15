@@ -2232,10 +2232,16 @@ class NegativeBinomialIntegerR2(_NegativeBinomialBase,MeanField, MeanFieldSVI):
         self.p = np.random.beta(alpha_0,beta_0)
 
     def _resample_from_mf(self):
+        self._resample_r_from_mf()
+        self._resample_p_from_mf()
+
+    def _resample_r_from_mf(self):
         lognorm = np.logaddexp.reduce(self.rho_mf)
         ridx = sample_discrete(np.exp(self.rho_mf - lognorm))
-        self.r = self.r_support[ridx]
-        d = self._fixedr_distns[ridx]
+        self.r, self.ridx = self.r_support[ridx], ridx
+
+    def _resample_p_from_mf():
+        d = self._fixedr_distns[self.ridx]
         self.p = np.random.beta(d.alpha_mf,d.beta_mf)
 
     def get_vlb(self):
