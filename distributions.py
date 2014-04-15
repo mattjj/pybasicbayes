@@ -310,6 +310,10 @@ class Gaussian(_GaussianBase, GibbsSampling, MeanField, MeanFieldSVI, Collapsed,
         else:
             return sum(map(self._get_weighted_statistics,data,weights),out)
 
+    def _get_empty_statistics(self, D):
+        out = np.zeros((D+2,D+2))
+        return out
+
     def empirical_bayes(self,data):
         self.natural_hypparam = self._get_statistics(data)
         if (self.mu,self.sigma) == (None,None):
@@ -324,7 +328,7 @@ class Gaussian(_GaussianBase, GibbsSampling, MeanField, MeanFieldSVI, Collapsed,
                 sample_niw(*self._natural_to_standard(
                     self.natural_hypparam + self._get_statistics(data,D)))
         # NOTE: next line is so we can use Gibbs sampling to initialize mean field
-        self.mu_mf, self._sigma_mf = self.mu, self.sigma * (self.nu_mf - D - 1)
+        self.mu_mf, self._sigma_mf = self.mu, self.sigma * (self.nu_0 - D - 1)
         return self
 
     def copy_sample(self):
