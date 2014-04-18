@@ -2245,7 +2245,7 @@ class NegativeBinomialIntegerR2(_NegativeBinomialBase,MeanField, MeanFieldSVI):
         ridx = sample_discrete(np.exp(self.rho_mf - lognorm))
         self.r, self.ridx = self.r_support[ridx], ridx
 
-    def _resample_p_from_mf():
+    def _resample_p_from_mf(self):
         d = self._fixedr_distns[self.ridx]
         self.p = np.random.beta(d.alpha_mf,d.beta_mf)
 
