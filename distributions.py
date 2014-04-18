@@ -2218,13 +2218,17 @@ class NegativeBinomialFixedR(_NegativeBinomialBase, GibbsSampling, MeanField, Me
     def _posterior_hypparams(self,n,tot):
         return np.array([self.alpha_0 + tot, self.beta_0 + n*self.r])
 
-class NegativeBinomialIntegerR2(_NegativeBinomialBase,MeanField, MeanFieldSVI):
+class NegativeBinomialIntegerR2(_NegativeBinomialBase,MeanField,MeanFieldSVI):
     # NOTE: this class should replace NegativeBinomialFixedR completely...
-    # TODO add Gibbs sampling
-
     _fixedr_class = NegativeBinomialFixedR
 
-    def __init__(self,r_support,r_probs,alpha_0,beta_0,r=None,ps=None):
+    def __init__(self,alpha_0,beta_0,
+            r_support=None,r_probs=None,r_discrete_distn=None,
+            r=None,ps=None):
+        assert (r_discrete_distn is not None) ^ (r_support is not None and r_probs is not None)
+        if r_discrete_distn is not None:
+            r_support, = np.where(r_discrete_distn)
+            r_probs = r_discrete_distn[r_support]
         self.r_support = r_support
         self.rho_0 = self.rho_mf = np.log(r_probs)
         ps = ps if ps is not None else [None]*len(r_support)
@@ -2233,8 +2237,20 @@ class NegativeBinomialIntegerR2(_NegativeBinomialBase,MeanField, MeanFieldSVI):
                     for r,p in zip(r_support,ps)]
 
         # for init
-        self.r = r_support[sample_discrete(r_probs)]
-        self.p = np.random.beta(alpha_0,beta_0)
+        self.ridx = sample_discrete(r_probs)
+        self.r = r_support[self.ridx]
+
+    @property
+    def alpha_0(self):
+        return self._fixedr_distns[0].alpha_0 if len(self._fixedr_distns) > 0 else None
+
+    @property
+    def beta_0(self):
+        return self._fixedr_distns[0].beta_0 if len(self._fixedr_distns) > 0 else None
+
+    @property
+    def p(self):
+        return self._fixedr_distns[self.ridx].p
 
     def _resample_from_mf(self):
         self._resample_r_from_mf()
@@ -2242,8 +2258,8 @@ class NegativeBinomialIntegerR2(_NegativeBinomialBase,MeanField, MeanFieldSVI):
 
     def _resample_r_from_mf(self):
         lognorm = np.logaddexp.reduce(self.rho_mf)
-        ridx = sample_discrete(np.exp(self.rho_mf - lognorm))
-        self.r, self.ridx = self.r_support[ridx], ridx
+        self.ridx = sample_discrete(np.exp(self.rho_mf - lognorm))
+        self.r = self.r_support[ridx]
 
     def _resample_p_from_mf(self):
         d = self._fixedr_distns[self.ridx]
@@ -2261,7 +2277,7 @@ class NegativeBinomialIntegerR2(_NegativeBinomialBase,MeanField, MeanFieldSVI):
         for d in self._fixedr_distns:
             d.meanfieldupdate(data,weights)
         self._update_rho_mf(data,weights)
-        # for plotting
+        # everythign below here is for plotting
         ridx = self.rho_mf.argmax()
         d = self._fixedr_distns[ridx]
         self.r = d.r
@@ -2302,6 +2318,34 @@ class NegativeBinomialIntegerR2(_NegativeBinomialBase,MeanField, MeanFieldSVI):
         d = self._fixedr_distns[ridx]
         self.r = d.r
         self.p = d.alpha_mf / (d.alpha_mf + d.beta_mf)
+
+    def resample(self,data=[]):
+        self._resample_r(data)
+        self._fixedr_distns[self.ridx].resample(data)
+
+    def _resample_r(self,data):
+        self.ridx = sample_discrete(
+                self._posterior_hypparams(self._get_statistics(data)))
+        self.r = self.r_support[self.ridx]
+
+    def _get_statistics(self,data=[]):
+        n, tot = self._fixedr_distns[0]._get_statistics(data)
+        if n > 0:
+            data = flattendata(data)
+            alpha_n, betas_n = self.alpha_0 + tot, self.beta_0 + self.r_support*n
+            log_marg_likelihoods = \
+                    special.betaln(alpha_n, betas_n) \
+                        - special.betaln(self.alpha_0, self.beta_0) \
+                    + (special.gammaln(data[:,na]+self.r_support)
+                        - special.gammaln(data[:,na]+1) \
+                        - special.gammaln(self.r_support)).sum(0)
+        else:
+            log_marg_likelihoods = np.zeros_like(self.r_support)
+        return log_marg_likelihoods
+
+    def _posterior_hypparams(self,log_marg_likelihoods):
+        log_posterior_discrete = self.rho_0 + log_marg_likelihoods
+        return np.exp(log_posterior_discrete - log_posterior_discrete.max())
 
 class NegativeBinomialIntegerR(NegativeBinomialFixedR, GibbsSampling, MaxLikelihood):
     '''
@@ -2505,6 +2549,9 @@ class NegativeBinomialIntegerRVariant(NegativeBinomialIntegerR):
         ps = 1-(rs*n)/tot
         assert (ps >= 0).all()
         return ps
+
+    def rvs(self,size=[]):
+        return super(NegativeBinomialIntegerRVariant,self).rvs(size) + self.r
 
 class NegativeBinomialIntegerR2Variant(NegativeBinomialIntegerR2):
     _fixedr_class = NegativeBinomialFixedRVariant
