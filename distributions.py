@@ -2252,6 +2252,10 @@ class NegativeBinomialIntegerR2(_NegativeBinomialBase,MeanField,MeanFieldSVI):
     def p(self):
         return self._fixedr_distns[self.ridx].p
 
+    @p.setter
+    def p(self,val):
+        self._fixedr_distns[self.ridx].p = val
+
     def _resample_from_mf(self):
         self._resample_r_from_mf()
         self._resample_p_from_mf()
@@ -2259,7 +2263,7 @@ class NegativeBinomialIntegerR2(_NegativeBinomialBase,MeanField,MeanFieldSVI):
     def _resample_r_from_mf(self):
         lognorm = np.logaddexp.reduce(self.rho_mf)
         self.ridx = sample_discrete(np.exp(self.rho_mf - lognorm))
-        self.r = self.r_support[ridx]
+        self.r = self.r_support[self.ridx]
 
     def _resample_p_from_mf(self):
         d = self._fixedr_distns[self.ridx]
