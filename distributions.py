@@ -1826,7 +1826,7 @@ class Geometric(GibbsSampling, Collapsed, MaxLikelihood):
         return special.betaln(alpha,beta)
 
 
-class Poisson(GibbsSampling, Collapsed, MaxLikelihood):
+class Poisson(GibbsSampling, Collapsed, MaxLikelihood, MeanField, MeanFieldSVI):
     '''
     Poisson distribution with a conjugate Gamma prior.
 
@@ -1841,8 +1841,8 @@ class Poisson(GibbsSampling, Collapsed, MaxLikelihood):
     def __init__(self,lmbda=None,alpha_0=None,beta_0=None):
         self.lmbda = lmbda
 
-        self.alpha_0 = alpha_0
-        self.beta_0 = beta_0
+        self.alpha_0 = self.alpha_mf = alpha_0
+        self.beta_0 = self.beta_mf = beta_0
 
         if lmbda is None and None not in (alpha_0,beta_0):
             self.resample() # intialize from prior
@@ -1905,16 +1905,65 @@ class Poisson(GibbsSampling, Collapsed, MaxLikelihood):
             n = weights
             tot = weights*data
 
-        return n, tot
+        return np.array([n, tot])
+
+    ### Mean Field
+
+    def _resample_from_mf(self):
+        raise NotImplementedError
+
+    def meanfieldupdate(self,data,weights):
+        self.mf_natural_hypparam = \
+                self.natural_hypparam + self._get_weighted_statistics(data,weights)
+
+    def meanfield_sgdstep(self,data,weights,minibatchfrac,stepsize):
+        self.mf_natural_hypparam = \
+                (1-stepsize) * self.mf_natural_hypparam + stepsize * (
+                        self.natural_hypparam
+                        + 1./minibatchfrac * self._get_weighted_statistics(data,weights))
+
+    def get_vlb(self):
+        return (self.natural_hypparam - self.mf_natural_hypparam).dot(self._mf_expected_statistics) \
+                - (self._log_partition_fn(self.alpha_0,self.beta_0)
+                        - self._log_partition_fn(self.alpha_mf,self.beta_mf))
+
+    def expected_log_likelihood(self,x):
+        Emlmbda, Elnlmbda = self._mf_expected_statistics
+        return -special.gammaln(x+1) + Elnlmbda * (x-1) + Emlmbda
+
+    @property
+    def _mf_expected_statistics(self):
+        alpha, beta = self.alpha_mf, self.beta_mf
+        return np.array([-alpha/beta, special.digamma(alpha) - np.log(beta)])
+
+
+    @property
+    def natural_hypparam(self):
+        return self._standard_to_natural(self.alpha_0,self.beta_0)
+
+    @property
+    def mf_natural_hypparam(self):
+        return self._standard_to_natural(self.alpha_mf,self.beta_mf)
+
+    @mf_natural_hypparam.setter
+    def mf_natural_hypparam(self,natparam):
+        self.alpha_mf, self.beta_mf = self._natural_to_standard(natparam)
+
+
+    def _standard_to_natural(self,alpha,beta):
+        return np.array([beta, alpha-1])
+
+    def _natural_to_standard(self,natparam):
+        return natparam[1]+1, natparam[0]
 
     ### Collapsed
 
     def log_marginal_likelihood(self,data):
-        return self._log_partition_function(*self._posterior_hypparams(*self._get_statistics(data))) \
-                - self._log_partition_function(self.alpha_0,self.beta_0) \
+        return self._log_partition_fn(*self._posterior_hypparams(*self._get_statistics(data))) \
+                - self._log_partition_fn(self.alpha_0,self.beta_0) \
                 - self._get_sum_of_gammas(data)
 
-    def _log_partition_function(self,alpha,beta):
+    def _log_partition_fn(self,alpha,beta):
         return special.gammaln(alpha) - alpha * np.log(beta)
 
     def _get_sum_of_gammas(self,data):
