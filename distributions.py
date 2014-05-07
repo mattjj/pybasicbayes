@@ -1525,6 +1525,7 @@ class Categorical(GibbsSampling, MeanField, MeanFieldSVI, MaxLikelihood, MAP):
         if alphav_0 is not None:
             self._alphav_0 = alphav_0
             self.K = len(alphav_0)
+            self._alpha_mf = self._alphav_0
 
     alphav_0 = property(_get_alphav_0,_set_alphav_0)
 
