@@ -2268,35 +2268,45 @@ class NegativeBinomialFixedR(_NegativeBinomialBase, GibbsSampling, MeanField, Me
     def _posterior_hypparams(self,n,tot):
         return np.array([self.alpha_0 + tot, self.beta_0 + n*self.r])
 
-class NegativeBinomialIntegerR2(_NegativeBinomialBase,MeanField,MeanFieldSVI):
+class NegativeBinomialIntegerR2(_NegativeBinomialBase,MeanField,MeanFieldSVI,GibbsSampling):
     # NOTE: this class should replace NegativeBinomialFixedR completely...
     _fixedr_class = NegativeBinomialFixedR
 
-    def __init__(self,alpha_0,beta_0,
+    def __init__(self,alpha_0=None,beta_0=None,alphas_0=None,betas_0=None,
             r_support=None,r_probs=None,r_discrete_distn=None,
             r=None,ps=None):
+
         assert (r_discrete_distn is not None) ^ (r_support is not None and r_probs is not None)
         if r_discrete_distn is not None:
             r_support, = np.where(r_discrete_distn)
             r_probs = r_discrete_distn[r_support]
         self.r_support = r_support
         self.rho_0 = self.rho_mf = np.log(r_probs)
+
+        assert (None not in (alpha_0, beta_0)) ^ (None not in (alphas_0,betas_0))
+        alphas_0 = alphas_0 if alphas_0 is not None else [alpha_0]*len(r_support)
+        betas_0 = betas_0 if betas_0 is not None else [beta_0]*len(r_support)
         ps = ps if ps is not None else [None]*len(r_support)
         self._fixedr_distns = \
             [self._fixedr_class(r=r,p=p,alpha_0=alpha_0,beta_0=beta_0)
-                    for r,p in zip(r_support,ps)]
+                    for r,p,alpha_0,beta_0 in zip(r_support,ps,alphas_0,betas_0)]
 
         # for init
         self.ridx = sample_discrete(r_probs)
         self.r = r_support[self.ridx]
 
-    @property
-    def alpha_0(self):
-        return self._fixedr_distns[0].alpha_0 if len(self._fixedr_distns) > 0 else None
+    def __repr__(self):
+        return 'NB(r=%d,p=%0.3f)' % (self.r,self.p)
 
     @property
-    def beta_0(self):
-        return self._fixedr_distns[0].beta_0 if len(self._fixedr_distns) > 0 else None
+    def alphas_0(self):
+        return np.array([d.alpha_0 for d in self._fixedr_distns]) \
+                if len(self._fixedr_distns) > 0 else None
+
+    @property
+    def betas_0(self):
+        return np.array([d.beta_0 for d in self._fixedr_distns]) \
+                if len(self._fixedr_distns) > 0 else None
 
     @property
     def p(self):
@@ -2374,22 +2384,28 @@ class NegativeBinomialIntegerR2(_NegativeBinomialBase,MeanField,MeanFieldSVI):
         self.p = d.alpha_mf / (d.alpha_mf + d.beta_mf)
 
     def resample(self,data=[]):
-        self._resample_r(data)
-        self._fixedr_distns[self.ridx].resample(data)
+        self._resample_r(data) # marginalizes out p values
+        self._resample_p(data) # resample p given sampled r
+        return self
 
     def _resample_r(self,data):
         self.ridx = sample_discrete(
                 self._posterior_hypparams(self._get_statistics(data)))
         self.r = self.r_support[self.ridx]
+        return self
+
+    def _resample_p(self,data):
+        self._fixedr_distns[self.ridx].resample(data)
+        return self
 
     def _get_statistics(self,data=[]):
         n, tot = self._fixedr_distns[0]._get_statistics(data)
         if n > 0:
             data = flattendata(data)
-            alpha_n, betas_n = self.alpha_0 + tot, self.beta_0 + self.r_support*n
+            alphas_n, betas_n = self.alphas_0 + tot, self.betas_0 + self.r_support*n
             log_marg_likelihoods = \
-                    special.betaln(alpha_n, betas_n) \
-                        - special.betaln(self.alpha_0, self.beta_0) \
+                    special.betaln(alphas_n, betas_n) \
+                        - special.betaln(self.alphas_0, self.betas_0) \
                     + (special.gammaln(data[:,na]+self.r_support)
                         - special.gammaln(data[:,na]+1) \
                         - special.gammaln(self.r_support)).sum(0)

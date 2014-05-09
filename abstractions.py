@@ -3,6 +3,7 @@ import numpy as np
 import copy
 
 from util.stats import combinedata
+from util.text import progprint_xrange
 
 # NOTE: data is always a (possibly masked) np.ndarray or list of (possibly
 # masked) np.ndarrays.
@@ -205,9 +206,11 @@ class ModelMeanField(Model):
         # returns variational lower bound after update, if available
         pass
 
-    def meanfield_coordinate_descent(self,tol=1e-1,maxiter=250):
+    def meanfield_coordinate_descent(self,tol=1e-1,maxiter=250,progprint=False):
+        # NOTE: doesn't re-initialize!
         scores = []
-        for itr in xrange(maxiter):
+        step_iterator = xrange(maxiter) if not progprint else progprint_xrange(maxiter)
+        for itr in step_iterator:
             scores.append(self.meanfield_coordinate_descent_step())
             if scores[-1] is not None and len(scores) > 1:
                 if np.abs(scores[-1]-scores[-2]) < tol:
@@ -230,10 +233,11 @@ class _EMBase(Model):
         # returns a log likelihood number on attached data
         pass
 
-    def _EM_fit(self,method,tol=1e-1,maxiter=100):
+    def _EM_fit(self,method,tol=1e-1,maxiter=100,progprint=False):
         # NOTE: doesn't re-initialize!
         likes = []
-        for itr in xrange(maxiter):
+        step_iterator = xrange(maxiter) if not progprint else progprint_xrange(maxiter)
+        for itr in step_iterator:
             method()
             likes.append(self.log_likelihood())
             if len(likes) > 1:
