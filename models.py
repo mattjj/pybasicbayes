@@ -8,7 +8,8 @@ import abc, copy
 from warnings import warn
 
 from abstractions import ModelGibbsSampling, ModelMeanField, ModelEM
-from abstractions import Distribution, GibbsSampling, MeanField, Collapsed, MaxLikelihood
+from abstractions import Distribution, GibbsSampling, MeanField, Collapsed, \
+        MeanFieldSVI, MaxLikelihood
 from distributions import Categorical, CategoricalAndConcentration
 from internals.labels import Labels, CRPLabels
 from util.stats import getdatasize
@@ -98,38 +99,39 @@ class Mixture(ModelGibbsSampling, ModelMeanField, ModelEM):
                 'Components must implement MeanField'
         assert len(self.labels_list) > 0, 'Must have data to run MeanField'
 
+        self._meanfield_update_sweep()
+        return self._vlb()
+
+    def _meanfield_update_sweep(self):
         # NOTE: to interleave mean field steps with Gibbs sampling steps, label
         # updates need to come first, otherwise the sampled updates will be
         # ignored and the model will essentially stay where it was the last time
         # mean field updates were run
+        # TODO fix that, seed with sample from variational distribution
+        self.meanfield_update_labels()
+        self.meanfield_update_parameters()
 
-        ### update sweep!
-        # update the label responsibilities
+    def meanfield_update_labels(self):
         for l in self.labels_list:
             l.meanfieldupdate()
 
-        # pass the weights to pi
-        K = len(self.components)
+    def meanfield_update_parameters(self):
+        self.meanfield_update_components()
+        self.meanfield_update_weights()
+
+    def meanfield_update_weights(self):
         self.weights.meanfieldupdate(None,[l.r for l in self.labels_list])
 
-        # pass the weights to the components
+    def meanfield_update_components(self):
         for idx, c in enumerate(self.components):
             c.meanfieldupdate([l.data for l in self.labels_list],
                     [l.r[:,idx] for l in self.labels_list])
 
-        ### get vlb!
+    def _vlb(self):
         vlb = 0.
-
-        # get labels terms
         vlb += sum(l.get_vlb() for l in self.labels_list)
-
-        # get pi term
         vlb += self.weights.get_vlb()
-
-        # get components terms
         vlb += sum(c.get_vlb() for c in self.components)
-
-        # finally, need the evidence term in the vlb
         for l in self.labels_list:
             vlb += np.sum([r.dot(c.expected_log_likelihood(l.data))
                                 for c,r in zip(self.components, l.r.T)])
@@ -140,17 +142,35 @@ class Mixture(ModelGibbsSampling, ModelMeanField, ModelEM):
 
         return vlb
 
-    def meanfield_sgdstep(self,data,minibatchfrac,stepsize,**kwargs):
-        l = Labels(data=np.asarray(data),components=self.components,
-                weights=self.weights,**kwargs)
+    ### SVI
 
-        ## local vb
-        l.meanfieldupdate()
+    def meanfield_sgdstep(self,minibatch,minibatchfrac,stepsize,**kwargs):
+        minibatch = minibatch if isinstance(minibatch,list) else [minibatch]
+        mb_labels_list = []
+        for data in minibatch:
+            self.add_data(data,z=np.empty(data.shape[0]),**kwargs) # NOTE: dummy
+            mb_labels_list.append(self.labels_list.pop())
 
-        ## sgd steps on global variables
-        self.weights.meanfield_sgdstep(None,l.r,minibatchfrac,stepsize)
+        for l in mb_labels_list:
+            l.meanfieldupdate()
+
+        self._meanfield_sgdstep_parameters(mb_labels_list,minibatchfrac,stepsize)
+
+    def _meanfield_sgdstep_parameters(self,mb_labels_list,minibatchfrac,stepsize):
+        self._meanfield_sgdstep_components(mb_labels_list,minibatchfrac,stepsize)
+        self._meanfield_sgdstep_weights(mb_labels_list,minibatchfrac,stepsize)
+
+    def _meanfield_sgdstep_components(self,mb_labels_list,minibatchfrac,stepsize):
         for idx, c in enumerate(self.components):
-            c.meanfield_sgdstep(l.data,l.r[:,idx],minibatchfrac,stepsize)
+            c.meanfield_sgdstep(
+                    [l.data for l in mb_labels_list],
+                    [l.r[:,idx] for l in mb_labels_list],
+                    minibatchfrac,stepsize)
+
+    def _meanfield_sgdstep_weights(self,mb_labels_list,minibatchfrac,stepsize):
+        self.weights.meanfield_sgdstep(
+                None,[l.r for l in mb_labels_list],
+                minibatchfrac,stepsize)
 
     ### EM
 
@@ -278,9 +298,9 @@ class Mixture(ModelGibbsSampling, ModelMeanField, ModelEM):
             outs.append(csums[k:] - csums[:-k])
         return outs
 
-class MixtureDistribution(Mixture, GibbsSampling, Distribution):
+class MixtureDistribution(Mixture, GibbsSampling, MeanField, MeanFieldSVI, Distribution):
     '''
-    This makes a Mixture act like a Distribution for use in other compound models
+    This makes a Mixture act like a Distribution for use in other models
     '''
 
     @property
@@ -322,6 +342,47 @@ class MixtureDistribution(Mixture, GibbsSampling, Distribution):
             self.add_data(data)
             self.EM_fit()
             self.labels_list = []
+
+    def get_vlb(self):
+        vlb = 0.
+        vlb += self.weights.get_vlb()
+        vlb += sum(c.get_vlb() for c in self.components)
+        return vlb
+
+    def expected_log_likelihood(self,x):
+        lognorm = np.logaddexp.reduce(self.weights.alpha_mf)
+        return sum(np.exp(a - lognorm) * c.expected_log_likelihood(x)
+                for a, c in zip(self.weights.alpha_mf, self.components))
+
+    def meanfieldupdate(self,data,weights,**kwargs):
+        # NOTE: difference from parent's method is the inclusion of weights
+        data = data if isinstance(data,list) else [data]
+        old_labels = self.labels_list
+        self.labels_list = []
+
+        for d in data:
+            self.add_data(d,z=np.empty(d.shape[0])) # NOTE: dummy
+
+        self.meanfield_update_labels()
+        for l in self.labels_list:
+            l.r *= weights[:,na] # here's where the weights are used
+        self.meanfield_update_parameters()
+
+        self.labels_list = old_labels
+
+    def meanfield_sgdstep(self,minibatch,weights,minibatchfrac,stepsize):
+        # NOTE: difference from parent's method is the inclusion of weights
+        minibatch = minibatch if isinstance(minibatch,list) else [minibatch]
+        mb_labels_list = []
+        for data in minibatch:
+            self.add_data(data,z=np.empty(data.shape[0])) # NOTE: dummy
+            mb_labels_list.append(self.labels_list.pop())
+
+        for l in mb_labels_list:
+            l.meanfieldupdate()
+            l.r *= weights[:,na] # here's where weights are used
+
+        self._meanfield_sgdstep_parameters(mb_labels_list,minibatchfrac,stepsize)
 
     def plot(self,data=[],color='b',label='',plot_params=True,indices=None):
         # TODO handle indices for 1D
