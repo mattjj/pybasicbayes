@@ -1785,7 +1785,7 @@ class Geometric(GibbsSampling, Collapsed, MaxLikelihood):
     Parameter is the success probability:
         p
     '''
-    def __init__(self,p=None,alpha_0=None,beta_0=None):
+    def __init__(self,alpha_0=None,beta_0=None,p=None):
         self.p = p
 
         self.alpha_0 = alpha_0
