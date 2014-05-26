@@ -857,6 +857,54 @@ class DiagonalGaussian(_GaussianBase,GibbsSampling,MaxLikelihood):
 
         return self
 
+    ### Mean Field
+
+    @property
+    def natural_hypparam(self):
+        return self._standard_to_natural(self.alphas_0,self.betas_0,self.mu_0,self.nus_0)
+
+    @natural_hypparam.setter
+    def natural_hypparam(self,natparam):
+        self.alphas_0, self.betas_0, self.mu_0, self.nus_0 = \
+                self._natural_to_standard(natparam)
+
+    def _standard_to_natural(self,alphas,betas,mu,nus):
+        return np.array([2*betas + nus * mu, nus*mu, nus, nus + 2*(alphas+1)])
+
+    def _natural_to_standard(self,natparam):
+        nus = natparam[2]
+        mu = natparam[1] / nus
+        alphas = (natparam[3] - nus)/2. - 1
+        betas = (natparam[0] - nus*mu) / 2.
+        return alphas, betas, mu, nus
+
+    @property
+    def mf_natural_hypparam(self):
+        return self._standard_to_natural(self.mf_alphas,self.mf_betas,self.mf_mu,self.mf_nus)
+
+    @mf_natural_hypparam.setter
+    def mf_natural_hypparam(self,natparam):
+        self.mf_alphas, self.mf_betas, self.mf_mu, self.mf_nus = \
+                self._natural_to_standard(natparam)
+
+    def meanfieldupdate(self,data,weights):
+        self.mf_natural_hypparam = \
+            self.natural_hypparam + self._get_weighted_statistics(data,weights)
+
+    def meanfield_sgdstep(self,data,weights,minibatchfrac,stepsize):
+        self.mf_natural_hypparam = \
+            (1-stepsize) * self.mf_natural_hypparam + stepsize * (
+                    self.natural_hypparam
+                    + 1./minibatchfrac * self._get_weighted_statistics(data,weights))
+
+    def get_vlb(self):
+        raise NotImplementedError
+
+    def expected_log_likelihood(self,x):
+        raise NotImplementedError
+
+
+
 # TODO collapsed, meanfield, max_likelihood
 class IsotropicGaussian(GibbsSampling):
     '''
