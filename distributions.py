@@ -780,7 +780,7 @@ class DiagonalGaussian(_GaussianBase,GibbsSampling,MaxLikelihood,MeanField):
     def log_likelihood(self,x):
         mu, sigmas, D = self.mu, self.sigmas, self.mu.shape[0]
         x = np.reshape(x,(-1,D))
-        return (-0.5*((x-mu)**2/sigmas) - np.log(np.sqrt(2*np.pi*sigmas))).sum(1)
+        return (-0.5*((x-mu)**2/sigmas) - 1./2*np.log(2*np.pi*sigmas)).sum(1)
 
     def _posterior_hypparams(self,n,xbar,sumsq):
         mu_0, nus_0, alphas_0, betas_0 = self.mu_0, self.nus_0, self.alphas_0, self.betas_0
