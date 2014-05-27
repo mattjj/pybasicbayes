@@ -725,7 +725,7 @@ class GaussianNonConj(_GaussianBase, GibbsSampling):
 
 
 # TODO collapsed, meanfield
-class DiagonalGaussian(_GaussianBase,GibbsSampling,MaxLikelihood):
+class DiagonalGaussian(_GaussianBase,GibbsSampling,MaxLikelihood,MeanField):
     '''
     Product of normal-inverse-gamma priors over mu (mean vector) and sigmas
     (vector of scalar variances).
@@ -752,10 +752,10 @@ class DiagonalGaussian(_GaussianBase,GibbsSampling,MaxLikelihood):
                     (isinstance(betas_0,int) or isinstance(betas_0,float)):
                 betas_0 = betas_0*np.ones(D)
 
-        self.mu_0 = mu_0
-        self.nus_0 = nus_0
-        self.alphas_0 = alphas_0
-        self.betas_0 = betas_0
+        self.mu_0 = self.mf_mu = mu_0
+        self.nus_0 = self.mf_nus = nus_0
+        self.alphas_0 = self.mf_alphas = alphas_0
+        self.betas_0 = self.mf_betas = betas_0
 
         self.mu = mu
         self.sigmas = sigmas
@@ -803,6 +803,10 @@ class DiagonalGaussian(_GaussianBase,GibbsSampling,MaxLikelihood):
         D = mu_n.shape[0]
         self.sigmas = 1/np.random.gamma(alphas_n,scale=1/betas_n)
         self.mu = np.sqrt(self.sigmas/nus_n)*np.random.randn(D) + mu_n
+
+        # NOTE: next line is to use Gibbs sampling to initialize mean field
+        self.mf_mu = self.mu
+
         assert self.sigmas.ndim == 1
         return self
 
@@ -823,7 +827,7 @@ class DiagonalGaussian(_GaussianBase,GibbsSampling,MaxLikelihood):
 
         return n, xbar, sumsq
 
-    def _get_weighted_statistics(self,data,weights,D=None):
+    def _get_weighted_statistics_old(self,data,weights,D=None):
         if isinstance(data,np.ndarray):
             neff = weights.sum()
             if neff > weps:
@@ -850,7 +854,7 @@ class DiagonalGaussian(_GaussianBase,GibbsSampling,MaxLikelihood):
         if weights is None:
             n, muhat, sumsq = self._get_statistics(data)
         else:
-            n, muhat, sumsq = self._get_weighted_statistics(data,weights)
+            n, muhat, sumsq = self._get_weighted_statistics_old(data,weights)
 
         self.mu = muhat
         self.sigmas = sumsq/n
@@ -869,13 +873,13 @@ class DiagonalGaussian(_GaussianBase,GibbsSampling,MaxLikelihood):
                 self._natural_to_standard(natparam)
 
     def _standard_to_natural(self,alphas,betas,mu,nus):
-        return np.array([2*betas + nus * mu, nus*mu, nus, nus + 2*(alphas+1)])
+        return np.array([2*betas + nus * mu**2, nus*mu, nus, 2*alphas])
 
     def _natural_to_standard(self,natparam):
         nus = natparam[2]
         mu = natparam[1] / nus
-        alphas = (natparam[3] - nus)/2. - 1
-        betas = (natparam[0] - nus*mu) / 2.
+        alphas = natparam[3]/2.
+        betas = (natparam[0] - nus*mu**2) / 2.
         return alphas, betas, mu, nus
 
     @property
@@ -898,11 +902,44 @@ class DiagonalGaussian(_GaussianBase,GibbsSampling,MaxLikelihood):
                     + 1./minibatchfrac * self._get_weighted_statistics(data,weights))
 
     def get_vlb(self):
-        raise NotImplementedError
+        natparam_diff = self.natural_hypparam - self.mf_natural_hypparam
+        expected_stats = self._expected_statistics(
+                self.mf_alphas,self.mf_betas,self.mf_mu,self.mf_nus)
+        linear_term = sum(v1.dot(v2) for v1, v2 in zip(natparam_diff, expected_stats))
+
+        normalizer_term = \
+                self._log_Z(self.alphas_0,self.betas_0,self.mu_0,self.nus_0) \
+                - self._log_Z(self.mf_alphas,self.mf_betas,self.mf_mu,self.mf_nus)
+
+        return linear_term - normalizer_term - len(self.mf_mu)/2. * np.log(2*np.pi)
 
     def expected_log_likelihood(self,x):
-        raise NotImplementedError
+        x = np.atleast_2d(x).reshape((-1,len(self.mf_mu)))
+        a,b,c,d = self._expected_statistics(
+                self.mf_alphas,self.mf_betas,self.mf_mu,self.mf_nus)
+        return (x**2).dot(a) + x.dot(b) + c.sum() + d.sum() \
+                - len(self.mf_mu)/2. * np.log(2*np.pi)
 
+    def _expected_statistics(self,alphas,betas,mu,nus):
+        return np.array([
+            -1./2 * alphas/betas,
+            mu * alphas/betas,
+            -1./2 * (1./nus + mu**2 * alphas/betas),
+            -1./2 * (np.log(betas) - special.digamma(alphas)),
+            ])
+
+    def _log_Z(self,alphas,betas,mu,nus):
+        return (special.gammaln(alphas) - alphas*np.log(betas) - 1./2*np.log(nus)).sum()
+
+    def _get_weighted_statistics(self,data,weights):
+        if isinstance(data,np.ndarray):
+            assert data.ndim == 2 and weights.ndim == 1 \
+                    and data.shape[0] == weights.shape[0]
+            neff = weights.sum() * np.ones(data.shape[1])
+            return np.array([weights.dot(data**2), weights.dot(data), neff, neff])
+        else:
+            assert isinstance(data,list) and isinstance(weights,list)
+            return sum(self._get_weighted_statistics(d,w) for d, w in zip(data,weights))
 
 
 # TODO collapsed, meanfield, max_likelihood

@@ -252,7 +252,7 @@ class Mixture(ModelGibbsSampling, ModelMeanField, ModelEM):
                             label='%d' % label,
                             alpha=
                             0.1*(label in assigned_labels)
-                            +0.9*self.weights.weights[label]/self.weights.weights.max()
+                            + 0.9*self.weights.weights[label]/self.weights.weights.max()
                             if alpha is None else alpha)
 
             if legend and color is None:
@@ -272,7 +272,7 @@ class Mixture(ModelGibbsSampling, ModelMeanField, ModelEM):
             for i,(o,c) in enumerate(zip(top10,colors)):
                 o.plot(color=c,label='%d' % i,
                         alpha=
-                        0.05+0.95*self.weights.weights[top10indices[i]]/self.weights.weights[top10indices].max()
+                        0.04+0.95*self.weights.weights[top10indices[i]]/self.weights.weights[top10indices].max()
                         if alpha is None else alpha)
 
     def to_json_dict(self):
