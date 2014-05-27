@@ -890,6 +890,9 @@ class DiagonalGaussian(_GaussianBase,GibbsSampling,MaxLikelihood,MeanField):
     def mf_natural_hypparam(self,natparam):
         self.mf_alphas, self.mf_betas, self.mf_mu, self.mf_nus = \
                 self._natural_to_standard(natparam)
+        # NOTE: this part is for plotting
+        self.mu = self.mf_mu
+        self.sigmas = np.where(self.mf_alphas > 1,self.mf_betas / (self.mf_alphas - 1),100000)
 
     def meanfieldupdate(self,data,weights):
         self.mf_natural_hypparam = \
