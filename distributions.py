@@ -187,7 +187,7 @@ class _GaussianBase(object):
 
     ### plotting
 
-    def plot(self,data=None,indices=None,color='b',plot_params=True,label='',alpha=1.):
+    def plot(self,data=None,indices=None,color='b',plot_params=True,label='',alpha=1):
         from util.plot import project_data, plot_gaussian_projection, plot_gaussian_2D
         if data is not None:
             data = flattendata(data)
@@ -211,9 +211,9 @@ class _GaussianBase(object):
         if plot_params:
             if D > 2:
                 plot_gaussian_projection(self.mu,self.sigma,self.plotting_subspace_basis,
-                        color=color,label=label,alpha=alpha)
+                        color=color,label=label,alpha=min(1-1e-3,alpha))
             else:
-                plot_gaussian_2D(self.mu,self.sigma,color=color,label=label,alpha=alpha)
+                plot_gaussian_2D(self.mu,self.sigma,color=color,label=label,alpha=min(1-1e-3,alpha))
 
     def to_json_dict(self):
         D = self.mu.shape[0]
