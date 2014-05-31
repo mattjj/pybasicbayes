@@ -206,12 +206,12 @@ class ModelMeanField(Model):
         # returns variational lower bound after update, if available
         pass
 
-    def meanfield_coordinate_descent(self,tol=1e-1,maxiter=250,progprint=False):
+    def meanfield_coordinate_descent(self,tol=1e-1,maxiter=250,progprint=False,**kwargs):
         # NOTE: doesn't re-initialize!
         scores = []
         step_iterator = xrange(maxiter) if not progprint else progprint_xrange(maxiter)
         for itr in step_iterator:
-            scores.append(self.meanfield_coordinate_descent_step())
+            scores.append(self.meanfield_coordinate_descent_step(**kwargs))
             if scores[-1] is not None and len(scores) > 1:
                 if np.abs(scores[-1]-scores[-2]) < tol:
                     return scores
