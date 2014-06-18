@@ -108,11 +108,11 @@ class ProductDistribution(GibbsSampling,MaxLikelihood):
     ### Mean field
 
     def get_vlb(self):
-        return sum(distn.max_likelihood() for distn in self._distns)
+        return sum(distn.get_vlb() for distn in self._distns)
 
     def expected_log_likelihood(self,x):
-        return sum(distn.expected_log_likelihood(x[...,sl])
-                for distn,sl in zip(self._distns,self._slices))
+        return np.sum([distn.expected_log_likelihood(x[...,sl])
+                for distn,sl in zip(self._distns,self._slices)], axis=0)
 
     def meanfieldupdate(self,data,weights,**kwargs):
         assert isinstance(data,(np.ndarray,list))
