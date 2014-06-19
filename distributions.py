@@ -112,7 +112,7 @@ class ProductDistribution(GibbsSampling,MaxLikelihood):
 
     def expected_log_likelihood(self,x):
         return np.sum([distn.expected_log_likelihood(x[...,sl])
-                for distn,sl in zip(self._distns,self._slices)], axis=0)
+                for distn,sl in zip(self._distns,self._slices)], axis=0).ravel()
 
     def meanfieldupdate(self,data,weights,**kwargs):
         assert isinstance(data,(np.ndarray,list))
@@ -1240,7 +1240,7 @@ class ScalarGaussianNonconjNIG(_ScalarGaussianBase, MeanField, MeanFieldSVI):
         self.niter = niter
 
         self.mu = mu if mu is not None else np.random.normal(h_0/J_0,1./np.sqrt(J_0))
-        self.sigmasq = sigmsq if sigmasq is not None else 1./np.random.gamma(alpha_0,1./beta_0)
+        self.sigmasq = sigmasq if sigmasq is not None else 1./np.random.gamma(alpha_0,1./beta_0)
 
     @property
     def hypparams(self):
