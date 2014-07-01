@@ -36,6 +36,7 @@ class Labels(object):
 
         scores = np.hstack([c.log_likelihood(data)[:,na] for c in self.components]) \
                 + self.weights.log_likelihood(np.arange(len(self.components)))
+        scores = np.nan_to_num(scores)
 
         if temp is not None:
             scores /= temp
@@ -54,9 +55,9 @@ class Labels(object):
 
         # update, see Eq. 10.67 in Bishop
         component_scores = np.empty((N,K))
-
         for idx, c in enumerate(self.components):
             component_scores[:,idx] = c.expected_log_likelihood(data)
+        component_scores = np.nan_to_num(component_scores)
 
         logpitilde = self.weights.expected_log_likelihood(np.arange(len(self.components)))
         logr = logpitilde + component_scores
@@ -86,10 +87,11 @@ class Labels(object):
 
     def E_step(self):
         data, N, K = self.data, self.data.shape[0], len(self.components)
-        self.expectations = np.empty((N,K))
 
+        self.expectations = np.empty((N,K))
         for idx, c in enumerate(self.components):
             self.expectations[:,idx] = c.log_likelihood(data)
+        self.expectations = np.nan_to_num(self.expectations)
 
         self.expectations += self.weights.log_likelihood(np.arange(K))
 

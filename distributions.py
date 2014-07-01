@@ -782,7 +782,7 @@ class DiagonalGaussian(_GaussianBase,GibbsSampling,MaxLikelihood,MeanField):
         x = np.reshape(x,(-1,D))
         Js = 1./sigmas
         return -1./2*(
-                (np.einsum('ij,j->i',x**2,Js) - np.einsum('ij,j,j->i',x,2*mu,Js))
+                (np.einsum('ij,ij,j->i',x,x,Js) - np.einsum('ij,j,j->i',x,2*mu,Js))
                 +
                 (mu**2*Js - np.log(2*np.pi*sigmas)).sum())
 
