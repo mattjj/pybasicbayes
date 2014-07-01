@@ -802,8 +802,8 @@ class DiagonalGaussian(_GaussianBase,GibbsSampling,MaxLikelihood,MeanField):
 
     ### Gibbs sampling
 
-    def resample(self,data=[]):
-        stats = self._get_statistics(data)
+    def resample(self,data=[],stats=None):
+        stats = self._get_statistics(data) if stats is None else stats
         mu_n, nus_n, alphas_n, betas_n = self._posterior_hypparams(*stats)
         D = mu_n.shape[0]
         self.sigmas = 1/np.random.gamma(alphas_n,scale=1/betas_n)
