@@ -2368,6 +2368,7 @@ class NegativeBinomialIntegerR2(_NegativeBinomialBase,MeanField,MeanFieldSVI,Gib
         if r_discrete_distn is not None:
             r_support, = np.where(r_discrete_distn)
             r_probs = r_discrete_distn[r_support]
+            r_support += 1
         self.r_support = r_support
         self.rho_0 = self.rho_mf = np.log(r_probs)
 
