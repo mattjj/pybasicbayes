@@ -780,7 +780,11 @@ class DiagonalGaussian(_GaussianBase,GibbsSampling,MaxLikelihood,MeanField):
     def log_likelihood(self,x):
         mu, sigmas, D = self.mu, self.sigmas, self.mu.shape[0]
         x = np.reshape(x,(-1,D))
-        return (-0.5*((x-mu)**2/sigmas) - 1./2*np.log(2*np.pi*sigmas)).sum(1)
+        Js = 1./sigmas
+        return -1./2*(
+                (np.einsum('ij,ij,j->i',x,x,Js) - np.einsum('ij,j,j->i',x,2*mu,Js))
+                +
+                (mu**2*Js - np.log(2*np.pi*sigmas)).sum())
 
     def _posterior_hypparams(self,n,xbar,sumsq):
         mu_0, nus_0, alphas_0, betas_0 = self.mu_0, self.nus_0, self.alphas_0, self.betas_0
@@ -798,8 +802,9 @@ class DiagonalGaussian(_GaussianBase,GibbsSampling,MaxLikelihood,MeanField):
 
     ### Gibbs sampling
 
-    def resample(self,data=[]):
-        mu_n, nus_n, alphas_n, betas_n = self._posterior_hypparams(*self._get_statistics(data))
+    def resample(self,data=[],stats=None):
+        stats = self._get_statistics(data) if stats is None else stats
+        mu_n, nus_n, alphas_n, betas_n = self._posterior_hypparams(*stats)
         D = mu_n.shape[0]
         self.sigmas = 1/np.random.gamma(alphas_n,scale=1/betas_n)
         self.mu = np.sqrt(self.sigmas/nus_n)*np.random.randn(D) + mu_n
