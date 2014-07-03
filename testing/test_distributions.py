@@ -200,8 +200,24 @@ class TestDiagonalGaussian(BigDataGibbsTester,GewekeGibbsTester,BasicTester):
     def geweke_pval(self):
         return 0.05
 
-    def geweke_numerical_slice(d,self,setting_idx):
+    def geweke_numerical_slice(self,d,setting_idx):
         return slice(0,d.mu.shape[0])
+
+    ### class-specific
+
+    def test_log_likelihood2(self):
+        data = np.random.randn(1000,100)
+
+        mu = np.random.randn(100)
+        sigmas = np.random.uniform(1,2,size=100)
+
+        d = distributions.DiagonalGaussian(mu=mu,sigmas=sigmas)
+        pdf1 = d.log_likelihood(data)
+
+        import scipy.stats as stats
+        pdf2 = stats.norm.logpdf(data,loc=mu,scale=np.sqrt(sigmas)).sum(1)
+
+        assert np.allclose(pdf1,pdf2)
 
 @attr('gaussianfixedmean')
 class TestGaussianFixedMean(BigDataGibbsTester,GewekeGibbsTester):
