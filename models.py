@@ -314,7 +314,7 @@ class MixtureDistribution(Mixture, GibbsSampling, MeanField, MeanFieldSVI, Distr
     def log_likelihood(self,x):
         return self._log_likelihoods(x)
 
-    def resample(self,data,niter=25,temp=None):
+    def resample(self,data,niter=1,temp=None):
         # doesn't keep a reference to the data like a model would
         assert isinstance(data,list) or isinstance(data,np.ndarray)
 
