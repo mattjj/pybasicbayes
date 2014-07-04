@@ -807,6 +807,9 @@ class DiagonalGaussian(_GaussianBase,GibbsSampling,MaxLikelihood,MeanField):
         self.sigmas = 1/np.random.gamma(alphas_n,scale=1/betas_n)
         self.mu = np.sqrt(self.sigmas/nus_n)*np.random.randn(D) + mu_n
 
+        assert not np.isnan(self.mu).any()
+        assert not np.isnan(self.sigmas).any()
+
         # NOTE: next line is to use Gibbs sampling to initialize mean field
         self.mf_mu = self.mu
 
