@@ -6,6 +6,9 @@ import copy
 
 from ..util.stats import sample_discrete_from_log, sample_discrete
 
+from pyhsmm.util.profiling import line_profiled
+PROFILING = True
+
 class Labels(object):
     def __init__(self,components,weights,data=None,N=None,z=None,
             initialize_from_prior=True):
@@ -31,6 +34,7 @@ class Labels(object):
 
     ### Gibbs sampling
 
+    @line_profiled
     def resample(self,temp=None):
         data = self.data
 

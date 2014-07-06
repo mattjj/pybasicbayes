@@ -14,6 +14,8 @@ from distributions import Categorical, CategoricalAndConcentration
 from internals.labels import Labels, CRPLabels
 from util.stats import getdatasize
 
+from pyhsmm.util.profiling import line_profiled
+PROFILING = True
 
 class Mixture(ModelGibbsSampling, ModelMeanField, ModelEM):
     '''
@@ -59,6 +61,7 @@ class Mixture(ModelGibbsSampling, ModelMeanField, ModelEM):
 
         return out, templabels.z
 
+    @line_profiled
     def _log_likelihoods(self,x):
         x = np.asarray(x)
         K = len(self.components)
@@ -66,7 +69,6 @@ class Mixture(ModelGibbsSampling, ModelMeanField, ModelEM):
         for idx, c in enumerate(self.components):
             vals[:,idx] = c.log_likelihood(x)
         vals += self.weights.log_likelihood(np.arange(K))
-        assert not np.isnan(vals).any()
         return np.logaddexp.reduce(vals,axis=1)
 
     def log_likelihood(self,x):
@@ -74,6 +76,7 @@ class Mixture(ModelGibbsSampling, ModelMeanField, ModelEM):
 
     ### Gibbs sampling
 
+    @line_profiled
     def resample_model(self,temp=None):
         assert all(isinstance(c,GibbsSampling) for c in self.components), \
                 'Components must implement GibbsSampling'
@@ -322,7 +325,7 @@ class MixtureDistribution(Mixture, GibbsSampling, MeanField, MeanFieldSVI, Distr
             if not isinstance(data,np.ndarray):
                 data = np.concatenate(data)
 
-            self.add_data(data)
+            self.add_data(data,initialize_from_prior=False)
 
             for itr in range(niter):
                 self.resample_model(temp=temp)

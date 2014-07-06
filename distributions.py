@@ -760,6 +760,9 @@ class DiagonalGaussian(_GaussianBase,GibbsSampling,MaxLikelihood,MeanField):
         self.mu = mu
         self.sigmas = sigmas
 
+        assert self.mu is None or (isinstance(self.mu,np.ndarray) and not isinstance(self.mu,np.ma.MaskedArray))
+        assert self.sigmas is None or (isinstance(self.sigmas,np.ndarray) and not isinstance(self.sigmas,np.ma.MaskedArray))
+
         if (mu,sigmas) == (None,None) and None not in (mu_0,nus_0,alphas_0,betas_0):
             self.resample() # intialize from prior
 
