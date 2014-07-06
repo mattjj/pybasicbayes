@@ -205,11 +205,25 @@ class TestDiagonalGaussian(BigDataGibbsTester,GewekeGibbsTester,BasicTester):
 
     ### class-specific
 
-    def test_log_likelihood2(self):
+    def test_log_likelihood(self):
         data = np.random.randn(1000,100)
 
         mu = np.random.randn(100)
         sigmas = np.random.uniform(1,2,size=100)
+
+        d = distributions.DiagonalGaussian(mu=mu,sigmas=sigmas)
+        pdf1 = d.log_likelihood(data)
+
+        import scipy.stats as stats
+        pdf2 = stats.norm.logpdf(data,loc=mu,scale=np.sqrt(sigmas)).sum(1)
+
+        assert np.allclose(pdf1,pdf2)
+
+    def test_log_likelihood2(self):
+        data = np.random.randn(1000,600)
+
+        mu = np.random.randn(600)
+        sigmas = np.random.uniform(1,2,size=600)
 
         d = distributions.DiagonalGaussian(mu=mu,sigmas=sigmas)
         pdf1 = d.log_likelihood(data)

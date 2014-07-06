@@ -35,15 +35,12 @@ class Labels(object):
     ### Gibbs sampling
 
     @line_profiled
-    def resample(self,temp=None):
+    def resample(self):
         data = self.data
 
         scores = np.hstack([c.log_likelihood(data)[:,na] for c in self.components]) \
                 + self.weights.log_likelihood(np.arange(len(self.components)))
         scores = np.nan_to_num(scores)
-
-        if temp is not None:
-            scores /= temp
 
         self.z = sample_discrete_from_log(scores,axis=1)
 
