@@ -73,7 +73,7 @@ class Mixture(ModelGibbsSampling, ModelMeanField, ModelEM):
 
     ### Gibbs sampling
 
-    def resample_model(self,temp=None):
+    def resample_model(self):
         assert all(isinstance(c,GibbsSampling) for c in self.components), \
                 'Components must implement GibbsSampling'
         for idx, c in enumerate(self.components):
@@ -82,7 +82,7 @@ class Mixture(ModelGibbsSampling, ModelMeanField, ModelEM):
         self.weights.resample([l.z for l in self.labels_list])
 
         for l in self.labels_list:
-            l.resample(temp=temp)
+            l.resample()
 
     def copy_sample(self):
         new = copy.copy(self)
@@ -302,6 +302,10 @@ class MixtureDistribution(Mixture, GibbsSampling, MeanField, MeanFieldSVI, Distr
     This makes a Mixture act like a Distribution for use in other models
     '''
 
+    def __init__(self,niter=1,**kwargs):
+        self.niter = niter
+        super(MixtureDistribution,self).__init__(**kwargs)
+
     @property
     def params(self):
         return dict(weights=self.weights.params,components=[c.params for c in self.components])
@@ -313,7 +317,7 @@ class MixtureDistribution(Mixture, GibbsSampling, MeanField, MeanFieldSVI, Distr
     def log_likelihood(self,x):
         return self._log_likelihoods(x)
 
-    def resample(self,data,niter=1,temp=None):
+    def resample(self,data):
         # doesn't keep a reference to the data like a model would
         assert isinstance(data,list) or isinstance(data,np.ndarray)
 
@@ -323,12 +327,12 @@ class MixtureDistribution(Mixture, GibbsSampling, MeanField, MeanFieldSVI, Distr
 
             self.add_data(data,initialize_from_prior=False)
 
-            for itr in range(niter):
-                self.resample_model(temp=temp)
+            for itr in range(self.niter):
+                self.resample_model()
 
             self.labels_list.pop()
         else:
-            self.resample_model(temp=temp)
+            self.resample_model()
 
     def max_likelihood(self,data,weights=None):
         if weights is not None:
