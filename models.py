@@ -321,7 +321,7 @@ class MixtureDistribution(Mixture, GibbsSampling, MeanField, MeanFieldSVI, Distr
             if not isinstance(data,np.ndarray):
                 data = np.concatenate(data)
 
-            self.add_data(data)
+            self.add_data(data,initialize_from_prior=False)
 
             for itr in range(niter):
                 self.resample_model(temp=temp)
