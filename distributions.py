@@ -2455,7 +2455,7 @@ class NegativeBinomialIntegerR2(_NegativeBinomialBase,MeanField,MeanFieldSVI,Gib
             r_support, = np.where(r_discrete_distn)
             r_probs = r_discrete_distn[r_support]
             r_support += 1
-        self.r_support = r_support
+        self.r_support = np.asarray(r_support)
         self.rho_0 = self.rho_mf = np.log(r_probs)
 
         assert (None not in (alpha_0, beta_0)) ^ (None not in (alphas_0,betas_0))
