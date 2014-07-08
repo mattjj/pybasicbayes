@@ -47,13 +47,32 @@ class BasicTester(DistributionTester):
             s1 = dist._get_statistics(data)
             s2 = dist._get_statistics([d for d in np.array_split(data,self.basic_data_size)])
 
-            if isinstance(s1,np.ndarray):
-                if s1.dtype == np.object:
-                    assert all(np.allclose(t1,t2) for t1, t2 in zip(s1,s2))
-                else:
-                    assert np.allclose(s1,s2)
-            elif isinstance(s1,tuple):
-                assert all(np.allclose(ss1,ss2) for ss1,ss2 in zip(s1,s2))
+            self._check_stats(s1,s2)
+
+    def _check_stats(self,s1,s2):
+        if isinstance(s1,np.ndarray):
+            if s1.dtype == np.object:
+                assert all(np.allclose(t1,t2) for t1, t2 in zip(s1,s2))
+            else:
+                assert np.allclose(s1,s2)
+        elif isinstance(s1,tuple):
+            assert all(np.allclose(ss1,ss2) for ss1,ss2 in zip(s1,s2))
+
+    def missing_data_tests(self):
+        for setting_idx, hypparam_dict in enumerate(self.geweke_hyperparameter_settings):
+            yield self.check_missing_data_stats, setting_idx, hypparam_dict
+
+    def check_missing_data_stats(self,setting_idx,hypparam_dict):
+        dist = self.distribution_class(**hypparam_dict)
+        data = dist.rvs(self.basic_data_size)
+
+        if isinstance(data,np.ndarray):
+            data[np.random.randint(2,size=data.shape[0]) == 1] = np.nan
+
+            s1 = dist._get_statistics(data)
+            s2 = dist._get_statistics(data[~np.isnan(data).any(1)])
+
+            self._check_stats(s1,s2)
 
 class BigDataGibbsTester(DistributionTester):
     __metaclass__ = abc.ABCMeta
