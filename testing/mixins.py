@@ -48,7 +48,10 @@ class BasicTester(DistributionTester):
             s2 = dist._get_statistics([d for d in np.array_split(data,self.basic_data_size)])
 
             if isinstance(s1,np.ndarray):
-                assert np.allclose(s1,s2)
+                if s1.dtype == np.object:
+                    assert all(np.allclose(t1,t2) for t1, t2 in zip(s1,s2))
+                else:
+                    assert np.allclose(s1,s2)
             elif isinstance(s1,tuple):
                 assert all(np.allclose(ss1,ss2) for ss1,ss2 in zip(s1,s2))
 

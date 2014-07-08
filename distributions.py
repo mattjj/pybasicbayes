@@ -724,7 +724,7 @@ class GaussianNonConj(_GaussianBase, GibbsSampling):
         return self
 
 
-# TODO collapsed, meanfield
+# TODO collapsed
 class DiagonalGaussian(_GaussianBase,GibbsSampling,MaxLikelihood,MeanField):
     '''
     Product of normal-inverse-gamma priors over mu (mean vector) and sigmas
@@ -950,6 +950,86 @@ class DiagonalGaussian(_GaussianBase,GibbsSampling,MaxLikelihood,MeanField):
             assert isinstance(data,list) and isinstance(weights,list)
             return sum(self._get_weighted_statistics(d,w) for d, w in zip(data,weights))
 
+# TODO meanfield
+class DiagonalGaussianNonconjNIG(_GaussianBase,GibbsSampling):
+    '''
+    Product of normal priors over mu and product of gamma priors over sigmas.
+    Note that while the conjugate prior in DiagonalGaussian is of the form
+    p(mu,sigmas), this prior is of the form p(mu)p(sigmas). Therefore its
+    resample() update has to perform inner iterations.
+
+    The prior follows
+        mu     ~ N(mu_0,diag(sigmas_0))
+        sigmas ~ InvGamma(alpha_0,beta_0) iid
+    '''
+
+    def __init__(self,mu=None,sigmas=None,mu_0=None,sigmas_0=None,alpha_0=None,beta_0=None,
+            niter=20):
+        self.mu_0, self.sigmas_0 = mu_0, sigmas_0
+        self.alpha_0, self.beta_0 = alpha_0, beta_0
+
+        self.niter = niter
+
+        if None in (mu,sigmas):
+            self.resample()
+        else:
+            self.mu, self.sigmas = mu, sigmas
+
+    @property
+    def hypparams(self):
+        return dict(mu_0=self.mu_0,sigmas_0=self.sigmas_0,alpha_0=self.alpha_0,beta_0=self.beta_0)
+
+    # TODO next three methods are copied from DiagonalGaussian, factor them out
+
+    @property
+    def sigma(self):
+        return np.diag(self.sigmas)
+
+    def rvs(self,size=None):
+        size = np.array(size,ndmin=1)
+        return np.sqrt(self.sigmas)*\
+                np.random.normal(size=np.concatenate((size,self.mu.shape))) + self.mu
+
+    def log_likelihood(self,x):
+        mu, sigmas, D = self.mu, self.sigmas, self.mu.shape[0]
+        x = np.reshape(x,(-1,D))
+        Js = -1./(2*sigmas)
+        return (np.einsum('ij,ij,j->i',x,x,Js) - np.einsum('ij,j,j->i',x,2*mu,Js)) \
+                + (mu**2*Js - 1./2*np.log(2*np.pi*sigmas)).sum()
+
+
+    def resample(self,data=[]):
+        n, y, ysq = self._get_statistics(data)
+        if n == 0:
+            self.mu = np.sqrt(self.sigmas_0) * np.random.randn(self.mu_0.shape[0]) + self.mu_0
+            self.sigmas = 1./np.random.gamma(self.alpha_0,scale=1./self.beta_0)
+        else:
+            for itr in xrange(self.niter):
+                sigmas_n = 1./(1./self.sigmas_0 + n / self.sigmas)
+                mu_n = (self.mu_0 / self.sigmas_0 + y / self.sigmas) * sigmas_n
+                self.mu = np.sqrt(sigmas_n) * np.random.randn(mu_n.shape[0]) + mu_n
+
+                alphas_n = self.alpha_0 + 1./2*n
+                betas_n = self.beta_0 + 1./2*(ysq + n*self.mu**2 - 2*self.mu*y)
+                self.sigmas = 1./np.random.gamma(alphas_n,scale=1./betas_n)
+        return self
+
+    def _get_statistics(self,data):
+        # TODO dont forget to handle nans
+        assert isinstance(data,(list,np.ndarray)) and not isinstance(data,np.ma.MaskedArray)
+        if isinstance(data,np.ndarray):
+            data = data[gi(data)]
+            n = data.shape[0]
+            y = np.einsum('ni->i',data)
+            ysq = np.einsum('ni,ni->i',data,data)
+            return np.array([n,y,ysq],dtype=np.object)
+        else:
+            return sum((self._get_statistics(d) for d in data),self._empty_stats)
+
+    @property
+    def _empty_stats(self):
+        return np.array([0.,np.zeros_like(self.mu_0),np.zeros_like(self.sigmas_0)],
+                dtype=np.object)
 
 # TODO collapsed, meanfield, max_likelihood
 class IsotropicGaussian(GibbsSampling):
@@ -1250,7 +1330,7 @@ class ScalarGaussianNonconjNIG(_ScalarGaussianBase, MeanField, MeanFieldSVI):
 
     @property
     def hypparams(self):
-        return dict(h_0=self.h_0,J_0=self.J_0,alpha_0=self.J_0,beta_0=self.beta_0)
+        return dict(h_0=self.h_0,J_0=self.J_0,alpha_0=self.alpha_0,beta_0=self.beta_0)
 
     @property
     def _E_mu(self):
