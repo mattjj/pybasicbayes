@@ -1028,7 +1028,7 @@ class DiagonalGaussianNonconjNIG(_GaussianBase,GibbsSampling):
 
     @property
     def _empty_stats(self):
-        return np.array([0.,np.zeros_like(self.mu_0),np.zeros_like(self.sigmas_0)],
+        return np.array([0.,np.zeros_like(self.mu_0),np.zeros_like(self.mu_0)],
                 dtype=np.object)
 
 # TODO collapsed, meanfield, max_likelihood
