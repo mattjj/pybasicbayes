@@ -1646,9 +1646,10 @@ class Categorical(GibbsSampling, MeanField, MeanFieldSVI, MaxLikelihood, MAP):
 
     ### Gibbs sampling
 
-    def resample(self,data=[]):
-        self.weights = np.random.dirichlet(np.maximum(1e-5,
-            self.alphav_0 + self._get_statistics(data,len(self.alphav_0))))
+    def resample(self,data=[],counts=None):
+        counts = self._get_statistics(data,len(self.alphav_0)) \
+                if counts is None else counts
+        self.weights = np.random.dirichlet(np.maximum(1e-5,self.alphav_0 + counts))
         # NOTE: next line is so we can use Gibbs sampling to initialize mean field
         self._alpha_mf = self.weights * self.alphav_0.sum()
         assert (self._alpha_mf >= 0.).all()
