@@ -17,7 +17,7 @@ obs_hypparams=dict(
         mu_0=np.zeros(obs_dim),
         alphas_0=2*np.ones(obs_dim),
         betas_0=np.ones(obs_dim),
-        nus_0=0.001*np.ones(obs_dim))
+        nus_0=0.01*np.ones(obs_dim))
 
 #####################
 #  data generation  #
