@@ -24,6 +24,8 @@ class ParallelTempering(object):
 
     @property
     def energies(self):
+        # NOTE: this line assumes that only the likelihood terms are
+        # temperature-raised (and not the priors, so they cancel!)
         return [m.log_likelihood() for m in self.models]
 
     @property
