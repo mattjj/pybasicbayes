@@ -7,12 +7,11 @@ import copy
 from ..util.stats import sample_discrete_from_log, sample_discrete
 
 class Labels(object):
-    def __init__(self,components,weights,data=None,N=None,z=None,
+    def __init__(self,model,data=None,N=None,z=None,
             initialize_from_prior=True):
         assert data is not None or (N is not None and z is None)
 
-        self.components = components
-        self.weights = weights
+        self.model = model
 
         if data is None:
             self._generate(N)
@@ -28,6 +27,14 @@ class Labels(object):
 
     def _generate(self,N):
         self.z = self.weights.rvs(N)
+
+    @property
+    def components(self):
+        return self.model.components
+
+    @property
+    def weights(self):
+        return self.model.weights
 
     ### Gibbs sampling
 

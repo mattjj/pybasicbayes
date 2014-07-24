@@ -945,7 +945,7 @@ class DiagonalGaussian(_GaussianBase,GibbsSampling,MaxLikelihood,MeanField):
         return alphas, betas, mu, nus
 
     def _get_statistics(self,data):
-        if isinstance(data,np.ndarray):
+        if isinstance(data,np.ndarray) and data.shape[0] > 0:
             data = data[gi(data)]
             ns = np.repeat(*data.shape)
             return np.array([
@@ -995,6 +995,12 @@ class DiagonalGaussian(_GaussianBase,GibbsSampling,MaxLikelihood,MeanField):
 
         assert self.sigmas.ndim == 1
         return self
+
+    def copy_sample(self):
+        new = copy.copy(self)
+        new.mu = self.mu.copy()
+        new.sigmas = self.sigmas.copy()
+        return new
 
     ### max likelihood
 
