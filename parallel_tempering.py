@@ -38,12 +38,8 @@ class ParallelTempering(object):
         for (M1,E1,T1), (M2,E2,T2) in zip(self.triples[:-1],self.triples[1:]):
             swap_logprob = min(0., (E1-E2)*(1./T1 - 1./T2) )
             if np.log(np.random.random()) < swap_logprob:
-                self.swapcounts[(T1,T2)] += 1
-                # print 'swapped at %0.3f!' % np.exp(swap_logprob)
                 M1.swap_sample_with(M2)
-            # else:
-            #     print 'no swap at %0.3f' % np.exp(swap_logprob)
-            #     print '%0.3f, %0.3f' % (E1, E2)
+                self.swapcounts[(T1,T2)] += 1
 
         self.itercount += 1
 
