@@ -14,9 +14,6 @@ from distributions import Categorical, CategoricalAndConcentration
 from internals.labels import Labels, CRPLabels
 from util.stats import getdatasize
 
-from pyhsmm.util.profiling import line_profiled
-PROFILING = True
-
 class Mixture(ModelGibbsSampling, ModelMeanField, ModelEM):
     '''
     This class is for mixtures of other distributions.
@@ -39,12 +36,10 @@ class Mixture(ModelGibbsSampling, ModelMeanField, ModelEM):
         self.labels_list = []
 
     def add_data(self,data,**kwargs):
-        self.labels_list.append(Labels(data=np.asarray(data),
-            components=self.components,weights=self.weights,
-            **kwargs))
+        self.labels_list.append(Labels(data=np.asarray(data),model=self,**kwargs))
 
     def generate(self,N,keep=True):
-        templabels = Labels(components=self.components,weights=self.weights,N=N)
+        templabels = Labels(model=self,N=N)
 
         out = np.empty(self.components[0].rvs(N).shape)
         counts = np.bincount(templabels.z,minlength=len(self.components))
@@ -61,7 +56,6 @@ class Mixture(ModelGibbsSampling, ModelMeanField, ModelEM):
 
         return out, templabels.z
 
-    @line_profiled
     def _log_likelihoods(self,x):
         x = np.asarray(x)
         K = len(self.components)
@@ -71,12 +65,43 @@ class Mixture(ModelGibbsSampling, ModelMeanField, ModelEM):
         vals += self.weights.log_likelihood(np.arange(K))
         return np.logaddexp.reduce(vals,axis=1)
 
-    def log_likelihood(self,x):
-        return self._log_likelihoods(x).sum()
+    def log_likelihood(self,x=None):
+        if x is None:
+            K = len(self.components)
+            out = 0.
+
+            for l in self.labels_list:
+                vals = np.empty((K,l.data.shape[0]))
+                for idx, c in enumerate(self.components):
+                    vals[idx] = c.log_likelihood(l.data)
+                vals += self.weights.log_likelihood(np.arange(K))[:,na]
+                out += np.logaddexp.reduce(vals,axis=0).sum()
+
+            return out
+        else:
+            return self._log_likelihoods(x).sum()
+
+    def swap_sample_with(self,other):
+        self.components, other.components = other.components, self.components
+        self.weights, other.weights = other.weights, self.weights
+
+    ### parallel tempering
+
+    @property
+    def temperature(self):
+        if hasattr(self,'_temperature'):
+            return self._temperature
+        else:
+            return None
+
+    @temperature.setter
+    def temperature(self,T):
+        self._temperature = T
+        for c in self.components:
+            c.temperature = T
 
     ### Gibbs sampling
 
-    @line_profiled
     def resample_model(self):
         assert all(isinstance(c,GibbsSampling) for c in self.components), \
                 'Components must implement GibbsSampling'
@@ -93,6 +118,8 @@ class Mixture(ModelGibbsSampling, ModelMeanField, ModelEM):
         new.components = [c.copy_sample() for c in self.components]
         new.weights = self.weights.copy_sample()
         new.labels_list = [l.copy_sample() for l in self.labels_list]
+        for l in new.labels_list:
+            l.model = new
         return new
 
     ### Mean Field
