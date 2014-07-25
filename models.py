@@ -9,12 +9,12 @@ from warnings import warn
 
 from abstractions import ModelGibbsSampling, ModelMeanField, ModelEM
 from abstractions import Distribution, GibbsSampling, MeanField, Collapsed, \
-        MeanFieldSVI, MaxLikelihood
+        MeanFieldSVI, MaxLikelihood, ModelParallelTempering
 from distributions import Categorical, CategoricalAndConcentration
 from internals.labels import Labels, CRPLabels
 from util.stats import getdatasize
 
-class Mixture(ModelGibbsSampling, ModelMeanField, ModelEM):
+class Mixture(ModelGibbsSampling, ModelMeanField, ModelEM, ModelParallelTempering):
     '''
     This class is for mixtures of other distributions.
     '''
@@ -85,20 +85,26 @@ class Mixture(ModelGibbsSampling, ModelMeanField, ModelEM):
 
     @property
     def temperature(self):
-        if hasattr(self,'_temperature'):
-            return self._temperature
-        else:
-            return None
+        return self._temperature if hasattr(self,'_temperature') else 1.
 
     @temperature.setter
     def temperature(self,T):
         self._temperature = T
-        for c in self.components:
-            c.temperature = T
+
+    @property
+    def energy(self):
+        energy = 0.
+        for l in self.labels_list:
+            for label, datum in zip(l.z,l.data):
+                energy += self.components[label].energy(datum)
+        return energy
 
     def swap_sample_with(self,other):
         self.components, other.components = other.components, self.components
         self.weights, other.weights = other.weights, self.weights
+
+        for l1, l2 in zip(self.labels_list,other.labels_list):
+            l1.z, l2.z = l2.z, l1.z
 
     ### Gibbs sampling
 
@@ -344,6 +350,20 @@ class MixtureDistribution(Mixture, GibbsSampling, MeanField, MeanFieldSVI, Distr
     @property
     def hypparams(self):
         return dict(weights=self.weights.hypparams,components=[c.hypparams for c in self.components])
+
+    def energy(self,data):
+        # TODO TODO this function is horrible
+        assert data.ndim == 1
+
+        if np.isnan(data).any():
+            return 0.
+
+        from util.stats import sample_discrete
+        likes = np.array([c.log_likelihood(data) for c in self.components]).reshape((-1,))
+        likes += np.log(self.weights.weights)
+        label = sample_discrete(np.exp(likes - likes.max()))
+
+        return self.components[label].energy(data)
 
     def log_likelihood(self,x):
         return self._log_likelihoods(x)

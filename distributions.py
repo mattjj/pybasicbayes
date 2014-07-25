@@ -12,7 +12,7 @@ import copy
 from warnings import warn
 
 from abstractions import Distribution, BayesianDistribution, \
-        GibbsSampling, MeanField, MeanFieldSVI, Collapsed, MaxLikelihood, MAP
+        GibbsSampling, MeanField, MeanFieldSVI, Collapsed, MaxLikelihood, MAP, Tempering
 from util.stats import sample_niw, sample_mniw, sample_invwishart, invwishart_entropy,\
         invwishart_log_partitionfunction, sample_discrete, sample_pareto,\
         sample_discrete_from_log, getdatasize, flattendata,\
@@ -855,7 +855,7 @@ class GaussianNonConj(_GaussianBase, GibbsSampling):
 
 
 # TODO collapsed
-class DiagonalGaussian(_GaussianBase,GibbsSampling,MaxLikelihood,MeanField):
+class DiagonalGaussian(_GaussianBase,GibbsSampling,MaxLikelihood,MeanField,Tempering):
     '''
     Product of normal-inverse-gamma priors over mu (mean vector) and sigmas
     (vector of scalar variances).
@@ -912,12 +912,8 @@ class DiagonalGaussian(_GaussianBase,GibbsSampling,MaxLikelihood,MeanField):
         return np.sqrt(self.sigmas)*\
                 np.random.normal(size=np.concatenate((size,self.mu.shape))) + self.mu
 
-    def log_likelihood(self,x):
-        if hasattr(self,'temperature'):
-            mu, sigmas, D = self.mu, self.sigmas * self.temperature, self.mu.shape[0]
-        else:
-            mu, sigmas, D = self.mu, self.sigmas, self.mu.shape[0]
-
+    def log_likelihood(self,x,temperature=1.):
+        mu, sigmas, D = self.mu, self.sigmas * temperature, self.mu.shape[0]
         x = np.reshape(x,(-1,D))
         Js = -1./(2*sigmas)
         return (np.einsum('ij,ij,j->i',x,x,Js) - np.einsum('ij,j,j->i',x,2*mu,Js)) \
@@ -973,15 +969,11 @@ class DiagonalGaussian(_GaussianBase,GibbsSampling,MaxLikelihood,MeanField):
 
     ### Gibbs sampling
 
-    def resample(self,data=[],stats=None):
+    def resample(self,data=[],temperature=1.,stats=None):
         stats = self._get_statistics(data) if stats is None else stats
 
-        if hasattr(self,'temperature'):
-            alphas_n, betas_n, mu_n, nus_n = self._natural_to_standard(
-                    self.natural_hypparam + stats / self.temperature)
-        else:
-            alphas_n, betas_n, mu_n, nus_n = self._natural_to_standard(
-                    self.natural_hypparam + stats)
+        alphas_n, betas_n, mu_n, nus_n = self._natural_to_standard(
+                self.natural_hypparam + stats / temperature)
 
         D = mu_n.shape[0]
         self.sigmas = 1/np.random.gamma(alphas_n,scale=1/betas_n)
