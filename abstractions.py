@@ -247,7 +247,9 @@ class ModelMAPEM(_EMBase):
     def MAP_EM_step(self):
         pass
 
-class ModelParallelTempering(BayesianDistribution):
+class ModelParallelTempering(object):
+    __metaclass__ = abc.ABCMeta
+
     @abc.abstractproperty
     def temperature(self):
         pass
