@@ -81,10 +81,6 @@ class Mixture(ModelGibbsSampling, ModelMeanField, ModelEM):
         else:
             return self._log_likelihoods(x).sum()
 
-    def swap_sample_with(self,other):
-        self.components, other.components = other.components, self.components
-        self.weights, other.weights = other.weights, self.weights
-
     ### parallel tempering
 
     @property
@@ -99,6 +95,10 @@ class Mixture(ModelGibbsSampling, ModelMeanField, ModelEM):
         self._temperature = T
         for c in self.components:
             c.temperature = T
+
+    def swap_sample_with(self,other):
+        self.components, other.components = other.components, self.components
+        self.weights, other.weights = other.weights, self.weights
 
     ### Gibbs sampling
 
