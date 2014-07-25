@@ -1,13 +1,14 @@
 from __future__ import division
 import numpy as np
 from collections import defaultdict
+from copy import deepcopy
 
 from util.text import progprint_xrange
 
 class ParallelTempering(object):
     def __init__(self,model,temperatures):
         temperatures = [1.] + list(sorted(temperatures))
-        self.models = [model.copy_sample() for T in temperatures]
+        self.models = [deepcopy(model) for T in temperatures]
         for m,T in zip(self.models,temperatures):
             m.temperature = T
 
@@ -24,24 +25,22 @@ class ParallelTempering(object):
 
     @property
     def energies(self):
-        # NOTE: this line assumes that only the likelihood terms are
-        # temperature-raised (and not the priors, so they cancel!)
-        return [m.log_likelihood() for m in self.models]
-
-    @property
-    def triples(self):
-        return zip(self.models,self.energies,self.temperatures)
+        return [m.energy for m in self.models]
 
     def step(self,intermediate_resamples):
         for m in self.models:
             for itr in xrange(intermediate_resamples):
                 m.resample_model()
 
-        for (M1,E1,T1), (M2,E2,T2) in zip(self.triples[:-1],self.triples[1:]):
-            swap_logprob = min(0., (E1-E2)*(1./T1 - 1./T2) )
+        triples = zip(self.models,self.energies,self.temperatures)
+        for (M1,E1,T1), (M2,E2,T2) in zip(triples[:-1],triples[1:]):
+            swap_logprob = min(0., (E1-E2)*(1./T1 - 1./T2))
             if np.log(np.random.random()) < swap_logprob:
+                print 'swap at %0.3f (%0.2f,%0.2f,%0.3f, %0.3f)' % (np.exp(swap_logprob),T1,T2,E1,E2)
                 M1.swap_sample_with(M2)
                 self.swapcounts[(T1,T2)] += 1
+            else:
+                print 'no swap at delta E = %0.3f' % (E1-E2)
 
         self.itercount += 1
 
@@ -49,5 +48,4 @@ class ParallelTempering(object):
         samples = []
         for itr in progprint_xrange(niter):
             self.step(intermediate_resamples)
-            samples.append(self.unit_temp_model.copy_sample())
-        return samples
+

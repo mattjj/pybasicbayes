@@ -150,7 +150,17 @@ class MAP(BayesianDistribution):
         '''
         pass
 
+class Tempering(BayesianDistribution):
+    @abc.abstractmethod
+    def log_likelihood(self,data,temperature=1.):
+        pass
 
+    @abc.abstractmethod
+    def resample(self,data,temperature=1.):
+        pass
+
+    def energy(self,data):
+        return -self.log_likelihood(data,temperature=1.)
 
 ############
 #  Models  #
@@ -273,11 +283,15 @@ class ModelMAPEM(_EMBase):
     def MAP_EM_step(self):
         pass
 
-class ModelParallelTempering(object):
+class ModelParallelTempering(Model):
     __metaclass__ = abc.ABCMeta
 
     @abc.abstractproperty
     def temperature(self):
+        pass
+
+    @abc.abstractproperty
+    def energy(self):
         pass
 
     @abc.abstractmethod
