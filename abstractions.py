@@ -150,6 +150,8 @@ class MAP(BayesianDistribution):
         '''
         pass
 
+
+
 ############
 #  Models  #
 ############
@@ -269,5 +271,14 @@ class ModelMAPEM(_EMBase):
 
     @abc.abstractmethod
     def MAP_EM_step(self):
+        pass
+
+class ModelParallelTempering(BayesianDistribution):
+    @abc.abstractproperty
+    def temperature(self):
+        pass
+
+    @abc.abstractmethod
+    def swap_sample_with(self,other):
         pass
 
