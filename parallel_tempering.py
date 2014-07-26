@@ -5,6 +5,10 @@ from copy import deepcopy
 
 from util.text import progprint_xrange
 
+from pyhsmm.util.profiling import line_profiled
+PROFILING = True
+PRINTING = True
+
 class ParallelTempering(object):
     def __init__(self,model,temperatures):
         temperatures = [1.] + list(sorted(temperatures))
@@ -27,6 +31,7 @@ class ParallelTempering(object):
     def energies(self):
         return [m.energy for m in self.models]
 
+    @line_profiled
     def step(self,intermediate_resamples):
         for m in self.models:
             for itr in xrange(intermediate_resamples):
@@ -36,11 +41,16 @@ class ParallelTempering(object):
         for (M1,E1,T1), (M2,E2,T2) in zip(triples[:-1],triples[1:]):
             swap_logprob = min(0., (E1-E2)*(1./T1 - 1./T2))
             if np.log(np.random.random()) < swap_logprob:
-                print 'swap at %0.3f (%0.2f,%0.2f,%0.3f, %0.3f)' % (np.exp(swap_logprob),T1,T2,E1,E2)
                 M1.swap_sample_with(M2)
                 self.swapcounts[(T1,T2)] += 1
-            else:
-                print 'no swap at delta E = %0.3f' % (E1-E2)
+
+                if PRINTING:
+                    print 'SWAP at %0.3f%% (Egap = %0.3f)' \
+                            % (100*np.exp(swap_logprob),E1-E2)
+
+            elif PRINTING:
+                print 'no swap at %0.3f%% (Egap = %0.3f)' \
+                        % (100*np.exp(swap_logprob),E1-E2)
 
         self.itercount += 1
 
