@@ -536,3 +536,31 @@ class CRPMixture(CollapsedMixture):
 
         return out, templabels.z
 
+##########
+#  temp  #
+##########
+
+class DiagonalGaussianMixture(Mixture):
+    def resample_model(self):
+        from pyhsmm.util.temp import hsmm_gmm_energy
+
+        datas = [l.data for l in self.labels_list]
+        stateseqs = [np.zeros(l.shape[0],dtype='int32') for l in self.labels_list]
+        randseqs = [np.random.uniform(size=d.shape[0]) for d in datas]
+
+        mus = np.array([[c.mu for c in self.components]])
+        sigmas = np.array([[c.sigmas for c in self.components]])
+        logweights = np.log(np.array([self.weights.weights]))
+
+        # compute likelihoods, resample labels, and collect statistics
+        allstats, allcounts = \
+            resample_gmm_labels(stateseqs,datas,randseqs,sigmas,mus,logweights)
+
+        stats = allstats[0]
+        counts = allcounts[0]
+
+        for s, c in zip(stats,self.components):
+            c.resample(stats=s)
+
+        self.weights.resample(counts=counts)
+
