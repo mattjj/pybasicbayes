@@ -29,7 +29,7 @@ plt.figure()
 plt.plot(data[:,0],data[:,1],'kx')
 plt.title('data')
 
-posteriormodel = models.Mixture(alpha_0=alpha_0,
+posteriormodel = models.DiagonalGaussianMixture(alpha_0=alpha_0,
         components=[distributions.DiagonalGaussian(**obs_hypparams) for itr in range(30)])
 
 posteriormodel.add_data(data)

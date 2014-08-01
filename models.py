@@ -542,7 +542,7 @@ class CRPMixture(CollapsedMixture):
 
 class DiagonalGaussianMixture(Mixture):
     def resample_model(self):
-        from pyhsmm.util.temp import hsmm_gmm_energy
+        from pyhsmm.util.temp import resample_gmm_labels
 
         datas = [l.data for l in self.labels_list]
         stateseqs = [np.zeros(l.shape[0],dtype='int32') for l in self.labels_list]
