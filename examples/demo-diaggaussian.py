@@ -14,7 +14,7 @@ obs_hypparams=dict(
         betas_0=np.ones(2),
         nus_0=0.1*np.ones(2))
 
-priormodel = models.Mixture(alpha_0=alpha_0,
+priormodel = models.DiagonalGaussianMixture(alpha_0=alpha_0,
         components=[distributions.DiagonalGaussian(**obs_hypparams) for itr in range(30)])
 
 data, _ = priormodel.generate(500)
@@ -34,33 +34,9 @@ posteriormodel = models.Mixture(alpha_0=alpha_0,
 
 posteriormodel.add_data(data)
 
-allscores = []
-allmodels = []
-for superitr in range(5):
-    # Gibbs sampling to wander around the posterior
-    print 'Gibbs Sampling'
-    for itr in progprint_xrange(100):
-        posteriormodel.resample_model()
+for itr in progprint_xrange(100):
+    posteriormodel.resample_model()
 
-    # mean field to lock onto a mode
-    print 'Mean Field'
-    scores = [posteriormodel.meanfield_coordinate_descent_step()
-                for itr in progprint_xrange(100)]
-
-    allscores.append(scores)
-    allmodels.append(copy.deepcopy(posteriormodel))
-
-plt.figure()
-for scores in allscores:
-    plt.plot(scores)
-plt.title('model vlb scores vs iteration')
-
-import operator
-models_and_scores = sorted([(m,s[-1]) for m,s
-    in zip(allmodels,allscores)],key=operator.itemgetter(1),reverse=True)
-
-plt.figure()
-models_and_scores[0][0].plot()
-plt.title('best model')
+posteriormodel.plot()
 
 plt.show()
