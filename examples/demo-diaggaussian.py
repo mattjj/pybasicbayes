@@ -40,3 +40,4 @@ for itr in progprint_xrange(100):
 posteriormodel.plot()
 
 plt.show()
+

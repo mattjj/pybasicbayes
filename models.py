@@ -545,7 +545,7 @@ class DiagonalGaussianMixture(Mixture):
         from pyhsmm.util.temp import resample_gmm_labels
 
         datas = [l.data for l in self.labels_list]
-        stateseqs = [np.zeros(l.shape[0],dtype='int32') for l in self.labels_list]
+        stateseqs = [np.zeros(l.data.shape[0],dtype='int32') for l in self.labels_list]
         randseqs = [np.random.uniform(size=d.shape[0]) for d in datas]
 
         mus = np.array([[c.mu for c in self.components]])
