@@ -564,3 +564,9 @@ class DiagonalGaussianMixture(Mixture):
 
         self.weights.resample(counts=counts)
 
+    def plot(self,*args,**kwargs):
+        for l in self.labels_list:
+            l.resample()
+
+        super(DiagonalGaussianMixture,self).plot(*args,**kwargs)
+
