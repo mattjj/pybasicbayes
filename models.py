@@ -14,9 +14,6 @@ from distributions import Categorical, CategoricalAndConcentration
 from internals.labels import Labels, CRPLabels
 from util.stats import getdatasize
 
-from pyhsmm.util.profiling import line_profiled
-PROFILING = True
-
 class Mixture(ModelGibbsSampling, ModelMeanField, ModelEM):
     '''
     This class is for mixtures of other distributions.
@@ -61,7 +58,6 @@ class Mixture(ModelGibbsSampling, ModelMeanField, ModelEM):
 
         return out, templabels.z
 
-    @line_profiled
     def _log_likelihoods(self,x):
         x = np.asarray(x)
         K = len(self.components)
@@ -76,7 +72,6 @@ class Mixture(ModelGibbsSampling, ModelMeanField, ModelEM):
 
     ### Gibbs sampling
 
-    @line_profiled
     def resample_model(self):
         assert all(isinstance(c,GibbsSampling) for c in self.components), \
                 'Components must implement GibbsSampling'
