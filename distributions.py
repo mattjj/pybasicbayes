@@ -825,7 +825,9 @@ class DiagonalGaussian(_GaussianBase,GibbsSampling,MaxLikelihood,MeanField,Tempe
 
     def _get_weighted_statistics(self,data,weights):
         if isinstance(data,np.ndarray):
-            assert not np.isnan(data).any()
+            idx = ~np.isnan(data).any(1)
+            data = data[idx]
+            weights = weights[idx]
             assert data.ndim == 2 and weights.ndim == 1 \
                     and data.shape[0] == weights.shape[0]
             neff = np.repeat(weights.sum(),data.shape[1])
