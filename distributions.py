@@ -19,6 +19,9 @@ from util.stats import sample_niw, sample_invwishart, invwishart_entropy,\
         getdatadimension, combinedata, multivariate_t_loglik, gi, atleast_2d
 from util.cstats import sample_crp_tablecounts
 
+from pyhsmm.util.profiling import line_profiled
+PROFILING = True
+
 # Threshold on weights to perform posterior computation
 weps = 1e-12
 
@@ -823,6 +826,7 @@ class DiagonalGaussian(_GaussianBase,GibbsSampling,MaxLikelihood,MeanField,Tempe
         else:
             return sum((self._get_statistics(d) for d in data), self._empty_stats())
 
+    @line_profiled
     def _get_weighted_statistics(self,data,weights):
         if isinstance(data,np.ndarray):
             idx = ~np.isnan(data).any(1)

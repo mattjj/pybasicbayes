@@ -14,6 +14,9 @@ from distributions import Categorical, CategoricalAndConcentration
 from internals.labels import Labels, CRPLabels
 from util.stats import getdatasize
 
+from pyhsmm.util.profiling import line_profiled
+PROFILING = True
+
 class Mixture(ModelGibbsSampling, ModelMeanField, ModelEM, ModelParallelTempering):
     '''
     This class is for mixtures of other distributions.
@@ -411,6 +414,7 @@ class MixtureDistribution(Mixture, GibbsSampling, MeanField, MeanFieldSVI, Distr
         return sum(np.exp(a - lognorm) * c.expected_log_likelihood(x)
                 for a, c in zip(self.weights._alpha_mf, self.components))
 
+    @line_profiled
     def meanfieldupdate(self,data,weights,**kwargs):
         # NOTE: difference from parent's method is the inclusion of weights
         if not isinstance(data,(list,tuple)):
