@@ -2017,11 +2017,13 @@ class Poisson(GibbsSampling, Collapsed, MaxLikelihood, MeanField, MeanFieldSVI):
     Parameter is the mean/variance parameter:
         lmbda
     '''
-    def __init__(self,lmbda=None,alpha_0=None,beta_0=None):
+    def __init__(self,lmbda=None,alpha_0=None,beta_0=None,mf_alpha_0=None,mf_beta_0=None):
         self.lmbda = lmbda
 
-        self.alpha_0 = self.alpha_mf = alpha_0
-        self.beta_0 = self.beta_mf = beta_0
+        self.alpha_0 = alpha_0
+        self.beta_0 = beta_0
+        self.mf_alpha_0 = mf_alpha_0 if mf_alpha_0 is not None else alpha_0
+        self.mf_beta_0 = mf_beta_0 if mf_beta_0 is not None else beta_0
 
         if lmbda is None and None not in (alpha_0,beta_0):
             self.resample() # intialize from prior
@@ -2056,6 +2058,10 @@ class Poisson(GibbsSampling, Collapsed, MaxLikelihood, MeanField, MeanFieldSVI):
     def resample(self,data=[]):
         alpha_n, beta_n = self._posterior_hypparams(*self._get_statistics(data))
         self.lmbda = np.random.gamma(alpha_n,1/beta_n)
+
+        # next line is for mean field initialization
+        self.mf_alpha_0, self.mf_beta_0 = self.lmbda * self.beta_0, self.beta_0
+
         return self
 
     def _get_statistics(self,data):
@@ -2094,6 +2100,7 @@ class Poisson(GibbsSampling, Collapsed, MaxLikelihood, MeanField, MeanFieldSVI):
     def meanfieldupdate(self,data,weights):
         self.mf_natural_hypparam = \
                 self.natural_hypparam + self._get_weighted_statistics(data,weights)
+        self.lmbda = self.mf_alpha_0 / self.mf_beta_0
 
     def meanfield_sgdstep(self,data,weights,minibatchfrac,stepsize):
         self.mf_natural_hypparam = \
