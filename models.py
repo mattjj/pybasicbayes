@@ -154,6 +154,7 @@ class Mixture(ModelGibbsSampling, ModelMeanField, ModelEM, ModelParallelTemperin
         for l in self.labels_list:
             l.meanfieldupdate()
 
+    @line_profiled
     def meanfield_update_parameters(self):
         self.meanfield_update_components()
         self.meanfield_update_weights()
@@ -161,6 +162,7 @@ class Mixture(ModelGibbsSampling, ModelMeanField, ModelEM, ModelParallelTemperin
     def meanfield_update_weights(self):
         self.weights.meanfieldupdate(None,[l.r for l in self.labels_list])
 
+    @line_profiled
     def meanfield_update_components(self):
         for idx, c in enumerate(self.components):
             c.meanfieldupdate([l.data for l in self.labels_list],
