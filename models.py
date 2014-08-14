@@ -428,10 +428,11 @@ class MixtureDistribution(Mixture, GibbsSampling, MeanField, MeanFieldSVI, Distr
         for d in data:
             self.add_data(d,z=np.empty(d.shape[0])) # NOTE: dummy
 
-        self.meanfield_update_labels()
-        for l, w in zip(self.labels_list,weights):
-            l.r *= w[:,na] # here's where the weights are used
-        self.meanfield_update_parameters()
+        for itr in xrange(self.niter):
+            self.meanfield_update_labels()
+            for l, w in zip(self.labels_list,weights):
+                l.r *= w[:,na] # here's where the weights are used
+            self.meanfield_update_parameters()
 
         # self._labels_vlb = sum(l.get_vlb() for l in self.labels_list) # TODO hack
 
