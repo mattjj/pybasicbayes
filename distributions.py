@@ -898,8 +898,9 @@ class DiagonalGaussian(_GaussianBase,GibbsSampling,MaxLikelihood,MeanField,Tempe
         self.sigmas = np.where(self.mf_alphas > 1,self.mf_betas / (self.mf_alphas - 1),100000)
 
     def meanfieldupdate(self,data,weights,stats=None):
-        stats = self._get_weighted_statistics(data,weights) if stats is not None else stats
+        stats = self._get_weighted_statistics(data,weights) if stats is None else stats
         self.mf_natural_hypparam = self.natural_hypparam + stats
+        assert not np.isnan(self.mf_natural_hypparam).any()
 
     def meanfield_sgdstep(self,data,weights,minibatchfrac,stepsize):
         self.mf_natural_hypparam = \
@@ -934,8 +935,10 @@ class DiagonalGaussian(_GaussianBase,GibbsSampling,MaxLikelihood,MeanField,Tempe
             ])
 
     def mf_expected_statistics(self):
-        return self._expected_statistics(
+        ret = self._expected_statistics(
                 self.mf_alphas,self.mf_betas,self.mf_mu,self.mf_nus)
+        assert not np.isnan(ret).any()
+        return ret
 
     def _log_Z(self,alphas,betas,mu,nus):
         return (special.gammaln(alphas) - alphas*np.log(betas) - 1./2*np.log(nus)).sum()
@@ -1745,7 +1748,7 @@ class Categorical(GibbsSampling, MeanField, MeanFieldSVI, MaxLikelihood, MAP):
     ### Mean Field
 
     def meanfieldupdate(self,data,weights,stats=None):
-        stats = self._get_weighted_statistics(data,weights) if stats is not None else stats
+        stats = self._get_weighted_statistics(data,weights) if stats is None else stats
         self._alpha_mf = self.alphav_0 + stats
         self.weights = self._alpha_mf / self._alpha_mf.sum() # for plotting
         assert (self._alpha_mf > 0.).all()
