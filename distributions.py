@@ -897,9 +897,9 @@ class DiagonalGaussian(_GaussianBase,GibbsSampling,MaxLikelihood,MeanField,Tempe
         self.mu = self.mf_mu
         self.sigmas = np.where(self.mf_alphas > 1,self.mf_betas / (self.mf_alphas - 1),100000)
 
-    def meanfieldupdate(self,data,weights):
-        self.mf_natural_hypparam = \
-            self.natural_hypparam + self._get_weighted_statistics(data,weights)
+    def meanfieldupdate(self,data,weights,stats=None):
+        stats = self._get_weighted_statistics(data,weights) if stats is not None else stats
+        self.mf_natural_hypparam = self.natural_hypparam + stats
 
     def meanfield_sgdstep(self,data,weights,minibatchfrac,stepsize):
         self.mf_natural_hypparam = \
@@ -921,8 +921,7 @@ class DiagonalGaussian(_GaussianBase,GibbsSampling,MaxLikelihood,MeanField,Tempe
 
     def expected_log_likelihood(self,x):
         x = np.atleast_2d(x).reshape((-1,len(self.mf_mu)))
-        a,b,c,d = self._expected_statistics(
-                self.mf_alphas,self.mf_betas,self.mf_mu,self.mf_nus)
+        a,b,c,d = self.mf_expected_statistics()
         return (x**2).dot(a) + x.dot(b) + c.sum() + d.sum() \
                 - len(self.mf_mu)/2. * np.log(2*np.pi)
 
@@ -933,6 +932,10 @@ class DiagonalGaussian(_GaussianBase,GibbsSampling,MaxLikelihood,MeanField,Tempe
             -1./2 * (1./nus + mu**2 * alphas/betas),
             -1./2 * (np.log(betas) - special.digamma(alphas)),
             ])
+
+    def mf_expected_statistics(self):
+        return self._expected_statistics(
+                self.mf_alphas,self.mf_betas,self.mf_mu,self.mf_nus)
 
     def _log_Z(self,alphas,betas,mu,nus):
         return (special.gammaln(alphas) - alphas*np.log(betas) - 1./2*np.log(nus)).sum()
@@ -1741,9 +1744,9 @@ class Categorical(GibbsSampling, MeanField, MeanFieldSVI, MaxLikelihood, MAP):
 
     ### Mean Field
 
-    def meanfieldupdate(self,data,weights):
-        # update
-        self._alpha_mf = self.alphav_0 + self._get_weighted_statistics(data,weights)
+    def meanfieldupdate(self,data,weights,stats=None):
+        stats = self._get_weighted_statistics(data,weights) if stats is not None else stats
+        self._alpha_mf = self.alphav_0 + stats
         self.weights = self._alpha_mf / self._alpha_mf.sum() # for plotting
         assert (self._alpha_mf > 0.).all()
         return self
