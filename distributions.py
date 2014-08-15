@@ -2370,6 +2370,7 @@ class NegativeBinomialFixedR(_NegativeBinomialBase, GibbsSampling, MeanField, Me
                         - special.digamma(self.alpha_mf + self.beta_mf)
         return Elnp, Eln1mp
 
+    @line_profiled
     def expected_log_likelihood(self,x):
         Elnp, Eln1mp = self._mf_expected_statistics()
         x = np.atleast_1d(x)
@@ -2380,6 +2381,7 @@ class NegativeBinomialFixedR(_NegativeBinomialBase, GibbsSampling, MeanField, Me
         return out if out.shape[0] > 1 else out[0]
 
     @staticmethod
+    @line_profiled
     def _log_base_measure(x,r):
         return special.gammaln(x+r) - special.gammaln(x+1) - special.gammaln(r)
 
@@ -2528,6 +2530,7 @@ class NegativeBinomialIntegerR2(_NegativeBinomialBase,MeanField,MeanFieldSVI,Gib
                 self.rho_mf[idx] += sum(w.dot(d._log_base_measure(dt,d.r))
                         for dt,w in zip(data,weights))
 
+    @line_profiled
     def expected_log_likelihood(self,x):
         lognorm = np.logaddexp.reduce(self.rho_mf)
         return sum(np.exp(rho-lognorm)*d.expected_log_likelihood(x)
