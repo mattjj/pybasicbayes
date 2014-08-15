@@ -19,9 +19,6 @@ from util.stats import sample_niw, sample_invwishart, invwishart_entropy,\
         getdatadimension, combinedata, multivariate_t_loglik, gi, atleast_2d
 from util.cstats import sample_crp_tablecounts
 
-from pyhsmm.util.profiling import line_profiled
-PROFILING = True
-
 # Threshold on weights to perform posterior computation
 weps = 1e-12
 
@@ -2370,7 +2367,6 @@ class NegativeBinomialFixedR(_NegativeBinomialBase, GibbsSampling, MeanField, Me
                         - special.digamma(self.alpha_mf + self.beta_mf)
         return Elnp, Eln1mp
 
-    @line_profiled
     def expected_log_likelihood(self,x):
         Elnp, Eln1mp = self._mf_expected_statistics()
         x = np.atleast_1d(x)
@@ -2381,7 +2377,6 @@ class NegativeBinomialFixedR(_NegativeBinomialBase, GibbsSampling, MeanField, Me
         return out if out.shape[0] > 1 else out[0]
 
     @staticmethod
-    @line_profiled
     def _log_base_measure(x,r):
         return special.gammaln(x+r) - special.gammaln(x+1) - special.gammaln(r)
 
@@ -2508,29 +2503,35 @@ class NegativeBinomialIntegerR2(_NegativeBinomialBase,MeanField,MeanFieldSVI,Gib
         return np.exp(self.rho_mf).dot(self.rho_0) \
                 - np.exp(self.rho_mf).dot(self.rho_mf)
 
-    def meanfieldupdate(self,data,weights):
+    def meanfieldupdate(self,data,weights,basemeasures=None):
         for d in self._fixedr_distns:
             d.meanfieldupdate(data,weights)
-        self._update_rho_mf(data,weights)
+        self._update_rho_mf(data,weights,basemeasures)
         # everything below here is for plotting
         ridx = self.rho_mf.argmax()
         d = self._fixedr_distns[ridx]
         self.r = d.r
         self.p = d.alpha_mf / (d.alpha_mf + d.beta_mf)
 
-    def _update_rho_mf(self,data,weights):
+    def _update_rho_mf(self,data,weights,basemeasures=None):
         self.rho_mf = self.rho_0.copy()
         for idx, d in enumerate(self._fixedr_distns):
             n, tot = d._get_weighted_statistics(data,weights)
             Elnp, Eln1mp = d._mf_expected_statistics()
             self.rho_mf[idx] += (d.alpha_0-1+tot)*Elnp + (d.beta_0-1+n*d.r)*Eln1mp
-            if isinstance(data,np.ndarray):
-                self.rho_mf[idx] += weights.dot(d._log_base_measure(data,d.r))
+            if basemeasures is None:
+                if isinstance(data,np.ndarray):
+                    self.rho_mf[idx] += weights.dot(d._log_base_measure(data,d.r))
+                else:
+                    self.rho_mf[idx] += sum(w.dot(d._log_base_measure(dt,d.r))
+                            for dt,w in zip(data,weights))
             else:
-                self.rho_mf[idx] += sum(w.dot(d._log_base_measure(dt,d.r))
-                        for dt,w in zip(data,weights))
+                if isinstance(data,np.ndarray):
+                    self.rho_mf[idx] += weights.dot(basemeasures[idx])
+                else:
+                    self.rho_mf[idx] += sum(w.dot(bm[idx])
+                            for w,bm in zip(weights,basemeasures))
 
-    @line_profiled
     def expected_log_likelihood(self,x):
         lognorm = np.logaddexp.reduce(self.rho_mf)
         return sum(np.exp(rho-lognorm)*d.expected_log_likelihood(x)
