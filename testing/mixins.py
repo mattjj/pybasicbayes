@@ -23,7 +23,7 @@ class BasicTester(DistributionTester):
         return 1000
 
     def loglike_lists_tests(self):
-        for setting_idx, hypparam_dict in enumerate(self.geweke_hyperparameter_settings):
+        for setting_idx, hypparam_dict in enumerate(self.hyperparameter_settings):
             yield self.check_loglike_lists, setting_idx, hypparam_dict
 
     def check_loglike_lists(self,setting_idx,hypparam_dict):
@@ -36,7 +36,7 @@ class BasicTester(DistributionTester):
         assert np.isclose(l1,l2)
 
     def stats_lists_tests(self):
-        for setting_idx, hypparam_dict in enumerate(self.geweke_hyperparameter_settings):
+        for setting_idx, hypparam_dict in enumerate(self.hyperparameter_settings):
             yield self.check_stats_lists, setting_idx, hypparam_dict
 
     def check_stats_lists(self,setting_idx,hypparam_dict):
@@ -59,7 +59,7 @@ class BasicTester(DistributionTester):
             assert all(np.allclose(ss1,ss2) for ss1,ss2 in zip(s1,s2))
 
     def missing_data_tests(self):
-        for setting_idx, hypparam_dict in enumerate(self.geweke_hyperparameter_settings):
+        for setting_idx, hypparam_dict in enumerate(self.hyperparameter_settings):
             yield self.check_missing_data_stats, setting_idx, hypparam_dict
 
     def check_missing_data_stats(self,setting_idx,hypparam_dict):
