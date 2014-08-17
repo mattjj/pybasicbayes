@@ -211,9 +211,8 @@ class Regression(GibbsSampling):
         out -= self.D_out/2*np.log(2*np.pi) + np.log(np.diag(np.linalg.cholesky(sigma))).sum()
         return out
 
-    def rvs(self,x):
-        if isinstance(x,int):
-            x = np.random.normal(size=(x,self.D_in))
+    def rvs(self,x=None,size=1):
+        x = np.random.normal(size=(size,self.D_in)) if x is None else x
         A, sigma = self.A, self.sigma
         y = x.dot(A.T) + np.random.normal(size=(x.shape[0],self.D_out))\
                 .dot(np.linalg.cholesky(sigma).T)
