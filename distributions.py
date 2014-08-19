@@ -141,11 +141,12 @@ class ProductDistribution(GibbsSampling,MaxLikelihood):
 ################
 
 class Regression(GibbsSampling):
-    def __init__(self,nu_0,S_0,M_0,K_0,A=None,sigma=None):
+    def __init__(self,nu_0=None,S_0=None,M_0=None,K_0=None,A=None,sigma=None):
         self.A = A
         self.sigma = sigma
 
-        self.natural_hypparam = self._standard_to_natural(nu_0,S_0,M_0,K_0)
+        if None not in (nu_0,S_0,M_0,K_0):
+            self.natural_hypparam = self._standard_to_natural(nu_0,S_0,M_0,K_0)
 
         if (A,sigma) == (None,None) and None not in (nu_0,S_0,M_0,K_0):
             self.resample() # initialize from prior
@@ -211,12 +212,15 @@ class Regression(GibbsSampling):
         out -= self.D_out/2*np.log(2*np.pi) + np.log(np.diag(np.linalg.cholesky(sigma))).sum()
         return out
 
-    def rvs(self,x=None,size=1):
+    def rvs(self,x=None,size=1,return_xy=True):
         x = np.random.normal(size=(size,self.D_in)) if x is None else x
         A, sigma = self.A, self.sigma
         y = x.dot(A.T) + np.random.normal(size=(x.shape[0],self.D_out))\
                 .dot(np.linalg.cholesky(sigma).T)
-        return np.hstack((x,y))
+        if return_xy:
+            return np.hstack((x,y))
+        else:
+            return y
 
     ### Gibbs sampling
 
