@@ -2508,7 +2508,7 @@ class NegativeBinomialIntegerR2(_NegativeBinomialBase,MeanField,MeanFieldSVI,Gib
             d.meanfieldupdate(data,weights)
         self._update_rho_mf(data,weights,basemeasures)
         # everything below here is for plotting
-        ridx = self.rho_mf.argmax()
+        ridx = self.ridx = self.rho_mf.argmax()
         d = self._fixedr_distns[ridx]
         self.r = d.r
         self.p = d.alpha_mf / (d.alpha_mf + d.beta_mf)
