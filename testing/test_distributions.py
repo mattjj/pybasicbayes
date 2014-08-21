@@ -4,7 +4,7 @@ import numpy as np
 from nose.plugins.attrib import attr
 
 from .. import distributions as distributions
-from mixins import BigDataGibbsTester, GewekeGibbsTester, BasicTester, mkdir
+from mixins import BigDataGibbsTester, GewekeGibbsTester, BasicTester
 
 @attr('geometric')
 class TestGeometric(BigDataGibbsTester,GewekeGibbsTester):
@@ -140,6 +140,34 @@ class TestCategorical(BigDataGibbsTester,GewekeGibbsTester):
     @property
     def geweke_pval(self):
         return 0.05
+
+@attr('regression')
+class TestRegression(BasicTester,BigDataGibbsTester,GewekeGibbsTester):
+    @property
+    def distribution_class(self):
+        return distributions.Regression
+
+    @property
+    def hyperparameter_settings(self):
+        return (dict(nu_0=3,S_0=np.eye(1),M_0=np.zeros((1,2)),K_0=np.eye(2)),
+                dict(nu_0=5,S_0=np.eye(2),M_0=np.zeros((2,4)),K_0=2*np.eye(4)),)
+
+    def params_close(self,d1,d2):
+        return np.linalg.norm(d1.A-d2.A) < 0.1 and np.linalg.norm(d1.sigma-d2.sigma) < 0.1
+
+    def geweke_statistics(self,d,data):
+        return np.concatenate((d.A.flatten(),np.diag(d.sigma)))
+
+    def geweke_nuerical_slice(self,d,setting_idx):
+        return slice(0,d.A.flatten().shape[0])
+
+    @property
+    def geweke_ntrials(self):
+        return 1 # because it's slow
+
+    @property
+    def geweke_num_statistic_fails_to_tolerate(self):
+        return 0
 
 @attr('gaussian')
 class TestGaussian(BigDataGibbsTester,GewekeGibbsTester):
@@ -491,6 +519,7 @@ class TestDirichletCompoundGamma(object):
         plt.ylim(0,10)
 
         import os
+        from mixins import mkdir
         figpath = os.path.join(os.path.dirname(__file__),'figures',
                 self.__class__.__name__,'weaklimittest.pdf')
         mkdir(os.path.dirname(figpath))

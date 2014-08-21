@@ -13,7 +13,7 @@ from warnings import warn
 
 from abstractions import Distribution, BayesianDistribution, \
         GibbsSampling, MeanField, MeanFieldSVI, Collapsed, MaxLikelihood, MAP, Tempering
-from util.stats import sample_niw, sample_invwishart, invwishart_entropy,\
+from util.stats import sample_niw, sample_mniw, sample_invwishart, invwishart_entropy,\
         invwishart_log_partitionfunction, sample_discrete, sample_pareto,\
         sample_discrete_from_log, getdatasize, flattendata,\
         getdatadimension, combinedata, multivariate_t_loglik, gi, atleast_2d
@@ -142,6 +142,95 @@ class ProductDistribution(GibbsSampling,MaxLikelihood):
 ################
 #  Continuous  #
 ################
+
+class Regression(GibbsSampling):
+    def __init__(self,nu_0=None,S_0=None,M_0=None,K_0=None,A=None,sigma=None):
+        self.A = A
+        self.sigma = sigma
+
+        if None not in (nu_0,S_0,M_0,K_0):
+            self.natural_hypparam = self._standard_to_natural(nu_0,S_0,M_0,K_0)
+
+        if (A,sigma) == (None,None) and None not in (nu_0,S_0,M_0,K_0):
+            self.resample() # initialize from prior
+
+    @property
+    def D_in(self):
+        mat = self.A if self.A is not None else self.natural_hypparam[1]
+        return mat.shape[1]
+
+    @property
+    def D_out(self):
+        mat = self.A if self.A is not None else self.natural_hypparam[1]
+        return mat.shape[0]
+
+    ### converting between natural and standard parameters
+
+    @staticmethod
+    def _standard_to_natural(nu,S,M,K):
+        Kinv = np.linalg.inv(K)
+        A = S + M.dot(Kinv).dot(M.T)
+        B = M.dot(Kinv)
+        C = Kinv
+        d = nu
+        return np.array([A,B,C,d])
+
+    @staticmethod
+    def _natural_to_standard(natparam):
+        A,B,C,d = natparam
+        nu = d
+        Kinv = C
+        K = np.linalg.inv(Kinv)
+        M = K.T.dot(B.T).T
+        S = A - M.dot(Kinv).dot(M.T)
+        return nu, S, M, K
+
+    ### getting statistics
+
+    def _get_statistics(self,data):
+        if isinstance(data,list):
+            return sum((self._get_statistics(d) for d in data),self._empty_statistics())
+        else:
+            data = data[~np.isnan(data).any(1)]
+            n, D = data.shape[0], self.D_out
+            statmat = data.T.dot(data)
+            xxT, yxT, yyT = statmat[:-D,:-D], statmat[-D:,:-D], statmat[-D:,-D:]
+            return np.array([yyT, yxT, xxT, n])
+
+    def _empty_statistics(self):
+        D_in, D_out = self.D_in, self.D_out
+        return np.array(
+            [np.zeros((D_out,D_out)),np.zeros((D_out,D_in)),np.zeros((D_in,D_in)),0])
+
+    ### distribution
+
+    def log_likelihood(self,xy):
+        A, sigma = self.A, self.sigma
+        sigma_inv = np.linalg.inv(sigma)
+        parammat = -1./2 * np.bmat([
+            [A.T.dot(sigma_inv).dot(A), -A.T.dot(sigma_inv)],
+            [-sigma_inv.dot(A), sigma_inv]
+            ])
+        out = np.einsum('ni,ni->n',xy.dot(parammat),xy)
+        out -= self.D_out/2*np.log(2*np.pi) + np.log(np.diag(np.linalg.cholesky(sigma))).sum()
+        return out
+
+    def rvs(self,x=None,size=1,return_xy=True):
+        x = np.random.normal(size=(size,self.D_in)) if x is None else x
+        A, sigma = self.A, self.sigma
+        y = x.dot(A.T) + np.random.normal(size=(x.shape[0],self.D_out))\
+                .dot(np.linalg.cholesky(sigma).T)
+        if return_xy:
+            return np.hstack((x,y))
+        else:
+            return y
+
+    ### Gibbs sampling
+
+    def resample(self,data=[],stats=None):
+        stats = self._get_statistics(data) if stats is None else stats
+        self.A, self.sigma = sample_mniw(
+                *self._natural_to_standard(self.natural_hypparam + stats))
 
 class _GaussianBase(object):
     @property
@@ -2001,11 +2090,13 @@ class Poisson(GibbsSampling, Collapsed, MaxLikelihood, MeanField, MeanFieldSVI):
     Parameter is the mean/variance parameter:
         lmbda
     '''
-    def __init__(self,lmbda=None,alpha_0=None,beta_0=None):
+    def __init__(self,lmbda=None,alpha_0=None,beta_0=None,mf_alpha_0=None,mf_beta_0=None):
         self.lmbda = lmbda
 
-        self.alpha_0 = self.alpha_mf = alpha_0
-        self.beta_0 = self.beta_mf = beta_0
+        self.alpha_0 = alpha_0
+        self.beta_0 = beta_0
+        self.mf_alpha_0 = mf_alpha_0 if mf_alpha_0 is not None else alpha_0
+        self.mf_beta_0 = mf_beta_0 if mf_beta_0 is not None else beta_0
 
         if lmbda is None and None not in (alpha_0,beta_0):
             self.resample() # intialize from prior
@@ -2040,6 +2131,10 @@ class Poisson(GibbsSampling, Collapsed, MaxLikelihood, MeanField, MeanFieldSVI):
     def resample(self,data=[]):
         alpha_n, beta_n = self._posterior_hypparams(*self._get_statistics(data))
         self.lmbda = np.random.gamma(alpha_n,1/beta_n)
+
+        # next line is for mean field initialization
+        self.mf_alpha_0, self.mf_beta_0 = self.lmbda * self.beta_0, self.beta_0
+
         return self
 
     def _get_statistics(self,data):
@@ -2078,6 +2173,7 @@ class Poisson(GibbsSampling, Collapsed, MaxLikelihood, MeanField, MeanFieldSVI):
     def meanfieldupdate(self,data,weights):
         self.mf_natural_hypparam = \
                 self.natural_hypparam + self._get_weighted_statistics(data,weights)
+        self.lmbda = self.mf_alpha_0 / self.mf_beta_0
 
     def meanfield_sgdstep(self,data,weights,minibatchfrac,stepsize):
         self.mf_natural_hypparam = \

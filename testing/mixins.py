@@ -23,12 +23,12 @@ class BasicTester(DistributionTester):
         return 1000
 
     def loglike_lists_tests(self):
-        for setting_idx, hypparam_dict in enumerate(self.geweke_hyperparameter_settings):
+        for setting_idx, hypparam_dict in enumerate(self.hyperparameter_settings):
             yield self.check_loglike_lists, setting_idx, hypparam_dict
 
     def check_loglike_lists(self,setting_idx,hypparam_dict):
         dist = self.distribution_class(**hypparam_dict)
-        data = dist.rvs(self.basic_data_size)
+        data = dist.rvs(size=self.basic_data_size)
 
         l1 = dist.log_likelihood(data).sum()
         l2 = sum(dist.log_likelihood(d) for d in np.array_split(data,self.basic_data_size))
@@ -36,12 +36,12 @@ class BasicTester(DistributionTester):
         assert np.isclose(l1,l2)
 
     def stats_lists_tests(self):
-        for setting_idx, hypparam_dict in enumerate(self.geweke_hyperparameter_settings):
+        for setting_idx, hypparam_dict in enumerate(self.hyperparameter_settings):
             yield self.check_stats_lists, setting_idx, hypparam_dict
 
     def check_stats_lists(self,setting_idx,hypparam_dict):
         dist = self.distribution_class(**hypparam_dict)
-        data = dist.rvs(self.basic_data_size)
+        data = dist.rvs(size=self.basic_data_size)
 
         if hasattr(dist,'_get_statistics'):
             s1 = dist._get_statistics(data)
@@ -59,12 +59,12 @@ class BasicTester(DistributionTester):
             assert all(np.allclose(ss1,ss2) for ss1,ss2 in zip(s1,s2))
 
     def missing_data_tests(self):
-        for setting_idx, hypparam_dict in enumerate(self.geweke_hyperparameter_settings):
+        for setting_idx, hypparam_dict in enumerate(self.hyperparameter_settings):
             yield self.check_missing_data_stats, setting_idx, hypparam_dict
 
     def check_missing_data_stats(self,setting_idx,hypparam_dict):
         dist = self.distribution_class(**hypparam_dict)
-        data = dist.rvs(self.basic_data_size)
+        data = dist.rvs(size=self.basic_data_size)
 
         if isinstance(data,np.ndarray):
             data[np.random.randint(2,size=data.shape[0]) == 1] = np.nan
@@ -104,7 +104,7 @@ class BigDataGibbsTester(DistributionTester):
         d1 = self.distribution_class(**hypparam_dict)
         d2 = self.distribution_class(**hypparam_dict)
 
-        data = d1.rvs(self.big_data_size)
+        data = d1.rvs(size=self.big_data_size)
         d2.resample(data)
 
         assert self.params_close(d1,d2)
@@ -170,7 +170,7 @@ class GewekeGibbsTester(DistributionTester):
                 self.geweke_data_size, self.geweke_ntrials
 
         d = self.distribution_class(**hypparam_dict)
-        sample_dim = np.atleast_1d(self.geweke_statistics(d,d.rvs(10))).shape[0]
+        sample_dim = np.atleast_1d(self.geweke_statistics(d,d.rvs(size=10))).shape[0]
 
         num_statistic_fails = 0
         for trial in xrange(ntrials):
@@ -178,16 +178,16 @@ class GewekeGibbsTester(DistributionTester):
             forward_statistics = np.squeeze(np.empty((nsamples,sample_dim)))
             for i in xrange(nsamples):
                 d = self.distribution_class(**hypparam_dict)
-                data = d.rvs(data_size)
+                data = d.rvs(size=data_size)
                 forward_statistics[i] = self.geweke_statistics(d,data)
 
             # collect gibbs-generated statistics
             gibbs_statistics = np.squeeze(np.empty((nsamples,sample_dim)))
             d = self.distribution_class(**hypparam_dict)
-            data = d.rvs(data_size)
+            data = d.rvs(size=data_size)
             for i in xrange(nsamples):
                 d.resample(data,**self.resample_kwargs)
-                data = d.rvs(data_size)
+                data = d.rvs(size=data_size)
                 gibbs_statistics[i] = self.geweke_statistics(d,data)
 
             testing.populations_eq_quantile_plot(forward_statistics,gibbs_statistics,fig=fig)

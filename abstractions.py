@@ -18,11 +18,6 @@ from util.text import progprint_xrange
 class Distribution(object):
     __metaclass__ = abc.ABCMeta
 
-    @abc.abstractproperty
-    def params(self):
-        'distribution parameters'
-        pass
-
     @abc.abstractmethod
     def rvs(self,size=[]):
         'random variates (samples)'
@@ -36,22 +31,8 @@ class Distribution(object):
         '''
         pass
 
-    def __repr__(self):
-        return '%s(params={%s})' % (self.__class__.__name__,self._formatparams(self.params))
-
-    @staticmethod
-    def _formatparams(dct):
-        return ','.join(('{}:{:3.3G}' if isinstance(val,(int,long,float,complex))
-                                        else '{}:{}').format(name,val)
-                    for name,val in dct.iteritems()).replace('\n','').replace(',',', ')
-
 class BayesianDistribution(Distribution):
     __metaclass__ = abc.ABCMeta
-
-    @abc.abstractproperty
-    def hypparams(self):
-        'hyperparameters define a prior distribution over parameters'
-        pass
 
     def empirical_bayes(self,data):
         '''
@@ -59,13 +40,6 @@ class BayesianDistribution(Distribution):
         e.g. treat argument as a pseudo-dataset for exponential family
         '''
         raise NotImplementedError
-
-    def __repr__(self):
-        if not all(v is None for v in self.hypparams.itervalues()):
-            return '%s(\nparams={%s},\nhypparams={%s})' % (self.__class__.__name__,
-                    self._formatparams(self.params),self._formatparams(self.hypparams))
-        else:
-            return super(BayesianDistribution,self).__repr__()
 
 #########################################################
 #  Algorithm interfaces for inference in distributions  #
