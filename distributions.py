@@ -374,11 +374,21 @@ class Gaussian(_GaussianBase, GibbsSampling, MeanField, MeanFieldSVI, Collapsed,
 
     @property
     def num_parameters(self):
-        D = len(self.mu)
+        D = self.D
         return D*(D+1)/2
 
+    @property
+    def D(self):
+        if self.mu is not None:
+            return self.mu.shape[0]
+        elif self.mu_0 is not None:
+            return self.mu_0.shape[0]
+        else:
+            return None
+
     def _get_statistics(self,data,D=None):
-        D = getdatadimension(data) if D is None else D
+        if D is None:
+            D = self.D if self.D is not None else getdatadimension(data)
         out = np.zeros((D+2,D+2))
         if isinstance(data,np.ndarray):
             out[:D,:D] = data.T.dot(data)
