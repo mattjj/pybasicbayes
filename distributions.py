@@ -2204,7 +2204,7 @@ class Poisson(GibbsSampling, Collapsed, MaxLikelihood, MeanField, MeanFieldSVI):
 
     def expected_log_likelihood(self,x):
         Emlmbda, Elnlmbda = self._mf_expected_statistics
-        return -special.gammaln(x+1) + Elnlmbda * (x-1) + Emlmbda
+        return -special.gammaln(x+1) + Elnlmbda * x + Emlmbda
 
     @property
     def _mf_expected_statistics(self):
