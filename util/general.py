@@ -7,6 +7,9 @@ from contextlib import closing
 from urllib2 import urlopen
 from itertools import izip, chain, count, ifilter
 
+def blockarray(*args,**kwargs):
+    return np.array(np.bmat(*args,**kwargs),copy=False)
+
 def solve_psd(A,b,chol=None,overwrite_b=False,overwrite_A=False):
     if A.shape[0] < 5000 and chol is None:
         return np.linalg.solve(A,b)

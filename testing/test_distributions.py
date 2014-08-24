@@ -150,7 +150,8 @@ class TestRegression(BasicTester,BigDataGibbsTester,GewekeGibbsTester):
     @property
     def hyperparameter_settings(self):
         return (dict(nu_0=3,S_0=np.eye(1),M_0=np.zeros((1,2)),K_0=np.eye(2)),
-                dict(nu_0=5,S_0=np.eye(2),M_0=np.zeros((2,4)),K_0=2*np.eye(4)),)
+                dict(nu_0=5,S_0=np.eye(2),M_0=np.zeros((2,4)),K_0=2*np.eye(4)),
+                dict(nu_0=5,S_0=np.eye(2),M_0=np.zeros((2,5)),K_0=2*np.eye(5),affine=True),)
 
     def params_close(self,d1,d2):
         return np.linalg.norm(d1.A-d2.A) < 0.1 and np.linalg.norm(d1.sigma-d2.sigma) < 0.1
@@ -168,6 +169,38 @@ class TestRegression(BasicTester,BigDataGibbsTester,GewekeGibbsTester):
     @property
     def geweke_num_statistic_fails_to_tolerate(self):
         return 0
+
+    ### class-specific
+
+    def test_affine_loglike(self):
+        A = np.random.randn(2,3)
+        b = np.random.randn(2)
+        sigma = np.random.randn(2,2); sigma = sigma.dot(sigma.T)
+        data = np.random.randn(25,5)
+
+        d1 = self.distribution_class(A=np.hstack((A,b[:,None])),sigma=sigma,affine=True)
+        d2 = self.distribution_class(A=A,sigma=sigma)
+
+        likes1 = d1.log_likelihood(data)
+        data[:,-2:] -= b
+        likes2 = d2.log_likelihood(data)
+
+        assert np.allclose(likes1,likes2)
+
+    def test_loglike_against_gaussian(self):
+        mu = np.random.randn(3)
+        A = mu[:,None]
+        sigma = np.random.randn(3,3); sigma = sigma.dot(sigma.T)
+
+        data = np.random.randn(25,mu.shape[0])
+
+        d1 = distributions.Gaussian(mu=mu,sigma=sigma)
+        likes1 = d1.log_likelihood(data)
+
+        d2 = self.distribution_class(A=A,sigma=sigma)
+        likes2 = d2.log_likelihood(np.hstack((np.ones((data.shape[0],1)),data)))
+
+        assert np.allclose(likes1,likes2)
 
 @attr('gaussian')
 class TestGaussian(BigDataGibbsTester,GewekeGibbsTester):
