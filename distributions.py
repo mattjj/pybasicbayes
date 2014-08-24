@@ -17,6 +17,7 @@ from util.stats import sample_niw, sample_mniw, sample_invwishart, invwishart_en
         invwishart_log_partitionfunction, sample_discrete, sample_pareto,\
         sample_discrete_from_log, getdatasize, flattendata,\
         getdatadimension, combinedata, multivariate_t_loglik, gi, atleast_2d
+from util.general import blockarray
 from util.cstats import sample_crp_tablecounts
 
 # Threshold on weights to perform posterior computation
@@ -141,7 +142,12 @@ class ProductDistribution(GibbsSampling,MaxLikelihood):
 ################
 
 class Regression(GibbsSampling):
-    def __init__(self,nu_0=None,S_0=None,M_0=None,K_0=None,A=None,sigma=None):
+    def __init__(self,
+            nu_0=None,S_0=None,M_0=None,K_0=None,
+            affine=False,
+            A=None,sigma=None):
+        self.affine = affine
+
         self.A = A
         self.sigma = sigma
 
@@ -153,6 +159,7 @@ class Regression(GibbsSampling):
 
     @property
     def D_in(self):
+        # NOTE: D_in includes the extra affine coordinate
         mat = self.A if self.A is not None else self.natural_hypparam[1]
         return mat.shape[1]
 
@@ -190,8 +197,16 @@ class Regression(GibbsSampling):
         else:
             data = data[~np.isnan(data).any(1)]
             n, D = data.shape[0], self.D_out
+
             statmat = data.T.dot(data)
             xxT, yxT, yyT = statmat[:-D,:-D], statmat[-D:,:-D], statmat[-D:,-D:]
+
+            if self.affine:
+                xy = data.sum(0)
+                x, y = xy[:-D], xy[-D:]
+                xxT = blockarray([[xxT,x[:,na]],[x[na,:],np.atleast_2d(n)]])
+                yxT = np.hstack((yxT,y[:,na]))
+
             return np.array([yyT, yxT, xxT, n])
 
     def _empty_statistics(self):
@@ -202,25 +217,41 @@ class Regression(GibbsSampling):
     ### distribution
 
     def log_likelihood(self,xy):
-        A, sigma = self.A, self.sigma
+        A, sigma, D = self.A, self.sigma, self.D_out
+        x, y = xy[:,:-D], xy[:,-D:]
+
+        if self.affine:
+            A, b = A[:,:-1], A[:,-1]
+
         sigma_inv = np.linalg.inv(sigma)
-        parammat = -1./2 * np.bmat([
+        parammat = -1./2 * blockarray([
             [A.T.dot(sigma_inv).dot(A), -A.T.dot(sigma_inv)],
             [-sigma_inv.dot(A), sigma_inv]
             ])
         out = np.einsum('ni,ni->n',xy.dot(parammat),xy)
-        out -= self.D_out/2*np.log(2*np.pi) + np.log(np.diag(np.linalg.cholesky(sigma))).sum()
+        out -= D/2*np.log(2*np.pi) + np.log(np.diag(np.linalg.cholesky(sigma))).sum()
+
+        if self.affine:
+            out += y.dot(sigma_inv).dot(b)
+            out -= x.dot(A.T).dot(sigma_inv).dot(b)
+            out -= 1./2*b.dot(sigma_inv).dot(b)
+
         return out
 
     def rvs(self,x=None,size=1,return_xy=True):
-        x = np.random.normal(size=(size,self.D_in)) if x is None else x
         A, sigma = self.A, self.sigma
+
+        if self.affine:
+            A, b = A[:,:-1], A[:,-1]
+
+        x = np.random.normal(size=(size,A.shape[1])) if x is None else x
         y = x.dot(A.T) + np.random.normal(size=(x.shape[0],self.D_out))\
                 .dot(np.linalg.cholesky(sigma).T)
-        if return_xy:
-            return np.hstack((x,y))
-        else:
-            return y
+
+        if self.affine:
+            y += b.T
+
+        return np.hstack((x,y)) if return_xy else y
 
     ### Gibbs sampling
 
