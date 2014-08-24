@@ -5,6 +5,9 @@ from copy import deepcopy
 
 from util.text import progprint_xrange
 
+# NOTE: for a parallel implementation using MPI, see
+# https://github.com/mattjj/mpi4py-paralleltempering
+
 class ParallelTempering(object):
     def __init__(self,model,temperatures):
         temperatures = [1.] + list(sorted(temperatures))
