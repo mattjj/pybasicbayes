@@ -12,7 +12,7 @@ import copy
 from warnings import warn
 
 from abstractions import Distribution, BayesianDistribution, \
-        GibbsSampling, MeanField, MeanFieldSVI, Collapsed, MaxLikelihood, MAP
+        GibbsSampling, MeanField, MeanFieldSVI, Collapsed, MaxLikelihood, MAP, Tempering
 from util.stats import sample_niw, sample_mniw, sample_invwishart, invwishart_entropy,\
         invwishart_log_partitionfunction, sample_discrete, sample_pareto,\
         sample_discrete_from_log, getdatasize, flattendata,\
@@ -855,7 +855,7 @@ class GaussianNonConj(_GaussianBase, GibbsSampling):
 
 
 # TODO collapsed
-class DiagonalGaussian(_GaussianBase,GibbsSampling,MaxLikelihood,MeanField):
+class DiagonalGaussian(_GaussianBase,GibbsSampling,MaxLikelihood,MeanField,Tempering):
     '''
     Product of normal-inverse-gamma priors over mu (mean vector) and sigmas
     (vector of scalar variances).
@@ -896,6 +896,8 @@ class DiagonalGaussian(_GaussianBase,GibbsSampling,MaxLikelihood,MeanField):
         if (mu,sigmas) == (None,None) and None not in (mu_0,nus_0,alphas_0,betas_0):
             self.resample() # intialize from prior
 
+    ### the basics!
+
     @property
     def sigma(self):
         return np.diag(self.sigmas)
@@ -910,97 +912,14 @@ class DiagonalGaussian(_GaussianBase,GibbsSampling,MaxLikelihood,MeanField):
         return np.sqrt(self.sigmas)*\
                 np.random.normal(size=np.concatenate((size,self.mu.shape))) + self.mu
 
-    def log_likelihood(self,x):
-        mu, sigmas, D = self.mu, self.sigmas, self.mu.shape[0]
+    def log_likelihood(self,x,temperature=1.):
+        mu, sigmas, D = self.mu, self.sigmas * temperature, self.mu.shape[0]
         x = np.reshape(x,(-1,D))
         Js = -1./(2*sigmas)
         return (np.einsum('ij,ij,j->i',x,x,Js) - np.einsum('ij,j,j->i',x,2*mu,Js)) \
                 + (mu**2*Js - 1./2*np.log(2*np.pi*sigmas)).sum()
 
-    def _posterior_hypparams(self,n,xbar,sumsq):
-        mu_0, nus_0, alphas_0, betas_0 = self.mu_0, self.nus_0, self.alphas_0, self.betas_0
-        if n > 0:
-            nus_n = n + nus_0
-            alphas_n = alphas_0 + n/2
-            betas_n = betas_0 + 1/2*sumsq + n*nus_0/(n+nus_0) * 1/2*(xbar - mu_0)**2
-            mu_n = (n*xbar + nus_0*mu_0)/(n+nus_0)
-
-            assert alphas_n.ndim == betas_n.ndim == 1
-
-            return mu_n, nus_n, alphas_n, betas_n
-        else:
-            return mu_0, nus_0, alphas_0, betas_0
-
-    ### Gibbs sampling
-
-    def resample(self,data=[],stats=None):
-        stats = self._get_statistics(data) if stats is None else stats
-        mu_n, nus_n, alphas_n, betas_n = self._posterior_hypparams(*stats)
-        D = mu_n.shape[0]
-        self.sigmas = 1/np.random.gamma(alphas_n,scale=1/betas_n)
-        self.mu = np.sqrt(self.sigmas/nus_n)*np.random.randn(D) + mu_n
-
-        assert not np.isnan(self.mu).any()
-        assert not np.isnan(self.sigmas).any()
-
-        # NOTE: next line is to use Gibbs sampling to initialize mean field
-        self.mf_mu = self.mu
-
-        assert self.sigmas.ndim == 1
-        return self
-
-    def _get_statistics(self,data,D=None):
-        n = getdatasize(data)
-        if n > 0:
-            D = getdatadimension(data) if D is None else D
-            if isinstance(data,np.ndarray):
-                data = np.reshape(data,(-1,D))
-                xbar = data[gi(data)].mean(0)
-                sumsq = np.sum((data[gi(data)] - xbar)**2,axis=0)
-            else:
-                xbar = sum(np.sum(np.reshape(d[gi(d)],(-1,D)),axis=0) for d in data) / n
-                sumsq = sum(np.sum((np.reshape(d[gi(d)],(-1,D))-xbar)**2,axis=0) for d in data)
-            assert sumsq.ndim == 1
-        else:
-            xbar, sumsq = None, None
-
-        return n, xbar, sumsq
-
-    def _get_weighted_statistics_old(self,data,weights,D=None):
-        if isinstance(data,np.ndarray):
-            neff = weights.sum()
-            if neff > weps:
-                D = getdatadimension(data) if D is None else D
-                data = np.reshape(data,(-1,D))
-                xbar = weights.dot(data[gi(data)]) / neff
-                sumsq = weights.dot((data[gi(data)]-xbar)**2)
-            else:
-                xbar, sumsq = None, None
-        else:
-            neff = sum(w.sum() for w in weights)
-            if neff > weps:
-                D = getdatadimension(data) if D is None else D
-
-                xbar = sum(w[gi(d)].dot(np.reshape(d[gi(d)],(-1,D))) for w,d in zip(weights,data)) / neff
-                sumsq = sum(w[gi(d)].dot((np.reshape(d[gi(d)],(-1,D))-xbar)**2) for w,d in zip(weights,data))
-            else:
-                xbar, sumsq = None, None
-
-        return neff, xbar, sumsq
-
-    def max_likelihood(self,data,weights=None):
-        D = getdatadimension(data)
-        if weights is None:
-            n, muhat, sumsq = self._get_statistics(data)
-        else:
-            n, muhat, sumsq = self._get_weighted_statistics_old(data,weights)
-
-        self.mu = muhat
-        self.sigmas = sumsq/n
-
-        return self
-
-    ### Mean Field
+    ### posterior updating stuff
 
     @property
     def natural_hypparam(self):
@@ -1020,6 +939,78 @@ class DiagonalGaussian(_GaussianBase,GibbsSampling,MaxLikelihood,MeanField):
         alphas = natparam[3]/2.
         betas = (natparam[0] - nus*mu**2) / 2.
         return alphas, betas, mu, nus
+
+    def _get_statistics(self,data):
+        if isinstance(data,np.ndarray) and data.shape[0] > 0:
+            data = data[gi(data)]
+            ns = np.repeat(*data.shape)
+            return np.array([
+                np.einsum('ni,ni->i',data,data),
+                np.einsum('ni->i',data),
+                ns,
+                ns,
+                ])
+        else:
+            return sum((self._get_statistics(d) for d in data), self._empty_stats())
+
+    def _get_weighted_statistics(self,data,weights):
+        if isinstance(data,np.ndarray):
+            idx = ~np.isnan(data).any(1)
+            data = data[idx]
+            weights = weights[idx]
+            assert data.ndim == 2 and weights.ndim == 1 \
+                    and data.shape[0] == weights.shape[0]
+            neff = np.repeat(weights.sum(),data.shape[1])
+            return np.array([weights.dot(data**2), weights.dot(data), neff, neff])
+        else:
+            return sum((self._get_weighted_statistics(d,w) for d, w in zip(data,weights)),
+                        self._empty_stats())
+
+    def _empty_stats(self):
+        return np.zeros_like(self.natural_hypparam)
+
+    ### Gibbs sampling
+
+    def resample(self,data=[],temperature=1.,stats=None):
+        stats = self._get_statistics(data) if stats is None else stats
+
+        alphas_n, betas_n, mu_n, nus_n = self._natural_to_standard(
+                self.natural_hypparam + stats / temperature)
+
+        D = mu_n.shape[0]
+        self.sigmas = 1/np.random.gamma(alphas_n,scale=1/betas_n)
+        self.mu = np.sqrt(self.sigmas/nus_n)*np.random.randn(D) + mu_n
+
+        assert not np.isnan(self.mu).any()
+        assert not np.isnan(self.sigmas).any()
+
+        # NOTE: next line is to use Gibbs sampling to initialize mean field
+        self.mf_mu = self.mu
+
+        assert self.sigmas.ndim == 1
+        return self
+
+    def copy_sample(self):
+        new = copy.copy(self)
+        new.mu = self.mu.copy()
+        new.sigmas = self.sigmas.copy()
+        return new
+
+    ### max likelihood
+
+    def max_likelihood(self,data,weights=None):
+        D = getdatadimension(data)
+        if weights is None:
+            n, muhat, sumsq = self._get_statistics(data)
+        else:
+            n, muhat, sumsq = self._get_weighted_statistics_old(data,weights)
+
+        self.mu = muhat
+        self.sigmas = sumsq/n
+
+        return self
+
+    ### Mean Field
 
     @property
     def mf_natural_hypparam(self):
@@ -1072,16 +1063,6 @@ class DiagonalGaussian(_GaussianBase,GibbsSampling,MaxLikelihood,MeanField):
 
     def _log_Z(self,alphas,betas,mu,nus):
         return (special.gammaln(alphas) - alphas*np.log(betas) - 1./2*np.log(nus)).sum()
-
-    def _get_weighted_statistics(self,data,weights):
-        if isinstance(data,np.ndarray):
-            assert data.ndim == 2 and weights.ndim == 1 \
-                    and data.shape[0] == weights.shape[0]
-            neff = weights.sum() * np.ones(data.shape[1])
-            return np.array([weights.dot(data**2), weights.dot(data), neff, neff])
-        else:
-            assert isinstance(data,list) and isinstance(weights,list)
-            return sum(self._get_weighted_statistics(d,w) for d, w in zip(data,weights))
 
 # TODO meanfield
 class DiagonalGaussianNonconjNIG(_GaussianBase,GibbsSampling):
