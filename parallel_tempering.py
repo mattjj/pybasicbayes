@@ -5,10 +5,6 @@ from copy import deepcopy
 
 from util.text import progprint_xrange
 
-from pyhsmm.util.profiling import line_profiled
-PROFILING = True
-PRINTING = True
-
 class ParallelTempering(object):
     def __init__(self,model,temperatures):
         temperatures = [1.] + list(sorted(temperatures))
