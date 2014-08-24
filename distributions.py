@@ -141,7 +141,7 @@ class ProductDistribution(GibbsSampling,MaxLikelihood):
 #  Continuous  #
 ################
 
-class Regression(GibbsSampling):
+class Regression(GibbsSampling,MeanField,MeanFieldSVI):
     def __init__(self,
             nu_0=None,S_0=None,M_0=None,K_0=None,
             affine=False,
@@ -209,6 +209,26 @@ class Regression(GibbsSampling):
 
             return np.array([yyT, yxT, xxT, n])
 
+    def _get_weighted_statistics(self,data,weights):
+        if isinstance(data,list):
+            return sum((self._get_weighted_statistics(d,w) for d,w in zip(data,weights)),
+                self._empty_statistics())
+        else:
+            idx = ~np.isnan(data).any(1)
+            data, weights = data[idx], weights[idx]
+            n, D = weights.sum(), self.D_out
+
+            statmat = data.T.dot(weights[:,na]*data)
+            xxT, yxT, yyT = statmat[:-D,:-D], statmat[-D:,:-D], statmat[-D:,-D:]
+
+            if self.affine:
+                xy = weights.dot(data)
+                x, y = xy[:-D], xy[-D:]
+                xxT = blockarray([[xxT,x[:,na]],[x[na,:],np.atleast_2d(n)]])
+                yxT = np.hstack((yxT,y[:,na]))
+
+            return np.array([yyT, yxT, xxT, n])
+
     def _empty_statistics(self):
         D_in, D_out = self.D_in, self.D_out
         return np.array(
@@ -259,6 +279,22 @@ class Regression(GibbsSampling):
         stats = self._get_statistics(data) if stats is None else stats
         self.A, self.sigma = sample_mniw(
                 *self._natural_to_standard(self.natural_hypparam + stats))
+
+    ### mean field
+
+    # TODO add mf natural hyperparmeter stuff
+    # TODO don't forget to initialize
+
+    def meanfieldupdate(self,data,weights):
+        raise NotImplementedError
+
+    def expected_log_likelihood(self,xy):
+        raise NotImplementedError
+
+    ### svi
+
+    def meanfield_sgdstep(self,data,weights,minibatchfrac,stepsize):
+        raise NotImplementedError
 
 class _GaussianBase(object):
     @property
