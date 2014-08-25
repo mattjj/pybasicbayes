@@ -2103,6 +2103,7 @@ class Geometric(GibbsSampling, MeanField, Collapsed, MaxLikelihood):
     ### mean field
 
     def meanfieldupdate(self,data,weights,stats=None):
+        warn('untested')
         n, tot = self._get_weighted_statistics(data,weights) if stats is None else stats
         self.alpha_mf = self.alpha_0 + n
         self.beta_mf = self.beta_0 + tot
@@ -2111,17 +2112,20 @@ class Geometric(GibbsSampling, MeanField, Collapsed, MaxLikelihood):
         self.p = self.alpha_mf / (self.alpha_mf + self.beta_mf)
 
     def get_vlb(self):
+        warn('untested')
         Elnp, Eln1mp = self._expected_statistics(self.alpha_mf,self.beta_mf)
         return (self.alpha_0 - self.alpha_mf)*Elnp \
                 + (self.beta_0 - self.beta_mf)*Eln1mp \
                 - (self._log_partition_function(self.alpha_0,self.beta_0)
-                        - self._log_partition_function(self.alpha_mf,self.beta_mf)
+                        - self._log_partition_function(self.alpha_mf,self.beta_mf))
 
     def expected_log_likelihood(self,x):
+        warn('untested')
         Elnp, Eln1mp = self._expected_statistics(self.alpha_mf,self.beta_mf)
         return (x-1)*Eln1mp + Elnp1mp
 
     def _expected_statistics(self,alpha,beta):
+        warn('untested')
         Elnp = special.digamma(alpha) - special.digamma(alpha+beta)
         Eln1mp = special.digamma(beta) - special.digamma(alpha+beta)
         return Elnp, Eln1mp
