@@ -2015,10 +2015,10 @@ class MultinomialAndConcentration(CategoricalAndConcentration,Multinomial):
     pass
 
 
-class Geometric(GibbsSampling, Collapsed, MaxLikelihood):
+class Geometric(GibbsSampling, MeanField, Collapsed, MaxLikelihood):
     '''
     Geometric distribution with a conjugate beta prior.
-    NOTE: the support is {1,2,3,...}
+    The support is {1,2,3,...}.
 
     Hyperparameters:
         alpha_0, beta_0
@@ -2029,8 +2029,8 @@ class Geometric(GibbsSampling, Collapsed, MaxLikelihood):
     def __init__(self,alpha_0=None,beta_0=None,p=None):
         self.p = p
 
-        self.alpha_0 = alpha_0
-        self.beta_0 = beta_0
+        self.alpha_0 = self.mf_alpha_0 = alpha_0
+        self.beta_0 = self.mf_beta_0 = beta_0
 
         if p is None and None not in (alpha_0,beta_0):
             self.resample() # intialize from prior
@@ -2062,12 +2062,6 @@ class Geometric(GibbsSampling, Collapsed, MaxLikelihood):
     def rvs(self,size=None):
         return np.random.geometric(self.p,size=size)
 
-    ### Gibbs sampling
-
-    def resample(self,data=[]):
-        self.p = np.random.beta(*self._posterior_hypparams(*self._get_statistics(data)))
-        return self
-
     def _get_statistics(self,data):
         if isinstance(data,np.ndarray):
             n = data.shape[0]
@@ -2094,6 +2088,43 @@ class Geometric(GibbsSampling, Collapsed, MaxLikelihood):
             tot = weights*data - 1
 
         return n, tot
+
+    ### Gibbs sampling
+
+    def resample(self,data=[]):
+        self.p = np.random.beta(*self._posterior_hypparams(*self._get_statistics(data)))
+
+        # initialize mean field
+        self.alpha_mf = self.p*(self.alpha_0+self.beta_0)
+        self.beta_mf = (1-self.p)*(self.alpha_0+self.beta_0)
+
+        return self
+
+    ### mean field
+
+    def meanfieldupdate(self,data,weights,stats=None):
+        n, tot = self._get_weighted_statistics(data,weights) if stats is None else stats
+        self.alpha_mf = self.alpha_0 + n
+        self.beta_mf = self.beta_0 + tot
+
+        # initialize Gibbs
+        self.p = self.alpha_mf / (self.alpha_mf + self.beta_mf)
+
+    def get_vlb(self):
+        Elnp, Eln1mp = self._expected_statistics(self.alpha_mf,self.beta_mf)
+        return (self.alpha_0 - self.alpha_mf)*Elnp \
+                + (self.beta_0 - self.beta_mf)*Eln1mp \
+                - (self._log_partition_function(self.alpha_0,self.beta_0)
+                        - self._log_partition_function(self.alpha_mf,self.beta_mf)
+
+    def expected_log_likelihood(self,x):
+        Elnp, Eln1mp = self._expected_statistics(self.alpha_mf,self.beta_mf)
+        return (x-1)*Eln1mp + Elnp1mp
+
+    def _expected_statistics(self,alpha,beta):
+        Elnp = special.digamma(alpha) - special.digamma(alpha+beta)
+        Eln1mp = special.digamma(beta) - special.digamma(alpha+beta)
+        return Elnp, Eln1mp
 
     ### Max likelihood
 
@@ -2164,17 +2195,6 @@ class Poisson(GibbsSampling, Collapsed, MaxLikelihood, MeanField, MeanFieldSVI):
         raw[x<0] = -np.inf
         return raw if isinstance(x,np.ndarray) else raw[0]
 
-    ### Gibbs Sampling
-
-    def resample(self,data=[]):
-        alpha_n, beta_n = self._posterior_hypparams(*self._get_statistics(data))
-        self.lmbda = np.random.gamma(alpha_n,1/beta_n)
-
-        # next line is for mean field initialization
-        self.mf_alpha_0, self.mf_beta_0 = self.lmbda * self.beta_0, self.beta_0
-
-        return self
-
     def _get_statistics(self,data):
         if isinstance(data,np.ndarray):
             n = data.shape[0]
@@ -2202,6 +2222,17 @@ class Poisson(GibbsSampling, Collapsed, MaxLikelihood, MeanField, MeanFieldSVI):
             tot = weights*data
 
         return np.array([n, tot])
+
+    ### Gibbs Sampling
+
+    def resample(self,data=[]):
+        alpha_n, beta_n = self._posterior_hypparams(*self._get_statistics(data))
+        self.lmbda = np.random.gamma(alpha_n,1/beta_n)
+
+        # next line is for mean field initialization
+        self.mf_alpha_0, self.mf_beta_0 = self.lmbda * self.beta_0, self.beta_0
+
+        return self
 
     ### Mean Field
 
