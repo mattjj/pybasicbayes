@@ -148,7 +148,7 @@ def sample_invwishart(S,nu):
         x = np.random.randn(nu,n)
     else:
         x = np.diag(np.sqrt(np.atleast_1d(stats.chi2.rvs(nu-np.arange(n)))))
-        x[np.triu_indices_from(x,1)] = np.random.randn(n*(n-1)/2)
+        x[np.triu_indices_from(x,1)] = np.random.randn(n*(n-1)//2)
     R = np.linalg.qr(x,'r')
     T = scipy.linalg.solve_triangular(R.T,chol.T,lower=True).T
     return np.dot(T,T.T)
