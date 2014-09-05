@@ -2400,7 +2400,6 @@ class _NegativeBinomialBase(Distribution):
     def rvs(self,size=None):
         return np.random.poisson(np.random.gamma(self.r,self.p/(1-self.p),size=size))
 
-
 class NegativeBinomial(_NegativeBinomialBase, GibbsSampling):
     def resample(self,data=[],niter=20):
         if getdatasize(data) == 0:
