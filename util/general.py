@@ -2,6 +2,7 @@ from __future__ import division
 import numpy as np
 from numpy.lib.stride_tricks import as_strided as ast
 import scipy.linalg
+import scipy.linalg.lapack as lapack
 import copy, collections, os, shutil
 from contextlib import closing
 from urllib2 import urlopen
@@ -10,16 +11,15 @@ from itertools import izip, chain, count, ifilter
 def blockarray(*args,**kwargs):
     return np.array(np.bmat(*args,**kwargs),copy=False)
 
-def solve_psd(A,b,chol=None,overwrite_b=False,overwrite_A=False):
-    if A.shape[0] < 5000 and chol is None:
-        return np.linalg.solve(A,b)
+def inv_psd(A):
+    L = lapack.dpotri(np.linalg.cholesky(A))[0]
+    return L + L.T - np.diag(np.diag(L))
+
+def solve_psd(A,b,chol=None,lower=True,overwrite_b=False,overwrite_A=False):
+    if chol is None:
+        return lapack.dposv(A,b,overwrite_b=overwrite_b,overwrite_a=overwrite_A)[1]
     else:
-        if chol is None:
-            chol = np.linalg.cholesky(A)
-        return scipy.linalg.solve_triangular(
-                chol.T,
-                scipy.linalg.solve_triangular(chol,b,lower=True,overwrite_b=overwrite_b),
-                lower=False,overwrite_b=True)
+        return lapack.dpotrs(chol,b,lower,overwrite_b)[0]
 
 def interleave(*iterables):
     return list(chain.from_iterable(zip(*iterables)))

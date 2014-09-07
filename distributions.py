@@ -17,7 +17,7 @@ from util.stats import sample_niw, sample_mniw, sample_invwishart, invwishart_en
         invwishart_log_partitionfunction, sample_discrete, sample_pareto,\
         sample_discrete_from_log, getdatasize, flattendata,\
         getdatadimension, combinedata, multivariate_t_loglik, gi, atleast_2d
-from util.general import blockarray
+from util.general import blockarray, inv_psd, solve_psd
 from util.cstats import sample_crp_tablecounts
 
 # Threshold on weights to perform posterior computation
@@ -172,7 +172,7 @@ class Regression(GibbsSampling):
 
     @staticmethod
     def _standard_to_natural(nu,S,M,K):
-        Kinv = np.linalg.inv(K)
+        Kinv = inv_psd(K)
         A = S + M.dot(Kinv).dot(M.T)
         B = M.dot(Kinv)
         C = Kinv
@@ -184,9 +184,10 @@ class Regression(GibbsSampling):
         A,B,C,d = natparam
         nu = d
         Kinv = C
-        K = np.linalg.inv(Kinv)
-        M = K.T.dot(B.T).T
-        S = A - M.dot(Kinv).dot(M.T)
+        K = inv_psd(Kinv)
+        M = B.dot(K)
+        S = A - B.dot(K).dot(B.T)
+        assert np.all(0 < np.linalg.eigvalsh(S))
         return nu, S, M, K
 
     ### getting statistics
