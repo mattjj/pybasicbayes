@@ -8,18 +8,9 @@ from contextlib import closing
 from urllib2 import urlopen
 from itertools import izip, chain, count, ifilter
 
+
 def blockarray(*args,**kwargs):
     return np.array(np.bmat(*args,**kwargs),copy=False)
-
-def inv_psd(A):
-    L = lapack.dpotri(np.linalg.cholesky(A))[0]
-    return L + L.T - np.diag(np.diag(L))
-
-def solve_psd(A,b,chol=None,lower=True,overwrite_b=False,overwrite_A=False):
-    if chol is None:
-        return lapack.dposv(A,b,overwrite_b=overwrite_b,overwrite_a=overwrite_A)[1]
-    else:
-        return lapack.dpotrs(chol,b,lower,overwrite_b)[0]
 
 def interleave(*iterables):
     return list(chain.from_iterable(zip(*iterables)))
@@ -260,3 +251,17 @@ def list_split(lst,num):
     assert num > 0
     return [lst[start::num] for start in range(num)]
 
+### numerical linear algebra
+
+# TODO these should use Eigen's LDLT
+# TODO do we need versions that use rank-revealing decompositions?
+
+def inv_psd(A):
+    L = lapack.dpotri(np.linalg.cholesky(A))[0]
+    return L + L.T - np.diag(np.diag(L))
+
+def solve_psd(A,b,chol=None,lower=True,overwrite_b=False,overwrite_A=False):
+    if chol is None:
+        return lapack.dposv(A,b,overwrite_b=overwrite_b,overwrite_a=overwrite_A)[1]
+    else:
+        return lapack.dpotrs(chol,b,lower,overwrite_b)[0]
