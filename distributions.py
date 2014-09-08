@@ -17,7 +17,7 @@ from util.stats import sample_niw, sample_mniw, sample_invwishart, invwishart_en
         invwishart_log_partitionfunction, sample_discrete, sample_pareto,\
         sample_discrete_from_log, getdatasize, flattendata,\
         getdatadimension, combinedata, multivariate_t_loglik, gi, atleast_2d
-from util.general import blockarray, inv_psd, solve_psd
+from util.general import blockarray, inv_psd, solve_psd, cumsum
 from util.cstats import sample_crp_tablecounts
 
 # Threshold on weights to perform posterior computation
@@ -260,6 +260,56 @@ class Regression(GibbsSampling):
         stats = self._get_statistics(data) if stats is None else stats
         self.A, self.sigma = sample_mniw(
                 *self._natural_to_standard(self.natural_hypparam + stats))
+
+class LassoRegression(Regression):
+    def __init__(self,lmbda,blocksizes,
+            nu_0,S_0,M_0,K_0=None,niter=10,**kwargs):
+        self.niter = niter
+        self.lmbda = lmbda
+
+        self.blocksizes = np.array(blocksizes)
+        self.starts = cumsum(blocksizes,strict=True)
+        self.stops = cumsum(blocksizes,strict=False)
+
+        self.nu_0 = nu_0
+        self.S_0 = S_0
+        self.M_0 = M_0
+
+        self.K_0 = K_0
+
+        if K_0 is None:
+            self.resample_K()
+
+        super(LassoRegression,self).__init__(K_0=self.K_0,**kwargs)
+
+    def resample(self,data=[],stats=None):
+        if len(data) > 0:
+            stats = self._get_statistics(data) if stats is None else stats
+            for itr in xrange(self.niter):
+                self.A, self.sigma = sample_mniw(
+                        *self._natural_to_standard(self.natural_hypparam + stats))
+
+                mat = self.M_0 - self.A
+                self.resample_K(1./2*np.einsum(
+                    'ij,ij->j',mat,np.linalg.solve(self.sigma,mat)))
+        else:
+            self.resample_K()
+            super(LassoRegression,self).resample()
+
+    def resample_K(self,diag=None):
+        if diag is None:
+            a = np.ones(len(self.blocksizes))
+            b = 2./self.lmbda**2
+        else:
+            sums = [diag[start:stop].sum() for start,stop in zip(self.starts,self.stops)]
+            a = 1. + self.D_out*self.blocksizes/2.
+            b = 2./self.lmbda**2 + np.array(sums)
+
+        ks = 1./np.random.gamma(a,scale=1./b)
+        self.K_0 = np.diag(np.repeat(ks,self.blocksizes))
+
+        self.natural_hypparam = self._standard_to_natural(self.nu_0,self.S_0,self.M_0,self.K_0)
+
 
 class _GaussianBase(object):
     @property

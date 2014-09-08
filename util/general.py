@@ -257,8 +257,9 @@ def list_split(lst,num):
 # TODO do we need versions that use rank-revealing decompositions?
 
 def inv_psd(A):
-    L = lapack.dpotri(np.linalg.cholesky(A),lower=1)[0]
-    return L + L.T - np.diag(np.diag(L))
+    # L = lapack.dpotri(np.linalg.cholesky(A),lower=1)[0]
+    # return L + L.T - np.diag(np.diag(L))
+    return np.linalg.inv(A)
 
 def solve_psd(A,b,chol=None,lower=True,overwrite_b=False,overwrite_A=False):
     if chol is None:
