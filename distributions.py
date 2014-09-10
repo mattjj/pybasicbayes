@@ -261,15 +261,17 @@ class Regression(GibbsSampling):
         self.A, self.sigma = sample_mniw(
                 *self._natural_to_standard(self.natural_hypparam + stats))
 
-class LassoRegression(Regression):
-    def __init__(self,lmbda,blocksizes,
+class ARDRegression(Regression):
+    def __init__(self,
+            a,b,blocksizes,
             nu_0,S_0,M_0,K_0=None,niter=10,**kwargs):
         self.niter = niter
-        self.lmbda = lmbda
-
         self.blocksizes = np.array(blocksizes)
         self.starts = cumsum(blocksizes,strict=True)
         self.stops = cumsum(blocksizes,strict=False)
+
+        self.a = np.repeat(a,self.blocksizes.sum())
+        self.b = np.repeat(b,self.blocksizes.sum())
 
         self.nu_0 = nu_0
         self.S_0 = S_0
@@ -280,7 +282,7 @@ class LassoRegression(Regression):
         if K_0 is None:
             self.resample_K()
 
-        super(LassoRegression,self).__init__(K_0=self.K_0,**kwargs)
+        super(ARDRegression,self).__init__(K_0=self.K_0,**kwargs)
 
     def resample(self,data=[],stats=None):
         if len(data) > 0:
@@ -294,22 +296,20 @@ class LassoRegression(Regression):
                     'ij,ij->j',mat,np.linalg.solve(self.sigma,mat)))
         else:
             self.resample_K()
-            super(LassoRegression,self).resample()
+            super(ARDRegression,self).resample()
 
     def resample_K(self,diag=None):
         if diag is None:
-            a = np.ones(len(self.blocksizes))
-            b = 2./self.lmbda**2
+            a, b = self.a, self.b
         else:
             sums = [diag[start:stop].sum() for start,stop in zip(self.starts,self.stops)]
-            a = 1. + self.D_out*self.blocksizes/2.
-            b = 2./self.lmbda**2 + np.array(sums)
+            a = self.a + self.D_out*self.blocksizes/2.
+            b = self.b + np.array(sums)
 
         ks = 1./np.random.gamma(a,scale=1./b)
         self.K_0 = np.diag(np.repeat(ks,self.blocksizes))
 
         self.natural_hypparam = self._standard_to_natural(self.nu_0,self.S_0,self.M_0,self.K_0)
-
 
 class _GaussianBase(object):
     @property
