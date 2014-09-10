@@ -270,22 +270,22 @@ class ARDRegression(Regression):
         self.starts = cumsum(blocksizes,strict=True)
         self.stops = cumsum(blocksizes,strict=False)
 
-        self.a = np.repeat(a,self.blocksizes.sum())
-        self.b = np.repeat(b,self.blocksizes.sum())
+        self.a = np.repeat(a,len(blocksizes))
+        self.b = np.repeat(b,len(blocksizes))
 
         self.nu_0 = nu_0
         self.S_0 = S_0
         self.M_0 = M_0
 
-        self.K_0 = K_0
-
         if K_0 is None:
             self.resample_K()
+        else:
+            self.K_0 = K_0
 
         super(ARDRegression,self).__init__(K_0=self.K_0,**kwargs)
 
     def resample(self,data=[],stats=None):
-        if len(data) > 0:
+        if len(data) > 0 or stats is not None:
             stats = self._get_statistics(data) if stats is None else stats
             for itr in xrange(self.niter):
                 self.A, self.sigma = sample_mniw(
