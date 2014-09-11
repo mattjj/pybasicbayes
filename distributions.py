@@ -187,7 +187,12 @@ class Regression(GibbsSampling):
         K = inv_psd(Kinv)
         M = B.dot(K)
         S = A - B.dot(K).dot(B.T)
+
+        # numerical padding here...
+        K += 1e-8*np.eye(K.shape[0])
         assert np.all(0 < np.linalg.eigvalsh(S))
+        assert np.all(0 < np.linalg.eigvalsh(K))
+
         return nu, S, M, K
 
     ### getting statistics
