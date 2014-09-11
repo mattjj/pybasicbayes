@@ -263,8 +263,9 @@ class Regression(GibbsSampling):
 
 class ARDRegression(Regression):
     def __init__(self,
-            a,b,blocksizes,
-            nu_0,S_0,M_0,K_0=None,niter=10,**kwargs):
+            a,b,nu_0,S_0,M_0,
+            blocksizes=None,K_0=None,niter=10,**kwargs):
+        blocksizes = np.ones(M_0.shape[1],dtype=np.int64) if blocksizes is None else blocksizes
         self.niter = niter
         self.blocksizes = np.array(blocksizes)
         self.starts = cumsum(blocksizes,strict=True)
