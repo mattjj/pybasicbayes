@@ -536,3 +536,44 @@ class CRPMixture(CollapsedMixture):
 
         return out, templabels.z
 
+    def log_likelihood(self,x, K_extra=1):
+        """
+        Estimate the log likelihood with samples from
+         the model. Draw k_extra components which were not populated by
+         the current model in order to create a truncated approximate
+         mixture model.
+        """
+        x = np.asarray(x)
+        ks = self._get_occupied()
+        K = len(ks)
+        K_total = K + K_extra
+
+        # Sample observation distributions given current labels
+        obs_distns = []
+        for k in range(K):
+            o = copy.deepcopy(self.obs_distn)
+            o.resample(data=self._get_data_withlabel(k))
+            obs_distns.append(o)
+
+        # Sample extra observation distributions from prior
+        for k in range(K_extra):
+            o = copy.deepcopy(self.obs_distn)
+            o.resample()
+            obs_distns.append(o)
+
+        # Sample a set of weights
+        weights = Categorical(alpha_0=self.alpha_0,
+                              K=K_total,
+                              weights=None)
+
+        assert len(self.labels_list) == 1
+        weights.resample(data=self.labels_list[0].z)
+
+        # Now compute the log likelihood
+        vals = np.empty((x.shape[0],K_total))
+        for k in range(K_total):
+            vals[:,k] = obs_distns[k].log_likelihood(x)
+
+        vals += weights.log_likelihood(np.arange(K_total))
+        assert not np.isnan(vals).any()
+        return np.logaddexp.reduce(vals,axis=1).sum()

@@ -125,6 +125,10 @@ class ProductDistribution(GibbsSampling,MaxLikelihood):
                 distn.meanfieldupdate([d[...,sl] for d in data],weights=weights)
         return self
 
+    def _resample_from_mf(self):
+        for distn in self._distns:
+            distn._resample_from_mf()
+
     ### SVI
 
     def meanfield_sgdstep(self,data,weights,minibatchfrac,stepsize):
@@ -2298,7 +2302,8 @@ class Poisson(GibbsSampling, Collapsed, MaxLikelihood, MeanField, MeanFieldSVI):
     ### Mean Field
 
     def _resample_from_mf(self):
-        raise NotImplementedError
+        mf_alpha_0, mf_beta_0 = self._natural_to_standard(self.mf_natural_hypparam)
+        self.lmbda = np.random.gamma(mf_alpha_0, 1./mf_beta_0)
 
     def meanfieldupdate(self,data,weights):
         self.mf_natural_hypparam = \
@@ -2314,7 +2319,7 @@ class Poisson(GibbsSampling, Collapsed, MaxLikelihood, MeanField, MeanFieldSVI):
     def get_vlb(self):
         return (self.natural_hypparam - self.mf_natural_hypparam).dot(self._mf_expected_statistics) \
                 - (self._log_partition_fn(self.alpha_0,self.beta_0)
-                        - self._log_partition_fn(self.alpha_mf,self.beta_mf))
+                        - self._log_partition_fn(self.mf_alpha_0,self.mf_beta_0))
 
     def expected_log_likelihood(self,x):
         Emlmbda, Elnlmbda = self._mf_expected_statistics
@@ -2322,7 +2327,7 @@ class Poisson(GibbsSampling, Collapsed, MaxLikelihood, MeanField, MeanFieldSVI):
 
     @property
     def _mf_expected_statistics(self):
-        alpha, beta = self.alpha_mf, self.beta_mf
+        alpha, beta = self.mf_alpha_0, self.mf_beta_0
         return np.array([-alpha/beta, special.digamma(alpha) - np.log(beta)])
 
 
@@ -2332,11 +2337,11 @@ class Poisson(GibbsSampling, Collapsed, MaxLikelihood, MeanField, MeanFieldSVI):
 
     @property
     def mf_natural_hypparam(self):
-        return self._standard_to_natural(self.alpha_mf,self.beta_mf)
+        return self._standard_to_natural(self.mf_alpha_0,self.mf_beta_0)
 
     @mf_natural_hypparam.setter
     def mf_natural_hypparam(self,natparam):
-        self.alpha_mf, self.beta_mf = self._natural_to_standard(natparam)
+        self.mf_alpha_0, self.mf_beta_0 = self._natural_to_standard(natparam)
 
 
     def _standard_to_natural(self,alpha,beta):
