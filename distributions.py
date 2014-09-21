@@ -125,6 +125,10 @@ class ProductDistribution(GibbsSampling,MaxLikelihood):
                 distn.meanfieldupdate([d[...,sl] for d in data],weights=weights)
         return self
 
+    def _resample_from_mf(self):
+        for distn in self._distns:
+            distn._resample_from_mf()
+
     ### SVI
 
     def meanfield_sgdstep(self,data,weights,minibatchfrac,stepsize):
@@ -2298,7 +2302,8 @@ class Poisson(GibbsSampling, Collapsed, MaxLikelihood, MeanField, MeanFieldSVI):
     ### Mean Field
 
     def _resample_from_mf(self):
-        raise NotImplementedError
+        alpha_mf, beta_mf = self._natural_to_standard(self.mf_natural_hypparam)
+        self.lmbda = np.random.gamma(alpha_mf, 1./beta_mf)
 
     def meanfieldupdate(self,data,weights):
         self.mf_natural_hypparam = \
