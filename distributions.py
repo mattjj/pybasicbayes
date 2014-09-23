@@ -2290,8 +2290,9 @@ class Poisson(GibbsSampling, Collapsed, MaxLikelihood, MeanField, MeanFieldSVI):
 
     ### Gibbs Sampling
 
-    def resample(self,data=[]):
-        alpha_n, beta_n = self._posterior_hypparams(*self._get_statistics(data))
+    def resample(self,data=[],stats=None):
+        stats = self._get_statistics(data) if stats is None else stats
+        alpha_n, beta_n = self._posterior_hypparams(*stats)
         self.lmbda = np.random.gamma(alpha_n,1/beta_n)
 
         # next line is for mean field initialization
