@@ -30,7 +30,6 @@ class ParallelTempering(object):
     def energies(self):
         return [m.energy for m in self.models]
 
-    @line_profiled
     def step(self,intermediate_resamples):
         for m in self.models:
             for itr in xrange(intermediate_resamples):
