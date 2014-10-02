@@ -9,8 +9,6 @@ from numpy.core.umath_tests import inner1d
 
 import general
 
-# TODO write cholesky versions
-
 ### data abstraction
 
 def atleast_2d(data):
@@ -196,6 +194,23 @@ def sample_mniw(nu,S,M,K=None,Kinv=None):
 
 def sample_pareto(x_m,alpha):
     return x_m + np.random.pareto(alpha)
+
+def sample_crp_tablecounts(concentration,customers,colweights):
+    m = np.zeros_like(customers)
+    tot = customers.sum()
+    randseq = np.random.random(tot)
+
+    tmp = np.empty_like(customers)
+    tmp[0,0] = 0
+    tmp.flat[1:] = np.cumsum(np.ravel(customers)[:customers.size-1])
+
+    for (i,j), n in np.ndenumerate(customers):
+        w = colweights[j]
+        for k in xrange(n):
+            m[i,j] += randseq[starts[i,j]+k] \
+                    < (concentration * w) / (k + concentration * w)
+
+    return m
 
 ### Entropy
 def invwishart_entropy(sigma,nu,chol=None):
