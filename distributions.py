@@ -155,10 +155,10 @@ class Regression(GibbsSampling):
         self.A = A
         self.sigma = sigma
 
-        if None not in (nu_0,S_0,M_0,K_0):
+        if not any(_ is None for _ in (nu_0,S_0,M_0,K_0)):
             self.natural_hypparam = self._standard_to_natural(nu_0,S_0,M_0,K_0)
 
-        if (A,sigma) == (None,None) and None not in (nu_0,S_0,M_0,K_0):
+        if A is sigma is None and not any(_ is None for _ in (nu_0,S_0,M_0,K_0)):
             self.resample() # initialize from prior
 
     @property
@@ -432,7 +432,8 @@ class Gaussian(_GaussianBase, GibbsSampling, MeanField, MeanFieldSVI, Collapsed,
         self.kappa_0 = self.kappa_mf = kappa_0
         self.nu_0    = self.nu_mf    = nu_0
 
-        if (mu,sigma) == (None,None) and None not in (mu_0,sigma_0,kappa_0,nu_0):
+        if mu is sigma is None \
+                and not any(_ is None for _ in (mu_0,sigma_0,kappa_0,nu_0)):
             self.resample() # initialize from prior
 
     @property
@@ -507,7 +508,7 @@ class Gaussian(_GaussianBase, GibbsSampling, MeanField, MeanFieldSVI, Collapsed,
 
     def empirical_bayes(self,data):
         self.natural_hypparam = self._get_statistics(data)
-        if (self.mu,self.sigma) == (None,None):
+        if self.mu is self.sigma is None:
             self.resample() # intialize from prior
         return self
 
@@ -688,7 +689,7 @@ class GaussianFixedMean(_GaussianBase, GibbsSampling, MaxLikelihood):
         self.nu_0 = nu_0
         self.lmbda_0 = lmbda_0
 
-        if sigma is None and None not in (nu_0,lmbda_0):
+        if sigma is None and not any(_ is None for _ in (nu_0,lmbda_0)):
             self.resample() # initialize from prior
 
     @property
@@ -775,7 +776,7 @@ class GaussianFixedCov(_GaussianBase, GibbsSampling, MaxLikelihood):
         self.mu_0 = mu_0
         self.lmbda_0 = lmbda_0
 
-        if mu is None and None not in (mu_0,lmbda_0):
+        if mu is None and not any(_ is None for _ in (mu_0,lmbda_0)):
             self.resample()
 
     @property
@@ -954,7 +955,8 @@ class DiagonalGaussian(_GaussianBase,GibbsSampling,MaxLikelihood,MeanField,Tempe
         assert self.mu is None or (isinstance(self.mu,np.ndarray) and not isinstance(self.mu,np.ma.MaskedArray))
         assert self.sigmas is None or (isinstance(self.sigmas,np.ndarray) and not isinstance(self.sigmas,np.ma.MaskedArray))
 
-        if (mu,sigmas) == (None,None) and None not in (mu_0,nus_0,alphas_0,betas_0):
+        if mu is sigmas is None \
+                and not any(_ is None for _ in (mu_0,nus_0,alphas_0,betas_0)):
             self.resample() # intialize from prior
 
     ### the basics!
@@ -1227,7 +1229,7 @@ class IsotropicGaussian(GibbsSampling):
         self.alpha_0 = alpha_0
         self.beta_0 = beta_0
 
-        if (mu,sigma) == (None,None) and None not in (mu_0,nu_0,alpha_0,beta_0):
+        if mu is sigma is None and not any(_ is None for _ in (mu_0,nu_0,alpha_0,beta_0)):
             self.resample() # intialize from prior
 
     @property
@@ -1393,7 +1395,8 @@ class ScalarGaussianNIX(_ScalarGaussianBase, GibbsSampling, Collapsed):
         self.sigmasq_0 = sigmasq_0
         self.nu_0 = nu_0
 
-        if (mu,sigmasq) == (None,None) and None not in (mu_0,kappa_0,sigmasq_0,nu_0):
+        if mu is sigmasq is None \
+                and not any(_ is None for _ in (mu_0,kappa_0,sigmasq_0,nu_0)):
             self.resample() # intialize from prior
 
     @property
@@ -1453,7 +1456,8 @@ class ScalarGaussianNonconjNIX(_ScalarGaussianBase, GibbsSampling):
 
         self.niter = niter
 
-        if (mu,sigmasq) == (None,None) and None not in (mu_0, tausq_0, sigmasq_0, nu_0):
+        if mu is sigmasq is None \
+                and not any(_ is None for _ in (mu_0, tausq_0, sigmasq_0, nu_0)):
             self.resample() # intialize from prior
 
     @property
@@ -1640,7 +1644,7 @@ class ScalarGaussianFixedvar(_ScalarGaussianBase, GibbsSampling):
         self.mu_0 = mu_0
         self.tausq_0 = tausq_0
 
-        if mu is None and None not in (mu_0,tausq_0):
+        if mu is None and not any(_ is None for _ in (mu_0,tausq_0)):
             self.resample() # intialize from prior
 
     @property
@@ -1722,7 +1726,7 @@ class UniformOneSided(GibbsSampling):
         self.alpha = alpha
         self.low = low
 
-        if high is None and None not in (x_m,alpha):
+        if high is None and not any(_ is None for _ in (x_m,alpha)):
             self.resample() # intialize from prior
 
     @property
@@ -1787,7 +1791,8 @@ class Uniform(UniformOneSided):
         self.x_m_high = x_m_high
         self.alpha_high = alpha_high
 
-        if (low,high) == (None,None) and None not in (x_m_low,alpha_low,x_m_high,alpha_high):
+        if low is high is None \
+                and not any(_ is None for _ in (x_m_low,alpha_low,x_m_high,alpha_high)):
             self.resample() # initialize from prior
 
     @property
@@ -1862,7 +1867,7 @@ class Categorical(GibbsSampling, MeanField, MeanFieldSVI, MaxLikelihood, MAP):
 
     def _set_alpha_0(self,alpha_0):
         self._alpha_0 = alpha_0
-        if None not in (self.K, self._alpha_0):
+        if not any(_ is None for _ in (self.K, self._alpha_0)):
             self.alphav_0 = np.repeat(self._alpha_0/self.K,self.K)
 
     alpha_0 = property(_get_alpha_0,_set_alpha_0)
@@ -2093,7 +2098,7 @@ class Geometric(GibbsSampling, MeanField, Collapsed, MaxLikelihood):
         self.alpha_0 = self.mf_alpha_0 = alpha_0
         self.beta_0 = self.mf_beta_0 = beta_0
 
-        if p is None and None not in (alpha_0,beta_0):
+        if p is None and not any(_ is None for _ in (alpha_0,beta_0)):
             self.resample() # intialize from prior
 
     @property
@@ -2232,7 +2237,7 @@ class Poisson(GibbsSampling, Collapsed, MaxLikelihood, MeanField, MeanFieldSVI):
         self.mf_alpha_0 = mf_alpha_0 if mf_alpha_0 is not None else alpha_0
         self.mf_beta_0 = mf_beta_0 if mf_beta_0 is not None else beta_0
 
-        if lmbda is None and None not in (alpha_0,beta_0):
+        if lmbda is None and not any(_ is None for _ in (alpha_0,beta_0)):
             self.resample() # intialize from prior
 
     @property
@@ -2419,7 +2424,7 @@ class _NegativeBinomialBase(Distribution):
         self.alpha_0 = alpha_0
         self.beta_0 = beta_0
 
-        if (r,p) == (None,None) and None not in (k_0,theta_0,alpha_0,beta_0):
+        if r is p is None and not any(_ is None for _ in (k_0,theta_0,alpha_0,beta_0)):
             self.resample() # intialize from prior
 
     @property
@@ -2541,10 +2546,10 @@ class NegativeBinomialFixedR(_NegativeBinomialBase, GibbsSampling, MeanField, Me
         self.alpha_0 = alpha_0
         self.beta_0 = beta_0
 
-        if p is None and None not in (alpha_0,beta_0):
+        if p is None and not any(_ is None for _ in (alpha_0,beta_0)):
             self.resample() # intialize from prior
 
-        if None not in (alpha_mf,beta_mf):
+        if not any(_ is None for _ in (alpha_mf,beta_mf)):
             self.alpha_mf = alpha_mf
             self.beta_mf = beta_mf
 
@@ -2677,7 +2682,8 @@ class NegativeBinomialIntegerR2(_NegativeBinomialBase,MeanField,MeanFieldSVI,Gib
         self.r_support = np.asarray(r_support)
         self.rho_0 = self.rho_mf = np.log(r_probs)
 
-        assert (None not in (alpha_0, beta_0)) ^ (None not in (alphas_0,betas_0))
+        assert (alpha_0 is not None and  beta_0 is not None) \
+                ^ (alphas_0 is not None and betas_0 is not None)
         alphas_0 = alphas_0 if alphas_0 is not None else [alpha_0]*len(r_support)
         betas_0 = betas_0 if betas_0 is not None else [beta_0]*len(r_support)
         ps = ps if ps is not None else [None]*len(r_support)
@@ -2825,7 +2831,8 @@ class NegativeBinomialIntegerR(NegativeBinomialFixedR, GibbsSampling, MaxLikelih
         self.r = r
         self.p = p
 
-        if (r,p) == (None,None) and None not in (r_discrete_distn,alpha_0,beta_0):
+        if r is p is None \
+                and not any(_ is None for _ in (r_discrete_distn,alpha_0,beta_0)):
             self.resample() # intialize from prior
 
     @property
