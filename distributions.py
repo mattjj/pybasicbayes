@@ -2208,7 +2208,7 @@ class Geometric(GibbsSampling, MeanField, Collapsed, MaxLikelihood):
             n, tot = self._get_weighted_statistics(data,weights)
 
         self.p = n/tot
-
+        return self
 
     ### Collapsed
 
