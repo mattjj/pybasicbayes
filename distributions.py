@@ -295,7 +295,7 @@ class ARDRegression(Regression):
         else:
             self.K_0 = K_0
 
-        super(ARDRegression,self).__init__(K_0=self.K_0,**kwargs)
+        super(ARDRegression,self).__init__(K_0=self.K_0,nu_0=nu_0,S_0=S_0,M_0=M_0,**kwargs)
 
     def resample(self,data=[],stats=None):
         if len(data) > 0 or stats is not None:
