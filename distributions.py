@@ -968,6 +968,15 @@ class DiagonalGaussian(_GaussianBase,GibbsSampling,MaxLikelihood,MeanField,Tempe
     def sigma(self):
         return np.diag(self.sigmas)
 
+    @sigma.setter
+    def sigma(self,val):
+        val = np.array(val)
+        assert val.ndim in (1,2)
+        if val.ndim == 1:
+            self.sigmas = val
+        else:
+            self.sigmas = np.diag(val)
+
     @property
     def hypparams(self):
         return dict(mu_0=self.mu_0,nus_0=self.nus_0,
