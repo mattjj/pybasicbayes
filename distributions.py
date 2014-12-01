@@ -165,6 +165,15 @@ class Regression(GibbsSampling):
             self.resample() # initialize from prior
 
     @property
+    def parameters(self):
+        return (self.A, self.sigma)
+
+    @parameters.setter
+    def parameters(self,(A,sigma)):
+        self.A = A
+        self.sigma = sigma
+
+    @property
     def D_in(self):
         # NOTE: D_in includes the extra affine coordinate
         mat = self.A if self.A is not None else self.natural_hypparam[1]
