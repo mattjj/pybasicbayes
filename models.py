@@ -156,12 +156,12 @@ class Mixture(ModelGibbsSampling, ModelMeanField, ModelEM, ModelParallelTemperin
         if len(self.labels_list) > 0:
             parallel.model = self
 
-            raw_labels = Parallel(n_jobs=joblib_jobs,backend='multiprocessing')\
+            raw = Parallel(n_jobs=joblib_jobs,backend='multiprocessing')\
                     (delayed(parallel._get_sampled_labels)(idx)
                             for idx in range(len(self.labels_list)))
 
-            for l, z in zip(self.labels_list,raw_labels):
-                l.z = z
+            for l, (z,normalizer) in zip(self.labels_list,raw):
+                l.z, l._normalizer = z, normalizer
 
 
     ### Mean Field

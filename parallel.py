@@ -6,7 +6,8 @@ labels_list = None
 
 def _get_sampled_labels(idx):
     model.add_data(model.labels_list[idx].data,initialize_from_prior=False)
-    return model.labels_list.pop().z
+    l = model.labels_list.pop()
+    return l.z, l._normalizer
 
 def _get_sampled_component_params(idx):
     model.components[idx].resample([l.data[l.z == idx] for l in labels_list])
