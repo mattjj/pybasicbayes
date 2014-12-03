@@ -152,7 +152,7 @@ class Mixture(ModelGibbsSampling, ModelMeanField, ModelEM, ModelParallelTemperin
                             for idx in range(len(self.components)))
 
         for c, p in zip(self.components,params):
-            o.parameters = p
+            c.parameters = p
 
     def _resample_labels_joblib(self,joblib_jobs):
         from joblib import Parallel, delayed
