@@ -36,16 +36,29 @@ class Labels(object):
     def weights(self):
         return self.model.weights
 
+    def log_likelihood(self):
+        if not hasattr(self,'_normalizer') or self._normalizer is None:
+            scores = self._compute_scores()
+            self._normalizer = np.logaddexp.reduce(scores,axis=1).sum()
+        return self._normalizer
+
+    def _compute_scores(self):
+        data, K = self.data, len(self.components)
+        scores = np.empty((data.shape[0],K))
+        for idx, c in enumerate(self.components):
+            scores[:,idx] = c.log_likelihood(data)
+        scores += self.weights.log_likelihood(np.arange(K))
+        scores[np.isnan(data).any(1)] = 0. # missing data
+        return scores
+
+    def clear_caches(self):
+        self._normalizer = None
+
     ### Gibbs sampling
 
     def resample(self):
-        data = self.data
-
-        scores = np.hstack([c.log_likelihood(data)[:,na] for c in self.components]) \
-                + self.weights.log_likelihood(np.arange(len(self.components)))
-        scores = np.nan_to_num(scores)
-
-        self.z = sample_discrete_from_log(scores,axis=1)
+        scores = self._compute_scores()
+        self.z, self._normalizer = sample_discrete_from_log(scores,axis=1,return_lognorm=True)
 
     def copy_sample(self):
         new = copy.copy(self)

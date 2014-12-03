@@ -56,6 +56,10 @@ class Mixture(ModelGibbsSampling, ModelMeanField, ModelEM, ModelParallelTemperin
 
         return out, templabels.z
 
+    def _clear_caches(self):
+        for l in self.labels_list:
+            l.clear_caches()
+
     def _log_likelihoods(self,x):
         x = np.asarray(x)
         K = len(self.components)
@@ -67,17 +71,7 @@ class Mixture(ModelGibbsSampling, ModelMeanField, ModelEM, ModelParallelTemperin
 
     def log_likelihood(self,x=None):
         if x is None:
-            K = len(self.components)
-            out = 0.
-
-            for l in self.labels_list:
-                vals = np.empty((K,l.data.shape[0]))
-                for idx, c in enumerate(self.components):
-                    vals[idx] = c.log_likelihood(l.data)
-                vals += self.weights.log_likelihood(np.arange(K))[:,na]
-                out += np.logaddexp.reduce(vals,axis=0).sum()
-
-            return out
+            return sum(l.log_likelihood() for l in self.labels_list)
         else:
             return self._log_likelihoods(x).sum()
 
@@ -112,6 +106,7 @@ class Mixture(ModelGibbsSampling, ModelMeanField, ModelEM, ModelParallelTemperin
         self.resample_components(joblib_jobs=components_jobs)
         self.resample_weights()
         self.resample_labels(joblib_jobs=labels_jobs)
+        self._clear_caches()
 
     def resample_weights(self):
         self.weights.resample([l.z for l in self.labels_list])

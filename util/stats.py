@@ -101,7 +101,7 @@ def sample_discrete(distn,size=[],dtype=np.int32):
     cumvals = np.cumsum(distn)
     return np.sum(np.array(random(size))[...,na] * cumvals[-1] > cumvals, axis=-1,dtype=dtype)
 
-def sample_discrete_from_log(p_log,axis=0,dtype=np.int32):
+def sample_discrete_from_log(p_log,return_lognorm=False,axis=0,dtype=np.int32):
     'samples log probability array along specified axis'
     cumvals = np.exp(p_log - np.expand_dims(p_log.max(axis),axis)).cumsum(axis) # cumlogaddexp
     thesize = np.array(p_log.shape)
@@ -109,7 +109,12 @@ def sample_discrete_from_log(p_log,axis=0,dtype=np.int32):
     randvals = random(size=thesize) * \
             np.reshape(cumvals[[slice(None) if i is not axis else -1
                 for i in range(p_log.ndim)]],thesize)
-    return np.sum(randvals > cumvals,axis=axis,dtype=dtype)
+    samples = np.sum(randvals > cumvals,axis=axis,dtype=dtype)
+    if return_lognorm:
+        return samples, \
+            cumvals[[slice(None) if i is not axis else -1 for i in range(cumvals.ndim)]]
+    else:
+        return samples
 
 def sample_markov(T,trans_matrix,init_state_distn):
     out = np.empty(T,dtype=np.int32)
