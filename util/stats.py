@@ -112,7 +112,7 @@ def sample_discrete_from_log(p_log,return_lognorm=False,axis=0,dtype=np.int32):
     samples = np.sum(randvals > cumvals,axis=axis,dtype=dtype)
     if return_lognorm:
         return samples, \
-            cumvals[[slice(None) if i is not axis else -1 for i in range(cumvals.ndim)]].sum()
+            cumvals[[slice(None) if i is not axis else -1 for i in range(cumvals.ndim)]]
     else:
         return samples
 

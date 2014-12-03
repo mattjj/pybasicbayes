@@ -61,13 +61,8 @@ class Mixture(ModelGibbsSampling, ModelMeanField, ModelEM, ModelParallelTemperin
             l.clear_caches()
 
     def _log_likelihoods(self,x):
-        x = np.asarray(x)
-        K = len(self.components)
-        vals = np.empty((x.shape[0],K))
-        for idx, c in enumerate(self.components):
-            vals[:,idx] = c.log_likelihood(x)
-        vals += self.weights.log_likelihood(np.arange(K))
-        return np.logaddexp.reduce(vals,axis=1)
+        self.add_data(data)
+        return self.labels_list.pop().log_likelihood()
 
     def log_likelihood(self,x=None):
         if x is None:
