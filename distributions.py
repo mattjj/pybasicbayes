@@ -974,6 +974,14 @@ class DiagonalGaussian(_GaussianBase,GibbsSampling,MaxLikelihood,MeanField,Tempe
     ### the basics!
 
     @property
+    def parameters(self):
+        return self.mu, self.sigmas
+
+    @parameters.setter
+    def parameters(self,(mu,sigmas)):
+        self.mu, self.sigmas = mu, sigmas
+
+    @property
     def sigma(self):
         return np.diag(self.sigmas)
 
