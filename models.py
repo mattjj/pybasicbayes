@@ -61,7 +61,7 @@ class Mixture(ModelGibbsSampling, ModelMeanField, ModelEM, ModelParallelTemperin
             l.clear_caches()
 
     def _log_likelihoods(self,x):
-        self.add_data(data)
+        self.add_data(x)
         return self.labels_list.pop().log_likelihood()
 
     def log_likelihood(self,x=None):
