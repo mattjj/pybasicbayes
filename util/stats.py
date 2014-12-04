@@ -205,9 +205,9 @@ def sample_crp_tablecounts(concentration,customers,colweights):
     tot = customers.sum()
     randseq = np.random.random(tot)
 
-    tmp = np.empty_like(customers)
-    tmp[0,0] = 0
-    tmp.flat[1:] = np.cumsum(np.ravel(customers)[:customers.size-1])
+    starts = np.empty_like(customers)
+    starts[0,0] = 0
+    starts.flat[1:] = np.cumsum(np.ravel(customers)[:customers.size-1])
 
     for (i,j), n in np.ndenumerate(customers):
         w = colweights[j]
