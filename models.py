@@ -61,6 +61,7 @@ class Mixture(ModelGibbsSampling, ModelMeanField, ModelEM, ModelParallelTemperin
             l.clear_caches()
 
     def _log_likelihoods(self,x):
+        # NOTE: nans propagate as nans
         x = np.asarray(x)
         K = len(self.components)
         vals = np.empty((x.shape[0],K))
@@ -73,8 +74,12 @@ class Mixture(ModelGibbsSampling, ModelMeanField, ModelEM, ModelParallelTemperin
         if x is None:
             return sum(l.log_likelihood() for l in self.labels_list)
         else:
-            self.add_data(x)
-            return self.labels_list.pop().log_likelihood()
+            assert isinstance(x,(np.ndarray,list))
+            if isinstance(x,list):
+                return sum(self.log_likelihood(d) for d in x)
+            else:
+                self.add_data(x)
+                return self.labels_list.pop().log_likelihood()
 
     ### parallel tempering
 
@@ -195,11 +200,13 @@ class Mixture(ModelGibbsSampling, ModelMeanField, ModelEM, ModelParallelTemperin
 
     def meanfield_update_weights(self):
         self.weights.meanfieldupdate(None,[l.r for l in self.labels_list])
+        self._clear_caches()
 
     def meanfield_update_components(self):
         for idx, c in enumerate(self.components):
             c.meanfieldupdate([l.data for l in self.labels_list],
                     [l.r[:,idx] for l in self.labels_list])
+        self._clear_caches()
 
     def _vlb(self):
         vlb = 0.

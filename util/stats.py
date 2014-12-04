@@ -101,18 +101,18 @@ def sample_discrete(distn,size=[],dtype=np.int32):
     cumvals = np.cumsum(distn)
     return np.sum(np.array(random(size))[...,na] * cumvals[-1] > cumvals, axis=-1,dtype=dtype)
 
-def sample_discrete_from_log(p_log,return_lognorm=False,axis=0,dtype=np.int32):
+def sample_discrete_from_log(p_log,return_lognorms=False,axis=0,dtype=np.int32):
     'samples log probability array along specified axis'
-    cumvals = np.exp(p_log - np.expand_dims(p_log.max(axis),axis)).cumsum(axis) # cumlogaddexp
+    lognorms = np.logaddexp.reduce(p_log,axis=axis)
+    cumvals = np.exp(p_log - np.expand_dims(lognorms,axis)).cumsum(axis)
     thesize = np.array(p_log.shape)
     thesize[axis] = 1
     randvals = random(size=thesize) * \
             np.reshape(cumvals[[slice(None) if i is not axis else -1
                 for i in range(p_log.ndim)]],thesize)
     samples = np.sum(randvals > cumvals,axis=axis,dtype=dtype)
-    if return_lognorm:
-        return samples, \
-            cumvals[[slice(None) if i is not axis else -1 for i in range(cumvals.ndim)]]
+    if return_lognorms:
+        return samples, lognorms
     else:
         return samples
 

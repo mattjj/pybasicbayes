@@ -58,7 +58,7 @@ class Labels(object):
 
     def resample(self):
         scores = self._compute_scores()
-        self.z, lognorms = sample_discrete_from_log(scores,axis=1,return_lognorm=True)
+        self.z, lognorms = sample_discrete_from_log(scores,axis=1,return_lognorms=True)
         self._normalizer = lognorms[~np.isnan(self.data).any(1)].sum()
 
     def copy_sample(self):
