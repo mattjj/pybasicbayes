@@ -3346,10 +3346,7 @@ class GammaCompoundDirichlet(CRP):
 
     def _get_statistics(self,data):
         # NOTE: this is a stochastic function: it samples auxiliary variables
-
-        # not sure when these would be needed, but pyhsmm issue #29 suggests they might be
         counts = np.array(data,ndmin=2,order='C')
-        weighted_cols = np.array(self.weighted_cols,order='C')
 
         # sample m's, which sample an inverse of the weak limit projection
         if counts.sum() == 0:
