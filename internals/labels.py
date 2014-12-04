@@ -39,7 +39,7 @@ class Labels(object):
     def log_likelihood(self):
         if not hasattr(self,'_normalizer') or self._normalizer is None:
             scores = self._compute_scores()
-            self._normalizer = np.logaddexp.reduce(scores,axis=1).sum()
+            self._normalizer = np.logaddexp.reduce(scores[~np.isnan(self.data).any(1)],axis=1).sum()
         return self._normalizer
 
     def _compute_scores(self):
@@ -59,7 +59,7 @@ class Labels(object):
     def resample(self):
         scores = self._compute_scores()
         self.z, lognorms = sample_discrete_from_log(scores,axis=1,return_lognorm=True)
-        self._normalizer = lognorms.sum()
+        self._normalizer = lognorms[~np.isnan(self.data).any(1)].sum()
 
     def copy_sample(self):
         new = copy.copy(self)
