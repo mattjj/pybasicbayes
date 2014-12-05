@@ -3352,7 +3352,7 @@ class GammaCompoundDirichlet(CRP):
         if counts.sum() == 0:
             return 0, 0
         else:
-            m = sample_crp_tablecounts(self.concentration,counts,weighted_cols)
+            m = sample_crp_tablecounts(self.concentration,counts,self.weighted_cols)
             return counts.sum(1), m.sum()
 
     def _get_statistics_python(self,data):
