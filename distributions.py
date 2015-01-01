@@ -779,21 +779,23 @@ class GaussianFixedMean(_GaussianBase, GibbsSampling, MaxLikelihood):
 
 class GaussianFixedCov(_GaussianBase, GibbsSampling, MaxLikelihood):
     # See Gelman's Bayesian Data Analysis notation around Eq. 3.18, p. 85 in 2nd
-    # Edition
-    def __init__(self,mu=None,sigma=None,mu_0=None,lmbda_0=None):
+    # Edition. We replaced \Lambda_0 with sigma_0 since it is a prior 
+    # *covariance* matrix rather than a precision matrix. This is also more
+    # consistent with the notation for other Gaussians in PyBasicBayes.
+    def __init__(self,mu=None,sigma=None,mu_0=None,sigma_0=None):
         self.mu = mu
 
         self.sigma = sigma
 
         self.mu_0 = mu_0
-        self.lmbda_0 = lmbda_0
+        self.sigma_0 = sigma_0
 
-        if mu is None and not any(_ is None for _ in (mu_0,lmbda_0)):
+        if mu is None and not any(_ is None for _ in (mu_0,sigma_0)):
             self.resample()
 
     @property
     def hypparams(self):
-        return dict(mu_0=self.mu_0,lmbda_0=self.lmbda_0)
+        return dict(mu_0=self.mu_0,sigma_0=self.sigma_0)
 
     @property
     def sigma_inv(self):
@@ -802,10 +804,10 @@ class GaussianFixedCov(_GaussianBase, GibbsSampling, MaxLikelihood):
         return self._sigma_inv
 
     @property
-    def lmbda_inv_0(self):
-        if not hasattr(self,'_lmbda_inv_0'):
-            self._lmbda_inv_0 = np.linalg.inv(self.lmbda_0)
-        return self._lmbda_inv_0
+    def sigma_inv_0(self):
+        if not hasattr(self,'_sigma_inv_0'):
+            self._sigma_inv_0 = np.linalg.inv(self.sigma_0)
+        return self._sigma_inv_0
 
     @property
     def num_parameters(self):
@@ -840,13 +842,14 @@ class GaussianFixedCov(_GaussianBase, GibbsSampling, MaxLikelihood):
         return neff, xbar
 
     def _posterior_hypparams(self,n,xbar):
-        sigma_inv, mu_0, lmbda_inv_0 = self.sigma_inv, self.mu_0, self.lmbda_inv_0
+        # It seems we should be working with lmbda and sigma inv (unless lmbda is a covariance, not a precision)
+        sigma_inv, mu_0, sigma_inv_0 = self.sigma_inv, self.mu_0, self.sigma_inv_0
         if n > 0:
-            lmbda_inv_n = n*sigma_inv + lmbda_inv_0
-            mu_n = np.linalg.solve(lmbda_inv_n, lmbda_inv_0.dot(mu_0) + n*sigma_inv.dot(xbar))
-            return mu_n, lmbda_inv_n
+            sigma_inv_n = n*sigma_inv + sigma_inv_0
+            mu_n = np.linalg.solve(sigma_inv_n, sigma_inv_0.dot(mu_0) + n*sigma_inv.dot(xbar))
+            return mu_n, sigma_inv_n
         else:
-            return mu_0, lmbda_inv_0
+            return mu_0, sigma_inv_0
 
     ### Gibbs sampling
 
@@ -881,7 +884,7 @@ class GaussianNonConj(_GaussianBase, GibbsSampling):
         self._sigma_distn = GaussianFixedMean(mu=mu,
                 nu_0=nu_0,lmbda_0=sigma_lmbda_0,sigma=sigma)
         self._mu_distn = GaussianFixedCov(sigma=self._sigma_distn.sigma,
-                mu_0=mu_0,lmbda_0=mu_lmbda_0,mu=mu)
+                mu_0=mu_0, sigma_0=mu_lmbda_0,mu=mu)
         self._sigma_distn.mu = self._mu_distn.mu
 
     @property
