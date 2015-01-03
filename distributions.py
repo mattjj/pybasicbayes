@@ -338,6 +338,10 @@ class _GaussianBase(object):
     def params(self):
         return dict(mu=self.mu,sigma=self.sigma)
 
+    @property
+    def D(self):
+        return self.mu.shape[0]
+
     ### internals
 
     def getsigma(self):
@@ -364,7 +368,7 @@ class _GaussianBase(object):
 
     def log_likelihood(self,x):
         try:
-            mu, sigma, D = self.mu, self.sigma, self.mu.shape[0]
+            mu, sigma, D = self.mu, self.sigma, self.D
             sigma_chol = self.sigma_chol
             bads = np.isnan(np.atleast_2d(x)).any(axis=1)
             x = np.nan_to_num(x).reshape((-1,D)) - mu
@@ -380,33 +384,50 @@ class _GaussianBase(object):
 
     ### plotting
 
-    def plot(self,data=None,indices=None,color='b',plot_params=True,label='',alpha=1.):
+    _scatterplot = None
+    _scatterplot_hash = None
+    _parameterplot = None
+
+    def plot(self,data=None,indices=None,color='b',plot_params=True,label='',alpha=1.,draw=True):
         from util.plot import project_data, plot_gaussian_projection, plot_gaussian_2D
+        from util.general import ndarrayhash
+        D = self.D
         if data is not None:
             data = flattendata(data)
-
-        D = self.mu.shape[0]
 
         if D > 2 and ((not hasattr(self,'plotting_subspace_basis'))
                 or (self.plotting_subspace_basis.shape[1] != D)):
             # TODO improve this bookkeeping. need a notion of collection. it's
-            # totally potentially broken and confusing to set class members like
-            # this!
-
+            # totally potentially broken and confusing to set class members.
+            # I need a notion of a collection of obs distns...
             subspace = np.random.randn(D,2)
             self.__class__.plotting_subspace_basis = np.linalg.qr(subspace)[0].T.copy()
 
         if data is not None:
             if D > 2:
                 data = project_data(data,self.plotting_subspace_basis)
-            plt.plot(data[:,0],data[:,1],marker='.',linestyle=' ',color=color)
+            if self._scatterplot is not None:
+                datahash = ndarrayhash(data)
+                if datahash != self._scatterplot_hash:
+                    self._scatterplot_hash = datahash
+                    self._scatterplot.set_offsets(data)
+                    self._scatterplot.set_color(color)
+                    self._scatterplot.set_alpha(alpha)
+            else:
+                self._scatterplot = plt.scatter(data[:,0],data[:,1],marker='.',color=color)
 
         if plot_params:
             if D > 2:
-                plot_gaussian_projection(self.mu,self.sigma,self.plotting_subspace_basis,
-                        color=color,label=label,alpha=min(1-1e-3,alpha))
+                self._parameterplot = \
+                    plot_gaussian_projection(self.mu,self.sigma,self.plotting_subspace_basis,
+                            color=color,label=label,alpha=min(1-1e-3,alpha),artists=self._parameterplot)
             else:
-                plot_gaussian_2D(self.mu,self.sigma,color=color,label=label,alpha=min(1-1e-3,alpha))
+                self._parameterplot = \
+                    plot_gaussian_2D(self.mu,self.sigma,color=color,label=label,alpha=min(1-1e-3,alpha),
+                            artists=self._parameterplot)
+
+        if draw:
+            plt.draw()
 
     def to_json_dict(self):
         D = self.mu.shape[0]

@@ -47,7 +47,7 @@ for superitr in range(5):
     allmodels.append(copy.deepcopy(posteriormodel))
 
 plt.figure()
-for scores in allscores[1:]:
+for scores in allscores:
     plt.plot(scores)
 plt.title('model vlb scores vs iteration')
 

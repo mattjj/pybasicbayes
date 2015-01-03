@@ -3,7 +3,7 @@ import numpy as np
 from numpy.lib.stride_tricks import as_strided as ast
 import scipy.linalg
 import scipy.linalg.lapack as lapack
-import copy, collections, os, shutil
+import copy, collections, os, shutil, hashlib
 from contextlib import closing
 from urllib2 import urlopen
 from itertools import izip, chain, count, ifilter
@@ -251,10 +251,11 @@ def list_split(lst,num):
     assert num > 0
     return [lst[start::num] for start in range(num)]
 
-### numerical linear algebra
+def ndarrayhash(v):
+    assert isinstance(v,np.ndarray)
+    return hashlib.sha1(v).hexdigest()
 
-# TODO these should use Eigen's LDLT
-# TODO do we need versions that use rank-revealing decompositions?
+### numerical linear algebra
 
 def inv_psd(A):
     # L = lapack.dpotri(np.linalg.cholesky(A),lower=1)[0]

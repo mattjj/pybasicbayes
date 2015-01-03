@@ -38,11 +38,15 @@ class Mixture(ModelGibbsSampling, ModelMeanField, ModelEM, ModelParallelTemperin
     def add_data(self,data,**kwargs):
         self.labels_list.append(Labels(data=np.asarray(data),model=self,**kwargs))
 
+    @property
+    def N(self):
+        return len(self.components)
+
     def generate(self,N,keep=True):
         templabels = Labels(model=self,N=N)
 
         out = np.empty(self.components[0].rvs(N).shape)
-        counts = np.bincount(templabels.z,minlength=len(self.components))
+        counts = np.bincount(templabels.z,minlength=self.N)
         for idx,(c,count) in enumerate(zip(self.components,counts)):
             out[templabels.z == idx,...] = c.rvs(count)
 
@@ -305,56 +309,42 @@ class Mixture(ModelGibbsSampling, ModelMeanField, ModelEM, ModelParallelTemperin
 
     ### Misc.
 
-    def plot(self,color=None,legend=True,alpha=None,plot_all_components=True):
+    def plot(self,color=None,legend=True,alpha=None,plot_usage_cutoff=0.0,draw=True):
         cmap = cm.get_cmap()
+        label_colors = {}
 
         if len(self.labels_list) > 0:
-            label_colors = {}
-
-            if plot_all_components:
-                assigned_labels = reduce(set.union,[set(l.z) for l in self.labels_list],set([]))
-                used_labels = np.arange(len(self.components))
-            else:
-                used_labels = assigned_labels = \
-                        reduce(set.union,[set(l.z) for l in self.labels_list],set([]))
-            num_labels = len(used_labels)
-            num_subfig_rows = len(self.labels_list)
-
-            for idx,label in enumerate(used_labels):
-                label_colors[label] = idx/(num_labels-1 if num_labels > 1 else 1) \
-                        if color is None else color
-
-            for subfigidx,l in enumerate(self.labels_list):
-                # plot the current observation distributions (and obs. if given)
-                plt.subplot(num_subfig_rows,1,1+subfigidx)
-                for label, (weight, o) in enumerate(zip(self.weights.weights,self.components)):
-                    o.plot(color=cmap(label_colors[label]) if color is None else color,
-                            data=(l.data[l.z == label] if l.data is not None else None),
-                            label='%d' % label,
-                            alpha=
-                            0.1*(label in assigned_labels)
-                            + 0.9*self.weights.weights[label]/self.weights.weights.max()
-                            if alpha is None else alpha)
-
-            if legend and color is None:
-                plt.legend(
-                        [plt.Rectangle((0,0),1,1,fc=cmap(c))
-                            for i,c in label_colors.iteritems() if i in used_labels],
-                        [i for i in label_colors if i in used_labels],
-                        loc='best',
-                        ncol=2
-                        )
-
+            label_usages = sum(np.bincount(l.z,minlength=self.N) for l in self.labels_list)
+            used_labels, = np.where(label_usages / label_usages.sum() > plot_usage_cutoff)
         else:
-            top10indices = np.argsort(self.weights.weights)[-1:-11:-1]
-            top10 = np.array(self.components)[top10indices]
-            colors = [cmap(x) for x in np.linspace(0,1,len(top10))] if color is None \
-                    else [color]*len(top10)
-            for i,(o,c) in enumerate(zip(top10,colors)):
-                o.plot(color=c,label='%d' % i,
-                        alpha=
-                        0.04+0.95*self.weights.weights[top10indices[i]]/self.weights.weights[top10indices].max()
-                        if alpha is None else alpha)
+            used_labels = np.argsort(self.weights.weights)[-1:-11:-1]
+
+        num_labels = len(used_labels)
+        for idx,label in enumerate(used_labels):
+            label_colors[label] = cmap(idx/(num_labels-1 if num_labels > 1 else 1)) \
+                    if color is None else color
+
+        for label in used_labels:
+            self.components[label].plot(
+                    color=label_colors[label],
+                    data=[l.data[l.z == label] for l in self.labels_list],
+                    label='%d' % label,
+                    alpha=0.1 + 0.9*self.weights.weights[label]/self.weights.weights.max()
+                    if alpha is None else alpha,
+                    draw=False)
+
+        if legend and color is None:
+            plt.legend(
+                    [plt.Rectangle((0,0),1,1,fc=c)
+                        for i,c in label_colors.iteritems() if i in used_labels],
+                    [i for i in label_colors if i in used_labels],
+                    loc='best',
+                    ncol=2
+                    )
+
+        if draw:
+            plt.draw()
+
 
     def to_json_dict(self):
         assert len(self.labels_list) == 1
