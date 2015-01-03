@@ -309,29 +309,43 @@ class Mixture(ModelGibbsSampling, ModelMeanField, ModelEM, ModelParallelTemperin
 
     ### Misc.
 
-    def plot(self,color=None,legend=True,alpha=None,plot_usage_cutoff=0.0,draw=True):
+    def plot(self,color=None,legend=False,alpha=None,update=False,draw=True):
         cmap = cm.get_cmap()
         label_colors = {}
 
         if len(self.labels_list) > 0:
             label_usages = sum(np.bincount(l.z,minlength=self.N) for l in self.labels_list)
-            used_labels, = np.where(label_usages / label_usages.sum() > plot_usage_cutoff)
+            used_labels, = np.where(label_usages > 0)
         else:
             used_labels = np.argsort(self.weights.weights)[-1:-11:-1]
 
-        num_labels = len(used_labels)
-        for idx,label in enumerate(used_labels):
-            label_colors[label] = cmap(idx/(num_labels-1 if num_labels > 1 else 1)) \
+        for label in xrange(self.N):
+            label_colors[label] = cmap(label/(self.N-1 if self.N > 1 else 1)) \
                     if color is None else color
 
-        for label in used_labels:
-            self.components[label].plot(
+        artists = []
+
+        # TODO this is currently a hack
+        for l in self.labels_list:
+            colorseq = [label_colors[label] for label in l.z]
+            if update and hasattr(l,'_data_scatter'):
+                l._data_scatter.set_offsets(l.data[:,:2])
+                l._data_scatter.set_color(colorseq)
+            else:
+                l._data_scatter = plt.scatter(l.data[:,0],l.data[:,1],c=colorseq,s=5)
+            artists.append(l._data_scatter)
+
+        axis = plt.axis()
+
+        for label, (c, w) in enumerate(zip(self.components,self.weights.weights)):
+            artists = c.plot(
                     color=label_colors[label],
-                    data=[l.data[l.z == label] for l in self.labels_list],
                     label='%d' % label,
-                    alpha=0.1 + 0.9*self.weights.weights[label]/self.weights.weights.max()
-                    if alpha is None else alpha,
-                    draw=False)
+                    alpha=min(0.25,1.-(1.-w)**2)/0.25 if alpha is None else alpha,
+                    update=update,draw=False)
+            artists.extend(artists)
+
+        plt.axis(axis)
 
         if legend and color is None:
             plt.legend(
@@ -344,6 +358,8 @@ class Mixture(ModelGibbsSampling, ModelMeanField, ModelEM, ModelParallelTemperin
 
         if draw:
             plt.draw()
+
+        return artists
 
 
     def to_json_dict(self):

@@ -25,6 +25,8 @@ def plot_gaussian_2D(mu, lmbda, color='b', centermarker=True,label='',alpha=1.,a
         line, point = artists
         if centermarker:
             point.set_offsets(np.atleast_2d(mu))
+            point.set_alpha(alpha)
+            point.set_color(color)
         line.set_xdata(ellipse[0,:] + mu[0])
         line.set_ydata(ellipse[1,:] + mu[1])
         line.set_alpha(alpha)
