@@ -384,6 +384,8 @@ class _GaussianBase(object):
 
     ### plotting
 
+    # TODO making animations, this seems to generate an extra notebook figure
+
     _scatterplot = None
     _parameterplot = None
 

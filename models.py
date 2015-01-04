@@ -309,23 +309,26 @@ class Mixture(ModelGibbsSampling, ModelMeanField, ModelEM, ModelParallelTemperin
 
     ### Misc.
 
-    def plot(self,color=None,legend=False,alpha=None,update=False,draw=True):
-        cmap = cm.get_cmap()
-        label_colors = {}
-
+    @property
+    def used_labels(self):
         if len(self.labels_list) > 0:
             label_usages = sum(np.bincount(l.z,minlength=self.N) for l in self.labels_list)
             used_labels, = np.where(label_usages > 0)
         else:
             used_labels = np.argsort(self.weights.weights)[-1:-11:-1]
+        return used_labels
 
+    def plot(self,color=None,legend=False,alpha=None,update=False,draw=True):
+        artists = []
+
+        ### get colors
+        cmap = cm.get_cmap()
+        label_colors = {}
         for label in xrange(self.N):
             label_colors[label] = cmap(label/(self.N-1 if self.N > 1 else 1)) \
                     if color is None else color
 
-        artists = []
-
-        # TODO this is currently a hack
+        ### plot data scatter
         for l in self.labels_list:
             colorseq = [label_colors[label] for label in l.z]
             if update and hasattr(l,'_data_scatter'):
@@ -335,8 +338,8 @@ class Mixture(ModelGibbsSampling, ModelMeanField, ModelEM, ModelParallelTemperin
                 l._data_scatter = plt.scatter(l.data[:,0],l.data[:,1],c=colorseq,s=5)
             artists.append(l._data_scatter)
 
+        ### plot parameters
         axis = plt.axis()
-
         for label, (c, w) in enumerate(zip(self.components,self.weights.weights)):
             artists = c.plot(
                     color=label_colors[label],
@@ -344,9 +347,9 @@ class Mixture(ModelGibbsSampling, ModelMeanField, ModelEM, ModelParallelTemperin
                     alpha=min(0.25,1.-(1.-w)**2)/0.25 if alpha is None else alpha,
                     update=update,draw=False)
             artists.extend(artists)
-
         plt.axis(axis)
 
+        ### add legend
         if legend and color is None:
             plt.legend(
                     [plt.Rectangle((0,0),1,1,fc=c)
@@ -356,9 +359,7 @@ class Mixture(ModelGibbsSampling, ModelMeanField, ModelEM, ModelParallelTemperin
                     ncol=2
                     )
 
-        if draw:
-            plt.draw()
-
+        if draw: plt.draw()
         return artists
 
 
