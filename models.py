@@ -323,10 +323,11 @@ class Mixture(ModelGibbsSampling, ModelMeanField, ModelEM, ModelParallelTemperin
 
         ### get colors
         cmap = cm.get_cmap()
-        label_colors = {}
-        for label in xrange(self.N):
-            label_colors[label] = cmap(label/(self.N-1 if self.N > 1 else 1)) \
-                    if color is None else color
+        if color is None:
+            label_colors = dict((idx,cmap(v))
+                for idx, v in enumerate(np.linspace(0,1,self.N,endpoint=True)))
+        else:
+            label_colors = dict((idx,color) for idx in range(self.N))
 
         ### plot data scatter
         for l in self.labels_list:
@@ -341,23 +342,21 @@ class Mixture(ModelGibbsSampling, ModelMeanField, ModelEM, ModelParallelTemperin
         ### plot parameters
         axis = plt.axis()
         for label, (c, w) in enumerate(zip(self.components,self.weights.weights)):
-            artists = c.plot(
+            artists.extend(
+                c.plot(
                     color=label_colors[label],
                     label='%d' % label,
                     alpha=min(0.25,1.-(1.-w)**2)/0.25 if alpha is None else alpha,
-                    update=update,draw=False)
-            artists.extend(artists)
+                    update=update,draw=False))
         plt.axis(axis)
 
         ### add legend
         if legend and color is None:
             plt.legend(
-                    [plt.Rectangle((0,0),1,1,fc=c)
-                        for i,c in label_colors.iteritems() if i in used_labels],
-                    [i for i in label_colors if i in used_labels],
-                    loc='best',
-                    ncol=2
-                    )
+                [plt.Rectangle((0,0),1,1,fc=c)
+                    for i,c in label_colors.iteritems() if i in used_labels],
+                [i for i in label_colors if i in used_labels],
+                loc='best', ncol=2)
 
         if draw: plt.draw()
         return artists
