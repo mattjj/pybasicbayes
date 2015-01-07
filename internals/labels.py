@@ -29,6 +29,10 @@ class Labels(object):
         self.z = self.weights.rvs(N)
 
     @property
+    def N(self):
+        return len(self.z)
+
+    @property
     def components(self):
         return self.model.components
 

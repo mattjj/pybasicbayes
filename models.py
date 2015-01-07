@@ -18,6 +18,8 @@ class Mixture(ModelGibbsSampling, ModelMeanField, ModelEM, ModelParallelTemperin
     '''
     This class is for mixtures of other distributions.
     '''
+    _labels_class = Labels
+
     def __init__(self,components,alpha_0=None,a_0=None,b_0=None,weights=None,weights_obj=None):
         assert len(components) > 0
         assert (alpha_0 is not None) ^ (a_0 is not None and b_0 is not None) \
@@ -36,14 +38,14 @@ class Mixture(ModelGibbsSampling, ModelMeanField, ModelEM, ModelParallelTemperin
         self.labels_list = []
 
     def add_data(self,data,**kwargs):
-        self.labels_list.append(Labels(data=np.asarray(data),model=self,**kwargs))
+        self.labels_list.append(self._labels_class(data=np.asarray(data),model=self,**kwargs))
 
     @property
     def N(self):
         return len(self.components)
 
     def generate(self,N,keep=True):
-        templabels = Labels(model=self,N=N)
+        templabels = self._labels_class(model=self,N=N)
 
         out = np.empty(self.components[0].rvs(N).shape)
         counts = np.bincount(templabels.z,minlength=self.N)
@@ -545,6 +547,8 @@ class CollapsedMixture(ModelGibbsSampling):
                             color=cmap(label_colors[label]),ls='None',marker='x')
 
 class CRPMixture(CollapsedMixture):
+    _labels_class = CRPLabels
+
     def __init__(self,alpha_0,obs_distn):
         assert isinstance(obs_distn,Collapsed)
         self.obs_distn = obs_distn
@@ -554,7 +558,7 @@ class CRPMixture(CollapsedMixture):
 
     def add_data(self,data):
         assert len(self.labels_list) == 0
-        self.labels_list.append(CRPLabels(model=self,data=np.asarray(data),
+        self.labels_list.append(self._labels_class(model=self,data=np.asarray(data),
             alpha_0=self.alpha_0,obs_distn=self.obs_distn))
 
     def resample_model(self):
@@ -569,7 +573,7 @@ class CRPMixture(CollapsedMixture):
         # counts
         assert len(self.labels_list) == 0
 
-        templabels = CRPLabels(model=self,alpha_0=self.alpha_0,obs_distn=self.obs_distn,N=N)
+        templabels = self._labels_class(model=self,alpha_0=self.alpha_0,obs_distn=self.obs_distn,N=N)
 
         counts = np.bincount(templabels.z)
         out = np.empty(self.obs_distn.rvs(N).shape)
