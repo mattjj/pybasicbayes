@@ -114,29 +114,29 @@ class Mixture(ModelGibbsSampling, ModelMeanField, ModelEM, ModelParallelTemperin
 
     ### Gibbs sampling
 
-    def resample_model(self,labels_jobs=0,components_jobs=0):
-        self.resample_components(joblib_jobs=components_jobs)
+    def resample_model(self,num_procs=0,components_jobs=0):
+        self.resample_components(num_procs=components_jobs)
         self.resample_weights()
-        self.resample_labels(joblib_jobs=labels_jobs)
+        self.resample_labels(num_procs=num_procs)
 
     def resample_weights(self):
         self.weights.resample([l.z for l in self.labels_list])
         self._clear_caches()
 
-    def resample_components(self,joblib_jobs=0):
-        if joblib_jobs == 0:
+    def resample_components(self,num_procs=0):
+        if num_procs == 0:
             for idx, c in enumerate(self.components):
                 c.resample(data=[l.data[l.z == idx] for l in self.labels_list])
         else:
-            self._resample_components_joblib(joblib_jobs)
+            self._resample_components_joblib(num_procs)
         self._clear_caches()
 
-    def resample_labels(self,joblib_jobs=0):
-        if joblib_jobs == 0:
+    def resample_labels(self,num_procs=0):
+        if num_procs == 0:
             for l in self.labels_list:
                 l.resample()
         else:
-            self._resample_labels_joblib(joblib_jobs)
+            self._resample_labels_joblib(num_procs)
 
     def copy_sample(self):
         new = copy.copy(self)
@@ -147,7 +147,7 @@ class Mixture(ModelGibbsSampling, ModelMeanField, ModelEM, ModelParallelTemperin
             l.model = new
         return new
 
-    def _resample_components_joblib(self,joblib_jobs):
+    def _resample_components_joblib(self,num_procs):
         from joblib import Parallel, delayed
         import parallel
 
@@ -155,21 +155,21 @@ class Mixture(ModelGibbsSampling, ModelMeanField, ModelEM, ModelParallelTemperin
         parallel.labels_list = self.labels_list
 
         if len(self.components) > 0:
-            params = Parallel(n_jobs=joblib_jobs,backend='multiprocessing')\
+            params = Parallel(n_jobs=num_procs,backend='multiprocessing')\
                     (delayed(parallel._get_sampled_component_params)(idx)
                             for idx in range(len(self.components)))
 
         for c, p in zip(self.components,params):
             c.parameters = p
 
-    def _resample_labels_joblib(self,joblib_jobs):
+    def _resample_labels_joblib(self,num_procs):
         from joblib import Parallel, delayed
         import parallel
 
         if len(self.labels_list) > 0:
             parallel.model = self
 
-            raw = Parallel(n_jobs=joblib_jobs,backend='multiprocessing')\
+            raw = Parallel(n_jobs=num_procs,backend='multiprocessing')\
                     (delayed(parallel._get_sampled_labels)(idx)
                             for idx in range(len(self.labels_list)))
 
