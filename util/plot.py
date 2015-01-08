@@ -9,7 +9,8 @@ def plot_gaussian_2D(mu, lmbda, color='b', centermarker=True,label='',alpha=1.,a
     assert len(mu) == 2
     ax = ax if ax else plt.gca()
 
-    # TODO use artists!
+    # TODO if update alpha=0. and our previous alpha is 0., we don't need to
+    # dirty the artist
 
     t = np.hstack([np.arange(0,2*np.pi,0.01),0])
     circle = np.vstack([np.sin(t),np.cos(t)])
