@@ -389,9 +389,10 @@ class _GaussianBase(object):
     _scatterplot = None
     _parameterplot = None
 
-    def plot(self,data=None,indices=None,color='b',plot_params=True,label='',alpha=1.,
+    def plot(self,ax=None,data=None,indices=None,color='b',plot_params=True,label='',alpha=1.,
             update=False,draw=True):
         from util.plot import project_data, plot_gaussian_projection, plot_gaussian_2D
+        ax = ax if ax else plt.gca()
         D = self.D
         if data is not None:
             data = flattendata(data)
@@ -403,21 +404,20 @@ class _GaussianBase(object):
                 self._scatterplot.set_offsets(data)
                 self._scatterplot.set_color(color)
             else:
-                self._scatterplot = plt.scatter(data[:,0],data[:,1],marker='.',color=color)
+                self._scatterplot = ax.scatter(data[:,0],data[:,1],marker='.',color=color)
 
         if plot_params:
             if D > 2:
                 self._parameterplot = \
                     plot_gaussian_projection(self.mu,self.sigma,self.plotting_subspace_basis,
                             color=color,label=label,alpha=min(1-1e-3,alpha),
-                            artists=self._parameterplot if update else None)
+                            ax=ax, artists=self._parameterplot if update else None)
             else:
                 self._parameterplot = \
                     plot_gaussian_2D(self.mu,self.sigma,color=color,label=label,alpha=min(1-1e-3,alpha),
-                            artists=self._parameterplot if update else None)
+                            ax=ax, artists=self._parameterplot if update else None)
 
-        if draw:
-            plt.draw()
+        if draw: plt.draw()
 
         return [self._scatterplot] + list(self._parameterplot)
 
