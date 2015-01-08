@@ -31,7 +31,7 @@ def plot_gaussian_2D(mu, lmbda, color='b', centermarker=True,label='',alpha=1.,a
         line.set_alpha(alpha)
         line.set_color(color)
 
-    return line, point
+    return (line, point) if point else (line,)
 
 
 def plot_gaussian_projection(mu, lmbda, vecs, **kwargs):
