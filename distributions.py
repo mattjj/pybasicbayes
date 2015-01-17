@@ -282,6 +282,28 @@ class Regression(GibbsSampling):
         self.A, self.sigma = sample_mniw(
                 *self._natural_to_standard(self.natural_hypparam + stats))
 
+    ### Max likelihood
+
+    def max_likelihood(self,data,weights=None):
+        if weights is None:
+            stats = self._get_statistics(data)
+        else:
+            stats = self._get_weighted_statistics(data)
+
+        yyT, yxT, xxT, n = stats
+
+        if n > 0:
+            try:
+                self.A = np.linalg.solve(xxT, yxT.T).T
+                self.sigma = (yyT - self.A.dot(yxT.T))/n
+            except np.linalg.LinAlgError:
+                self.broken = True
+        else:
+            self.broken = True
+
+        return self
+
+
 class ARDRegression(Regression):
     def __init__(self,
             a,b,nu_0,S_0,M_0,

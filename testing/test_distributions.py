@@ -4,7 +4,8 @@ import numpy as np
 from nose.plugins.attrib import attr
 
 from .. import distributions as distributions
-from mixins import BigDataGibbsTester, GewekeGibbsTester, BasicTester
+from mixins import BigDataGibbsTester, MaxLikelihoodTester, \
+        GewekeGibbsTester, BasicTester
 
 @attr('geometric')
 class TestGeometric(BigDataGibbsTester,GewekeGibbsTester):
@@ -142,7 +143,7 @@ class TestCategorical(BigDataGibbsTester,GewekeGibbsTester):
         return 0.05
 
 @attr('regression')
-class TestRegression(BasicTester,BigDataGibbsTester,GewekeGibbsTester):
+class TestRegression(BasicTester,BigDataGibbsTester,MaxLikelihoodTester,GewekeGibbsTester):
     @property
     def distribution_class(self):
         return distributions.Regression

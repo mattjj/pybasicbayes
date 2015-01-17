@@ -95,17 +95,52 @@ class BigDataGibbsTester(DistributionTester):
         return self.hyperparameter_settings
 
 
-    def big_data_tests(self):
+    def big_data_Gibbs_tests(self):
         for setting_idx, hypparam_dict in enumerate(self.big_data_hyperparameter_settings):
             for i in range(self.big_data_repeats_per_setting):
-                yield self.check_big_data, setting_idx, hypparam_dict
+                yield self.check_big_data_Gibbs, setting_idx, hypparam_dict
 
-    def check_big_data(self,setting_idx,hypparam_dict):
+    def check_big_data_Gibbs(self,setting_idx,hypparam_dict):
         d1 = self.distribution_class(**hypparam_dict)
         d2 = self.distribution_class(**hypparam_dict)
 
         data = d1.rvs(size=self.big_data_size)
         d2.resample(data)
+
+        assert self.params_close(d1,d2)
+
+class MaxLikelihoodTester(DistributionTester):
+    __metaclass__ = abc.ABCMeta
+
+    @abc.abstractmethod
+    def params_close(self,distn1,distn2):
+        pass
+
+
+    @property
+    def big_data_size(self):
+        return 20000
+
+    @property
+    def big_data_repeats_per_setting(self):
+        return 1
+
+    @property
+    def big_data_hyperparameter_settings(self):
+        return self.hyperparameter_settings
+
+
+    def maxlike_tests(self):
+        for setting_idx, hypparam_dict in enumerate(self.big_data_hyperparameter_settings):
+            for i in range(self.big_data_repeats_per_setting):
+                yield self.check_maxlike, setting_idx, hypparam_dict
+
+    def check_maxlike(self,setting_idx,hypparam_dict):
+        d1 = self.distribution_class(**hypparam_dict)
+        d2 = self.distribution_class(**hypparam_dict)
+
+        data = d1.rvs(size=self.big_data_size)
+        d2.max_likelihood(data)
 
         assert self.params_close(d1,d2)
 
