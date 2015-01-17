@@ -231,6 +231,26 @@ class Regression(GibbsSampling):
 
             return np.array([yyT, yxT, xxT, n])
 
+    def _get_weighted_statistics(self,data,weights):
+        if isinstance(data,list):
+            return sum((self._get_statistics(d) for d in data),self._empty_statistics())
+        else:
+            gi = ~np.isnan(data).any(1)
+            data, weights = data[gi], weights[gi]
+            neff, D = weights.sum(), self.D_out
+
+            statmat = data.T.dot(weights[:,na]*data)
+            xxT, yxT, yyT = statmat[:-D,:-D], statmat[-D:,:-D], statmat[-D:,-D:]
+
+            if self.affine:
+                xy = weights.dot(data)
+                x, y = xy[:-D], xy[-D:]
+                xxT = blockarray([[xxT,x[:,na]],[x[na,:],np.atleast_2d(n)]])
+                yxT = np.hstack((yxT,y[:,na]))
+
+            return np.array([yyT, yxT, xxT, n])
+
+
     def _empty_statistics(self):
         D_in, D_out = self.D_in, self.D_out
         return np.array(
