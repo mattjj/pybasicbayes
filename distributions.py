@@ -303,6 +303,12 @@ class Regression(GibbsSampling):
 
         return self
 
+    def empirical_bayes(self,data,D_in,D_out):
+        self.A = np.zeros((D_out,D_in)) # so self.D_in, self.D_out work
+        self.natural_hypparam = self._get_statistics(data)
+        self.resample() # intialize from prior given new hyperparameters
+        return self
+
 
 class ARDRegression(Regression):
     def __init__(self,
@@ -555,8 +561,7 @@ class Gaussian(_GaussianBase, GibbsSampling, MeanField, MeanFieldSVI, Collapsed,
 
     def empirical_bayes(self,data):
         self.natural_hypparam = self._get_statistics(data)
-        if self.mu is self.sigma is None:
-            self.resample() # intialize from prior
+        self.resample() # intialize from prior given new hyperparameters
         return self
 
     ### Gibbs sampling
