@@ -3317,7 +3317,7 @@ class CRP(GibbsSampling):
 
         return np.asarray(likes) if len(likes) > 1 else likes[0]
 
-    def resample(self,data=[],niter=25):
+    def resample(self,data=[],niter=50):
         for itr in range(niter):
             a_n, b_n = self._posterior_hypparams(*self._get_statistics(data))
             self.concentration = np.random.gamma(a_n,scale=1./b_n)
@@ -3387,7 +3387,7 @@ class GammaCompoundDirichlet(CRP):
                 np.random.dirichlet(np.repeat(self.concentration/self.K,self.K)))
         return out if out.shape[0] > 1 else out[0]
 
-    def resample(self,data=[],niter=25,weighted_cols=None):
+    def resample(self,data=[],niter=50,weighted_cols=None):
         if weighted_cols is not None:
             self.weighted_cols = weighted_cols
         else:
