@@ -3,7 +3,8 @@ import numpy as np
 from collections import defaultdict
 from copy import deepcopy
 
-from util.text import progprint_xrange
+import pybasicbayes
+from pybasicbayes.util.text import progprint_xrange
 
 # NOTE: for a parallel implementation using MPI, see
 # https://github.com/mattjj/mpi4py-paralleltempering

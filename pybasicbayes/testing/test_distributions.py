@@ -3,8 +3,9 @@ import numpy as np
 
 from nose.plugins.attrib import attr
 
-from .. import distributions as distributions
-from mixins import BigDataGibbsTester, MaxLikelihoodTester, \
+import pybasicbayes
+import pybasicbayes.distributions as distributions
+from pybasicbayes.testing.mixins import BigDataGibbsTester, MaxLikelihoodTester, \
         GewekeGibbsTester, BasicTester
 
 @attr('geometric')

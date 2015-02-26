@@ -4,7 +4,8 @@ na = np.newaxis
 import numpy.ma as ma
 import copy
 
-from ..util.stats import sample_discrete_from_log, sample_discrete
+import pybasicbayes
+from pybasicbayes.util.stats import sample_discrete_from_log, sample_discrete
 
 class Labels(object):
     def __init__(self,model,data=None,N=None,z=None,

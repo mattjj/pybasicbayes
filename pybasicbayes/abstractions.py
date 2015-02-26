@@ -2,8 +2,9 @@ import abc
 import numpy as np
 import copy
 
-from util.stats import combinedata
-from util.text import progprint_xrange
+import pybasicbayes
+from pybasicbayes.util.stats import combinedata
+from pybasicbayes.util.text import progprint_xrange
 
 # NOTE: data is always a (possibly masked) np.ndarray or list of (possibly
 # masked) np.ndarrays.

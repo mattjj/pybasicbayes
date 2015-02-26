@@ -1,6 +1,0 @@
-*.pyc
-*.pyo
-/tags
-/build
-*.c
-/*.so

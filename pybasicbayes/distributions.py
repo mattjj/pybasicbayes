@@ -11,17 +11,18 @@ import abc
 import copy
 from warnings import warn
 
-from abstractions import Distribution, BayesianDistribution, \
+import pybasicbayes
+from pybasicbayes.abstractions import Distribution, BayesianDistribution, \
         GibbsSampling, MeanField, MeanFieldSVI, Collapsed, MaxLikelihood, MAP, Tempering
-from util.stats import sample_niw, sample_mniw, sample_invwishart, invwishart_entropy,\
+from pybasicbayes.util.stats import sample_niw, sample_mniw, sample_invwishart, invwishart_entropy,\
         invwishart_log_partitionfunction, sample_discrete, sample_pareto,\
         sample_discrete_from_log, getdatasize, flattendata,\
         getdatadimension, combinedata, multivariate_t_loglik, gi, atleast_2d
-from util.general import blockarray, inv_psd, solve_psd, cumsum
+from pybasicbayes.util.general import blockarray, inv_psd, solve_psd, cumsum
 try:
-    from util.cstats import sample_crp_tablecounts
+    from pybasicbayes.util.cstats import sample_crp_tablecounts
 except ImportError:
-    from util.stats import sample_crp_tablecounts
+    from pybasicbayes.util.stats import sample_crp_tablecounts
 
 # Threshold on weights to perform posterior computation
 weps = 1e-12
