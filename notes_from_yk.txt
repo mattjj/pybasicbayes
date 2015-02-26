@@ -1,0 +1,29 @@
+1. demo-diaggaussian does not seem to work:
+
+$ python demo-diaggaussian.py 
+Traceback (most recent call last):
+  File "demo-diaggaussian.py", line 32, in <module>
+    posteriormodel.resample_model(labels_jobs=2)
+TypeError: resample_model() got an unexpected keyword argument 'labels_jobs'
+
+
+2. moviepy seems missing?
+
+
+$ python animation.py 
+Traceback (most recent call last):
+  File "animation.py", line 49, in <module>
+    from moviepy.video.io.bindings import mplfig_to_npimage
+ImportError: No module named moviepy.video.io.bindings
+
+
+3. not all the demos finished on my laptop (Mac OS X) but perhaps I didn't wait long enough.  "python demo.py" seems to work but after mean field it just kind of hangs.  Same with "EM_demo.py". 
+
+
+4. the tests for pybasicbayes won't be discovered by:
+
+python -m unittest discover pybasicbayes
+
+but maybe you want users to depend on nose instead?
+
+
