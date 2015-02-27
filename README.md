@@ -5,6 +5,8 @@ file `abstractions.py` describes the queries a distribution must support to be
 used in each algorithm, as well as an API for models, which compose the
 distribution objects.
 
+## Example ##
+
 The file `models.py` shows how to construct mixture models building on the
 distribution objects in this library. For example, to generate data from a
 Gaussian mixture model, we might set some hyperparameters, construct a
@@ -107,3 +109,8 @@ for plotting: we have fit entire distributions, so we can query any confidence
 or marginal that we need.
 
 See the file `demo.py` for the code for this demo.
+
+## Authors ##
+
+[Matt Johnson](https://github.com/mattjj), [Alex Wiltschko](https://github.com/alexbw), [Yarden Katz](https://github.com/yarden), [Nick Foti](https://github.com/nfoti), and [Scott Linderman](https://github.com/slinderman).
+
