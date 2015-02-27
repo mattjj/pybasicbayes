@@ -2,8 +2,6 @@ from distutils.core import setup
 
 PYBASICBAYES_VERSION = "0.1"
 
-long_description = open("README.md").read()
-
 ###
 ### NOTE: pybasicbayes contains *.pyx files, but it doesn't look
 ### like it technically requires Cython for installation, so I
@@ -12,7 +10,6 @@ long_description = open("README.md").read()
 setup(name = 'pybasicbayes',
       version = PYBASICBAYES_VERSION,
       description = "Basic utilities for Bayesian inference",
-      long_description = long_description,
       author = 'Matt Johnson',
       author_email = 'mattjj@csail.mit.edu',
       maintainer = 'Matt Johnson',
