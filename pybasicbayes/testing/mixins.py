@@ -4,7 +4,8 @@ import abc, os
 
 from nose.plugins.attrib import attr
 
-from ..util import testing
+import pybasicbayes
+from pybasicbayes.util import testing
 
 class DistributionTester(object):
     __metaclass__ = abc.ABCMeta

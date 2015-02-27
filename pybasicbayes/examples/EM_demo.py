@@ -4,6 +4,7 @@ np.seterr(invalid='raise')
 from matplotlib import pyplot as plt
 import copy
 
+import pybasicbayes
 from pybasicbayes import models, distributions
 from pybasicbayes.util.text import progprint_xrange
 

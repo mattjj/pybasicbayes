@@ -1,5 +1,6 @@
 from __future__ import division
 import os
+import sys
 import numpy as np
 from matplotlib import pyplot as plt
 plt.ion()
@@ -46,6 +47,11 @@ model.add_data(data)
 #  animate!  #
 ##############
 
+try:
+    import moviepy
+except:
+    print "No moviepy found. Quitting..."
+    sys.exit(1)
 from moviepy.video.io.bindings import mplfig_to_npimage
 from moviepy.editor import VideoClip
 
