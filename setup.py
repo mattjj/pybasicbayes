@@ -1,6 +1,6 @@
 from distutils.core import setup
 
-PYBASICBAYES_VERSION = "0.1"
+PYBASICBAYES_VERSION = "0.1.2"
 
 # NOTE: cython and moviepy are optional dependencies
 
