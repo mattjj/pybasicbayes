@@ -738,6 +738,7 @@ class Gaussian(_GaussianBase, GibbsSampling, MeanField, MeanFieldSVI, Collapsed,
         return self
 
     def MAP(self,data,weights=None):
+        D = getdatadimension(data)
         # max likelihood with prior pseudocounts included in data
         if weights is None:
             statmat = self._get_statistics(data)
