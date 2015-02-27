@@ -7,9 +7,9 @@ PYBASICBAYES_VERSION = "0.1"
 setup(name='pybasicbayes',
       version=PYBASICBAYES_VERSION,
       description="Basic utilities for Bayesian inference",
-      author='Matt Johnson',
+      author='Matthew James Johnson',
       author_email='mattjj@csail.mit.edu',
-      maintainer='Matt Johnson',
+      maintainer='Matthew James Johnson',
       maintainer_email='mattjj@csail.mit.edu',
       packages=['pybasicbayes',
                   'pybasicbayes.internals',
@@ -22,11 +22,10 @@ setup(name='pybasicbayes',
           "numpy",
           "scipy",
           "matplotlib",
-          "nose"
-          ],
+          "nose",
+      ],
       classifiers=[
           'Intended Audience :: Science/Research',
           'Programming Language :: Python',
-      ]
-)
+      ])
 
