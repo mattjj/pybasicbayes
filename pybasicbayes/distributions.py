@@ -382,6 +382,17 @@ class ARDRegression(Regression):
 
         self.natural_hypparam = self._standard_to_natural(self.nu_0,self.S_0,self.M_0,self.K_0)
 
+    @property
+    def parameters(self):
+        return (self.A, self.sigma, self.K_0)
+
+    @parameters.setter
+    def parameters(self,(A,sigma,K_0)):
+        self.A = A
+        self.sigma = sigma
+        self.K_0 = K_0
+
+
 class _GaussianBase(object):
     @property
     def params(self):
@@ -448,7 +459,8 @@ class _GaussianBase(object):
 
         if data is not None:
             if D > 2:
-                data = project_data(data,self.plotting_subspace_basis)
+                plot_basis = np.random.RandomState(seed=0).randn(2,D)
+                data = project_data(data,plot_basis)
             if update and self._scatterplot is not None:
                 self._scatterplot.set_offsets(data)
                 self._scatterplot.set_color(color)
@@ -457,8 +469,9 @@ class _GaussianBase(object):
 
         if plot_params:
             if D > 2:
+                plot_basis = np.random.RandomState(seed=0).randn(2,D)
                 self._parameterplot = \
-                    plot_gaussian_projection(self.mu,self.sigma,self.plotting_subspace_basis,
+                    plot_gaussian_projection(self.mu,self.sigma,plot_basis,
                             color=color,label=label,alpha=min(1-1e-3,alpha),
                             ax=ax, artists=self._parameterplot if update else None)
             else:
