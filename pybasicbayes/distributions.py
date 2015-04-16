@@ -251,7 +251,6 @@ class Regression(GibbsSampling):
 
             return np.array([yyT, yxT, xxT, n])
 
-
     def _empty_statistics(self):
         D_in, D_out = self.D_in, self.D_out
         return np.array(
@@ -305,11 +304,10 @@ class Regression(GibbsSampling):
 
     ### Max likelihood
 
-    def max_likelihood(self,data,weights=None):
-        if weights is None:
-            stats = self._get_statistics(data)
-        else:
-            stats = self._get_weighted_statistics(data)
+    def max_likelihood(self,data,weights=None,stats=None):
+        if stats is None:
+            stats = self._get_statistics(data) if weights is None \
+                else self._get_weighted_statistics(data,weights)
 
         yyT, yxT, xxT, n = stats
 
@@ -317,17 +315,18 @@ class Regression(GibbsSampling):
             try:
                 self.A = np.linalg.solve(xxT, yxT.T).T
                 self.sigma = (yyT - self.A.dot(yxT.T))/n
+
+                def symmetrize(A):
+                    return (A + A.T)/2.
+                self.sigma = 1e-10*np.eye(self.D_out) + symmetrize(self.sigma)  # numerical
             except np.linalg.LinAlgError:
                 self.broken = True
         else:
             self.broken = True
 
-        return self
+        assert np.allclose(self.sigma,self.sigma.T)
+        assert np.all(np.linalg.eigvalsh(self.sigma) > 0.)
 
-    def empirical_bayes(self,data,D_in,D_out):
-        self.A = np.zeros((D_out,D_in)) # so self.D_in, self.D_out work
-        self.natural_hypparam = self._get_statistics(data)
-        self.resample() # intialize from prior given new hyperparameters
         return self
 
 
