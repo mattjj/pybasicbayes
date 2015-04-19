@@ -11,6 +11,9 @@ import general
 
 ### data abstraction
 
+# the data type is ndarrays OR lists of ndarrays
+# type Data = ndarray | [ndarray]
+
 def atleast_2d(data):
     # NOTE: can't use np.atleast_2d because if it's 1D we want axis 1 to be the
     # singleton and axis 0 to be the sequence index
@@ -196,6 +199,20 @@ def sample_mniw(nu,S,M,K=None,Kinv=None):
         return sample_mn(M=M,U=Sigma,V=K), Sigma
     else:
         return sample_mn(M=M,U=Sigma,Vinv=Kinv), Sigma
+
+def mniw_expectedstats(nu,S,M,K=None,Kinv=None):
+    # NOTE: could speed this up with chol factorizing S, not re-solving
+    assert (K is None) ^ (Kinv is None)
+    m = M.shape[0]
+    K = K if K is not None else np.linalg.inv(Kinv)
+
+    E_Sigmainv = nu*np.linalg.inv(S)
+    E_Sigmainv_A = nu*np.linalg.solve(S,M)
+    E_AT_Sigmainv_A = m*K + nu*M.T.dot(np.linalg.solve(S,M))
+    E_logdetSigmainv = special.digamma((nu-np.arange(m))/2.).sum() \
+        + m*np.log(2) - np.linalg.slogdet(S)[1]
+
+    return E_Sigmainv, E_Sigmainv_A, E_AT_Sigmainv_A, E_logdetSigmainv
 
 def sample_pareto(x_m,alpha):
     return x_m + np.random.pareto(alpha)
