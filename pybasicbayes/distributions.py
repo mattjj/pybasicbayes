@@ -500,9 +500,8 @@ class Gaussian(_GaussianBase, GibbsSampling, MeanField, MeanFieldSVI, Collapsed,
     the scalar classes.  Uses a conjugate Normal/Inverse-Wishart prior.
 
     Hyperparameters mostly follow Gelman et al.'s notation in Bayesian Data
-    Analysis, except sigma_0 is proportional to expected covariance matrix:
-        nu_0, sigma_0
-        mu_0, kappa_0
+    Analysis:
+        nu_0, sigma_0, mu_0, kappa_0
 
     Parameters are mean and covariance matrix:
         mu, sigma
@@ -562,8 +561,6 @@ class Gaussian(_GaussianBase, GibbsSampling, MeanField, MeanFieldSVI, Collapsed,
             return self.mu.shape[0]
         elif self.mu_0 is not None:
             return self.mu_0.shape[0]
-        else:
-            return None
 
     def _get_statistics(self,data,D=None):
         if D is None:
@@ -2614,6 +2611,7 @@ class Poisson(GibbsSampling, Collapsed, MaxLikelihood, MeanField, MeanFieldSVI):
             self.broken = True
             self.lmbda = 999999
 
+        return self
 
 
 class _NegativeBinomialBase(Distribution):
