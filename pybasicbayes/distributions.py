@@ -539,7 +539,7 @@ class Gaussian(_GaussianBase, GibbsSampling, MeanField, MeanFieldSVI, Collapsed,
         out[:D,:D] = sigma_mf + kappa_mf * np.outer(mu_mf,mu_mf)
         out[:D,-2] = out[-2,:D] = kappa_mf * mu_mf
         out[-2,-2] = kappa_mf
-        out[-1,-1] = nu_mf
+        out[-1,-1] = nu_mf + 2 + D
         return out
 
     def _natural_to_standard(self,natparam):
@@ -548,7 +548,7 @@ class Gaussian(_GaussianBase, GibbsSampling, MeanField, MeanFieldSVI, Collapsed,
         b = natparam[:D,-2]
         c = natparam[-2,-2]
         d = natparam[-1,-1]
-        return b/c, A - np.outer(b,b)/c, c, d
+        return b/c, A - np.outer(b,b)/c, c, d - 2 - D
 
     @property
     def num_parameters(self):
