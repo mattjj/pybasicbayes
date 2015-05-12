@@ -2008,16 +2008,15 @@ class Categorical(GibbsSampling, MeanField, MeanFieldSVI, MaxLikelihood, MAP):
     ### Gibbs sampling
 
     def resample(self,data=[],counts=None):
-        counts = self._get_statistics(data,len(self.alphav_0)) \
-                if counts is None else counts
+        counts = self._get_statistics(data) if counts is None else counts
         self.weights = np.random.dirichlet(np.maximum(1e-5,self.alphav_0 + counts))
         # NOTE: next line is so we can use Gibbs sampling to initialize mean field
         self._alpha_mf = self.weights * self.alphav_0.sum()
         assert (self._alpha_mf >= 0.).all()
         return self
 
-    @staticmethod
-    def _get_statistics(data,K):
+    def _get_statistics(self,data,K=None):
+        K = K if K else self.K
         if isinstance(data,np.ndarray) or \
                 (isinstance(data,list) and len(data) > 0 \
                 and not isinstance(data[0],(np.ndarray,list))):
@@ -2026,14 +2025,25 @@ class Categorical(GibbsSampling, MeanField, MeanFieldSVI, MaxLikelihood, MAP):
             counts = sum(np.bincount(d,minlength=K) for d in data)
         return counts
 
-    @staticmethod
-    def _get_weighted_statistics(data,weights):
-        # data is just a placeholder; technically it should always be
-        # np.arange(K)[na,:].repeat(N,axis=0), but this code just ignores it
+    def _get_weighted_statistics(self,data,weights):
         if isinstance(weights,np.ndarray):
-            counts = np.atleast_2d(weights).sum(0)
+            assert weights.ndim in (1,2)
+            if data is None or weights.ndim == 2:
+                # when weights is 2D or data is None, the weights are expected
+                # indicators and data is just a placeholder; nominally data
+                # should be np.arange(K)[na,:].repeat(N,axis=0)
+                counts = np.atleast_2d(weights).sum(0)
+            else:
+                # when weights is 1D, data is indices and we do a weighted
+                # bincount
+                counts = np.bincount(data,weights,minlength=self.K)
         else:
-            counts = sum(np.atleast_2d(w).sum(0) for w in weights)
+            if len(weights) == 0:
+                counts = np.zeros(self.K,dtype=int)
+            else:
+                data = data if data else [None]*len(weights)
+                counts = sum(self._get_weighted_statistics(d,w)
+                             for d, w in zip(data,weights))
         return counts
 
     ### Mean Field
@@ -2077,18 +2087,16 @@ class Categorical(GibbsSampling, MeanField, MeanFieldSVI, MaxLikelihood, MAP):
     ### Max likelihood
 
     def max_likelihood(self,data,weights=None):
-        K = self.K
         if weights is None:
-            counts = self._get_statistics(data,K)
+            counts = self._get_statistics(data)
         else:
             counts = self._get_weighted_statistics(data,weights)
         self.weights = counts/counts.sum()
         return self
 
     def MAP(self,data,weights=None):
-        K = self.K
         if weights is None:
-            counts = self._get_statistics(data,K)
+            counts = self._get_statistics(data)
         else:
             counts = self._get_weighted_statistics(data,weights)
         counts += self.alphav_0
@@ -2130,7 +2138,7 @@ class CategoricalAndConcentration(Categorical):
         return dict(a_0=self.a_0,b_0=self.b_0,K=self.K)
 
     def resample(self,data=[]):
-        counts = self._get_statistics(data,self.K)
+        counts = self._get_statistics(data,K)
         self.alpha_0_obj.resample(counts)
         self.alpha_0 = self.alpha_0 # for the effect on alphav_0
         return super(CategoricalAndConcentration,self).resample(data)
@@ -2161,13 +2169,13 @@ class Multinomial(Categorical):
     def log_likelihood(self,x):
         assert isinstance(x,np.ndarray) and x.ndim == 2 and x.shape[1] == self.K
         return np.where(x,x*np.log(self.weights),0.).sum(1) \
-                + special.gammaln(x.sum(1)+1) - special.gammaln(x+1).sum(1)
+            + special.gammaln(x.sum(1)+1) - special.gammaln(x+1).sum(1)
 
     def rvs(self,size=None):
         return np.bincount(super(Multinomial,self).rvs(size=size),minlength=self.K)
 
-    @staticmethod
-    def _get_statistics(data,K):
+    def _get_statistics(self,data,K=None):
+        K = K if K else self.K
         if isinstance(data,np.ndarray):
             return np.atleast_2d(data).sum(0)
         else:
