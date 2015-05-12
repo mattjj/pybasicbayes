@@ -7,27 +7,28 @@ import scipy.linalg
 import scipy.stats as stats
 import scipy.special as special
 import matplotlib.pyplot as plt
-import abc
 import copy
 from warnings import warn
 
-import pybasicbayes
-from pybasicbayes.abstractions import Distribution, BayesianDistribution, \
-        GibbsSampling, MeanField, MeanFieldSVI, Collapsed, MaxLikelihood, MAP, Tempering
+from pybasicbayes.abstractions import Distribution, \
+    GibbsSampling, MeanField, MeanFieldSVI, Collapsed, MaxLikelihood, MAP, \
+    Tempering
 from pybasicbayes.util.stats import sample_niw, sample_mniw, sample_invwishart, invwishart_entropy,\
-        invwishart_log_partitionfunction, sample_discrete, sample_pareto,\
-        sample_discrete_from_log, getdatasize, flattendata,\
-        getdatadimension, combinedata, multivariate_t_loglik, gi, atleast_2d
-from pybasicbayes.util.general import blockarray, inv_psd, solve_psd, cumsum
+    invwishart_log_partitionfunction, sample_discrete, sample_pareto,\
+    sample_discrete_from_log, getdatasize, flattendata,\
+    getdatadimension, combinedata, multivariate_t_loglik, gi, atleast_2d
+from pybasicbayes.util.general import blockarray, inv_psd, cumsum
 try:
     from pybasicbayes.util.cstats import sample_crp_tablecounts
 except ImportError:
+    warn('using slow sample_crp_tablecounts')
     from pybasicbayes.util.stats import sample_crp_tablecounts
 
 # Threshold on weights to perform posterior computation
 weps = 1e-12
 
 # TODO reduce reallocation of parameters
+
 
 ##########
 #  Meta  #
