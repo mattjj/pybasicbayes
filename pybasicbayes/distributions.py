@@ -6,6 +6,7 @@ from numpy.core.umath_tests import inner1d
 import scipy.linalg
 import scipy.stats as stats
 import scipy.special as special
+from scipy.misc import logsumexp
 import matplotlib.pyplot as plt
 import copy
 from warnings import warn
@@ -2952,7 +2953,7 @@ class NegativeBinomialIntegerR2(_NegativeBinomialBase,MeanField,MeanFieldSVI,Gib
         self._resample_p_from_mf()
 
     def _resample_r_from_mf(self):
-        lognorm = np.logaddexp.reduce(self.rho_mf)
+        lognorm = logsumexp(self.rho_mf)
         self.ridx = sample_discrete(np.exp(self.rho_mf - lognorm))
         self.r = self.r_support[self.ridx]
 
@@ -2991,7 +2992,7 @@ class NegativeBinomialIntegerR2(_NegativeBinomialBase,MeanField,MeanFieldSVI,Gib
                         for dt,w in zip(data,weights))
 
     def expected_log_likelihood(self,x):
-        lognorm = np.logaddexp.reduce(self.rho_mf)
+        lognorm = logsumexp(self.rho_mf)
         return sum(np.exp(rho-lognorm)*d.expected_log_likelihood(x)
                 for rho,d in zip(self.rho_mf,self._fixedr_distns))
 
