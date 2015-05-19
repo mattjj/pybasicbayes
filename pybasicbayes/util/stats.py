@@ -9,6 +9,7 @@ from scipy.misc import logsumexp
 from numpy.core.umath_tests import inner1d
 
 import general
+from general import any_none, all_none
 
 ### data abstraction
 
@@ -95,6 +96,20 @@ def cov(a):
         return a.T.dot(a)/a.shape[0] - np.outer(mu,mu)
 
 ### Sampling functions
+
+def sample_gaussian(mu=None,Sigma=None,J=None,h=None):
+    mean_params = mu is not None and Sigma is not None
+    info_params = J is not None and h is not None
+    assert mean_params or info_params
+
+    if not any_none(mu,Sigma):
+        return np.random.multivariate_normal(mu,Sigma)
+    else:
+        from scipy.linalg.lapack import dpotrs
+        L = np.linalg.cholesky(J)
+        x = np.random.randn(h.shape[0])
+        return scipy.linalg.solve_triangular(L,x,lower=True) \
+            + dpotrs(L,h,lower=True)[0]
 
 def sample_discrete(distn,size=[],dtype=np.int32):
     'samples from a one-dimensional finite pmf'

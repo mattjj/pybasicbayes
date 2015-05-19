@@ -14,11 +14,13 @@ from warnings import warn
 from pybasicbayes.abstractions import Distribution, \
     GibbsSampling, MeanField, MeanFieldSVI, Collapsed, MaxLikelihood, MAP, \
     Tempering
-from pybasicbayes.util.stats import sample_niw, sample_mniw, sample_invwishart, invwishart_entropy,\
-    invwishart_log_partitionfunction, sample_discrete, sample_pareto,\
-    sample_discrete_from_log, getdatasize, flattendata,\
-    getdatadimension, combinedata, multivariate_t_loglik, gi, atleast_2d
-from pybasicbayes.util.general import blockarray, inv_psd, cumsum
+from pybasicbayes.util.stats import sample_gaussian, sample_niw, sample_mniw, \
+    sample_mn, sample_invwishart, invwishart_entropy, \
+    invwishart_log_partitionfunction, sample_discrete, sample_pareto, \
+    sample_discrete_from_log, getdatasize, flattendata, getdatadimension, \
+    combinedata, multivariate_t_loglik, gi, atleast_2d
+from pybasicbayes.util.general import blockarray, inv_psd, cumsum, \
+    all_none, any_none
 try:
     from pybasicbayes.util.cstats import sample_crp_tablecounts
 except ImportError:
@@ -152,8 +154,8 @@ class ProductDistribution(GibbsSampling,MaxLikelihood):
 ################
 
 class Regression(GibbsSampling):
-    def __init__(self,
-            nu_0=None,S_0=None,M_0=None,K_0=None,
+    def __init__(
+            self, nu_0=None,S_0=None,M_0=None,K_0=None,
             affine=False,
             A=None,sigma=None):
         self.affine = affine
@@ -165,7 +167,7 @@ class Regression(GibbsSampling):
             self.natural_hypparam = self._standard_to_natural(nu_0,S_0,M_0,K_0)
 
         if A is sigma is None and not any(_ is None for _ in (nu_0,S_0,M_0,K_0)):
-            self.resample() # initialize from prior
+            self.resample()  # initialize from prior
 
     @property
     def parameters(self):
@@ -240,7 +242,7 @@ class Regression(GibbsSampling):
         else:
             gi = ~np.isnan(data).any(1)
             data, weights = data[gi], weights[gi]
-            neff, D = weights.sum(), self.D_out
+            _, D = weights.sum(), self.D_out
 
             statmat = data.T.dot(weights[:,na]*data)
             xxT, yxT, yyT = statmat[:-D,:-D], statmat[-D:,:-D], statmat[-D:,-D:]
@@ -271,7 +273,7 @@ class Regression(GibbsSampling):
         parammat = -1./2 * blockarray([
             [A.T.dot(sigma_inv).dot(A), -A.T.dot(sigma_inv)],
             [-sigma_inv.dot(A), sigma_inv]
-            ])
+        ])
         out = np.einsum('ni,ni->n',xy.dot(parammat),xy)
         out -= D/2*np.log(2*np.pi) + np.log(np.diag(np.linalg.cholesky(sigma))).sum()
 
@@ -330,6 +332,36 @@ class Regression(GibbsSampling):
         assert np.all(np.linalg.eigvalsh(self.sigma) > 0.)
 
         return self
+
+class RegressionNonconj(Regression):
+    def __init__(self, M_0, Sigma_0, nu_0, S_0, A, sigma, affine=False):
+        self.A = A
+        self.sigma = sigma
+        self.affine = affine
+
+        self.h_0 = np.linalg.solve(Sigma_0, M_0.ravel()).reshape(M_0.shape)
+        self.J_0 = np.linalg.inv(Sigma_0)
+        self.nu_0 = nu_0
+        self.S_0 = S_0
+
+    ### Gibbs
+
+    def resample(self,data=[],niter=1):
+        yyT, yxT, xxT, n = self._get_statistics(data)
+        for itr in xrange(niter):
+            self._resample_A(xxT, yxT, self.sigma)
+            self._resample_sigma(xxT, yyT, n, self.A)
+
+    def _resample_A(self, xxT, yxT, sigma):
+        sigmainv = np.linalg.inv(sigma)
+        J = self.J_0 + np.kron(sigmainv, xxT)
+        h = self.h_0 + sigmainv.dot(yxT)
+        self.A = sample_gaussian(J=J,h=h.ravel()).reshape(h.shape)
+
+    def _resample_sigma(self, xxT, yyT, n, A):
+        S = self.S_0 + yyT - A.dot(xxT).dot(A.T)
+        nu = self.nu_0 + n
+        self.sigma = sample_invwishart(S, nu)
 
 
 class ARDRegression(Regression):
