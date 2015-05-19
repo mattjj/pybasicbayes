@@ -181,6 +181,10 @@ class GewekeGibbsTester(DistributionTester):
         return {}
 
     @property
+    def geweke_resample_kwargs(self):
+        return self.resample_kwargs
+
+    @property
     def geweke_num_statistic_fails_to_tolerate(self):
         return 1
 
@@ -222,7 +226,7 @@ class GewekeGibbsTester(DistributionTester):
             d = self.distribution_class(**hypparam_dict)
             data = d.rvs(size=data_size)
             for i in xrange(nsamples):
-                d.resample(data,**self.resample_kwargs)
+                d.resample(data,**self.geweke_resample_kwargs)
                 data = d.rvs(size=data_size)
                 gibbs_statistics[i] = self.geweke_statistics(d,data)
 

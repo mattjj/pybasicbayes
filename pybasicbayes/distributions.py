@@ -334,7 +334,8 @@ class Regression(GibbsSampling):
         return self
 
 class RegressionNonconj(Regression):
-    def __init__(self, M_0, Sigma_0, nu_0, S_0, A, sigma, affine=False):
+    def __init__(self, M_0, Sigma_0, nu_0, S_0,
+                 A=None, sigma=None, affine=False, niter=10):
         self.A = A
         self.sigma = sigma
         self.affine = affine
@@ -344,13 +345,24 @@ class RegressionNonconj(Regression):
         self.nu_0 = nu_0
         self.S_0 = S_0
 
+        self.niter = niter
+
+        if all_none(A,sigma):
+            self.resample()  # initialize from prior
+
     ### Gibbs
 
-    def resample(self,data=[],niter=1):
-        yyT, yxT, xxT, n = self._get_statistics(data)
-        for itr in xrange(niter):
-            self._resample_A(xxT, yxT, self.sigma)
-            self._resample_sigma(xxT, yyT, n, self.A)
+    def resample(self,data=[],niter=None):
+        niter = niter if niter else self.niter
+        if getdatasize(data) == 0:
+            self.A = sample_gaussian(J=self.J_0,h=self.h_0.ravel())\
+                .reshape(self.h_0.shape)
+            self.sigma = sample_invwishart(self.S_0,self.nu_0)
+        else:
+            yyT, yxT, xxT, n = self._get_statistics(data)
+            for itr in xrange(niter):
+                self._resample_A(xxT, yxT, self.sigma)
+                self._resample_sigma(xxT, yxT, yyT, n, self.A)
 
     def _resample_A(self, xxT, yxT, sigma):
         sigmainv = np.linalg.inv(sigma)
@@ -358,8 +370,8 @@ class RegressionNonconj(Regression):
         h = self.h_0 + sigmainv.dot(yxT)
         self.A = sample_gaussian(J=J,h=h.ravel()).reshape(h.shape)
 
-    def _resample_sigma(self, xxT, yyT, n, A):
-        S = self.S_0 + yyT - A.dot(xxT).dot(A.T)
+    def _resample_sigma(self, xxT, yxT, yyT, n, A):
+        S = self.S_0 + yyT - yxT.dot(A.T) - A.dot(yxT.T) + A.dot(xxT).dot(A.T)
         nu = self.nu_0 + n
         self.sigma = sample_invwishart(S, nu)
 

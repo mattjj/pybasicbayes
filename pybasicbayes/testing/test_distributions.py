@@ -161,12 +161,12 @@ class TestRegression(BasicTester,BigDataGibbsTester,MaxLikelihoodTester,GewekeGi
     def geweke_statistics(self,d,data):
         return np.concatenate((d.A.flatten(),np.diag(d.sigma)))
 
-    def geweke_nuerical_slice(self,d,setting_idx):
+    def geweke_numerical_slice(self,d,setting_idx):
         return slice(0,d.A.flatten().shape[0])
 
     @property
     def geweke_ntrials(self):
-        return 1 # because it's slow
+        return 1  # because it's slow
 
     @property
     def geweke_num_statistic_fails_to_tolerate(self):
@@ -203,6 +203,41 @@ class TestRegression(BasicTester,BigDataGibbsTester,MaxLikelihoodTester,GewekeGi
         likes2 = d2.log_likelihood(np.hstack((np.ones((data.shape[0],1)),data)))
 
         assert np.allclose(likes1,likes2)
+
+@attr('regressionnonconj')
+class TestRegressionNonconj(BasicTester,BigDataGibbsTester,GewekeGibbsTester):
+    @property
+    def distribution_class(self):
+        return distributions.RegressionNonconj
+
+    @property
+    def hyperparameter_settings(self):
+        def make_hyps(m,n):
+            return dict(nu_0=m+1, S_0=m*np.eye(m),
+                        M_0=np.zeros((m,n)), Sigma_0=np.eye(m*n))
+        return [make_hyps(m,n) for m, n in [(2,3)]]  # [(2,3), (3,2)]]
+
+    def params_close(self,d1,d2):
+        return np.linalg.norm(d1.A-d2.A) < 0.1 and np.linalg.norm(d1.sigma-d2.sigma) < 0.1
+
+    def geweke_statistics(self,d,data):
+        return np.concatenate((d.A.flatten(),np.diag(d.sigma)))
+
+    def geweke_numerical_slices(self,d,setting_idx):
+        return slice(0,d.A.flatten().shape[0])
+
+    @property
+    def geweke_ntrials(self):
+        return 1  # because it's slow
+
+    @property
+    def geweke_num_statistic_fails_to_tolerate(self):
+        return 0
+
+    @property
+    def geweke_resample_kwargs(self):
+        return dict(niter=2)
+
 
 @attr('gaussian')
 class TestGaussian(BigDataGibbsTester,GewekeGibbsTester):
