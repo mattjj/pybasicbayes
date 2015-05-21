@@ -557,8 +557,8 @@ class Gaussian(_GaussianBase, GibbsSampling, MeanField, MeanFieldSVI, Collapsed,
         self.mu    = mu
         self.sigma = sigma
 
-        self.mu_0    = mu_0
-        self.sigma_0 = sigma_0
+        self.mu_0    = self.mu_mf    = mu_0
+        self.sigma_0 = self.sigma_mf = sigma_0
         self.kappa_0 = self.kappa_mf = kappa_0
         self.nu_0    = self.nu_mf    = nu_0
 
