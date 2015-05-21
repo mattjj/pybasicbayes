@@ -6,6 +6,7 @@ from matplotlib import cm
 import scipy.special as special
 import abc, copy
 from warnings import warn
+from scipy.misc import logsumexp
 
 from abstractions import ModelGibbsSampling, ModelMeanField, ModelEM
 from abstractions import Distribution, GibbsSampling, MeanField, Collapsed, \
@@ -74,7 +75,7 @@ class Mixture(ModelGibbsSampling, ModelMeanField, ModelEM, ModelParallelTemperin
         for idx, c in enumerate(self.components):
             vals[:,idx] = c.log_likelihood(x)
         vals += self.weights.log_likelihood(np.arange(K))
-        return np.logaddexp.reduce(vals,axis=1)
+        return logsumexp(vals,axis=1)
 
     def log_likelihood(self,x=None):
         if x is None:
@@ -460,7 +461,7 @@ class MixtureDistribution(Mixture, GibbsSampling, MeanField, MeanFieldSVI, Distr
         return vlb
 
     def expected_log_likelihood(self,x):
-        lognorm = np.logaddexp.reduce(self.weights._alpha_mf)
+        lognorm = logsumexp(self.weights._alpha_mf)
         return sum(np.exp(a - lognorm) * c.expected_log_likelihood(x)
                 for a, c in zip(self.weights._alpha_mf, self.components))
 
@@ -631,4 +632,4 @@ class CRPMixture(CollapsedMixture):
 
         vals += weights.log_likelihood(np.arange(K_total))
         assert not np.isnan(vals).any()
-        return np.logaddexp.reduce(vals,axis=1).sum()
+        return logsumexp(vals,axis=1).sum()

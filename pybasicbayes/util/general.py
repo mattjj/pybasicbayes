@@ -279,3 +279,28 @@ def solve_psd(A,b,chol=None,lower=True,overwrite_b=False,overwrite_A=False):
         return lapack.dposv(A,b,overwrite_b=overwrite_b,overwrite_a=overwrite_A)[1]
     else:
         return lapack.dpotrs(chol,b,lower,overwrite_b)[0]
+
+
+# NOTE: existing numpy object array construction acts a bit weird, e.g.
+# np.array([randn(3,4),randn(3,5)]) vs np.array([randn(3,4),randn(5,3)])
+# this wrapper class is just meant to ensure that when ndarrays of objects are
+# constructed the construction doesn't "recurse" as in the first example
+class ObjArray(np.ndarray):
+    def __new__(cls,lst):
+        if isinstance(lst,(np.ndarray,types.FloatType,types.IntType)):
+            return lst
+        else:
+            return np.ndarray.__new__(cls,len(lst),dtype=np.object)
+
+    def __init__(self,lst):
+        if not isinstance(lst,(np.ndarray,types.FloatType,types.IntType)):
+            for i, elt in enumerate(lst):
+                self[i] = self.__class__(elt)
+
+
+def all_none(*args):
+    return all(_ is None for _ in args)
+
+def any_none(*args):
+    return any(_ is None for _ in args)
+

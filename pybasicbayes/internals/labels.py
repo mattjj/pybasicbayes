@@ -3,6 +3,7 @@ import numpy as np
 na = np.newaxis
 import numpy.ma as ma
 import copy
+from scipy.misc import logsumexp
 
 import pybasicbayes
 from pybasicbayes.util.stats import sample_discrete_from_log, sample_discrete
@@ -44,7 +45,7 @@ class Labels(object):
     def log_likelihood(self):
         if not hasattr(self,'_normalizer') or self._normalizer is None:
             scores = self._compute_scores()
-            self._normalizer = np.logaddexp.reduce(scores[~np.isnan(self.data).any(1)],axis=1).sum()
+            self._normalizer = logsumexp(scores[~np.isnan(self.data).any(1)],axis=1).sum()
         return self._normalizer
 
     def _compute_scores(self):

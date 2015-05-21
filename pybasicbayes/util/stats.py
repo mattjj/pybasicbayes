@@ -5,9 +5,11 @@ na = np.newaxis
 import scipy.stats as stats
 import scipy.special as special
 import scipy.linalg
+from scipy.misc import logsumexp
 from numpy.core.umath_tests import inner1d
 
 import general
+from general import any_none, all_none
 
 ### data abstraction
 
@@ -95,6 +97,20 @@ def cov(a):
 
 ### Sampling functions
 
+def sample_gaussian(mu=None,Sigma=None,J=None,h=None):
+    mean_params = mu is not None and Sigma is not None
+    info_params = J is not None and h is not None
+    assert mean_params or info_params
+
+    if not any_none(mu,Sigma):
+        return np.random.multivariate_normal(mu,Sigma)
+    else:
+        from scipy.linalg.lapack import dpotrs
+        L = np.linalg.cholesky(J)
+        x = np.random.randn(h.shape[0])
+        return scipy.linalg.solve_triangular(L,x,lower=True) \
+            + dpotrs(L,h,lower=True)[0]
+
 def sample_discrete(distn,size=[],dtype=np.int32):
     'samples from a one-dimensional finite pmf'
     distn = np.atleast_1d(distn)
@@ -106,7 +122,7 @@ def sample_discrete(distn,size=[],dtype=np.int32):
 
 def sample_discrete_from_log(p_log,return_lognorms=False,axis=0,dtype=np.int32):
     'samples log probability array along specified axis'
-    lognorms = np.logaddexp.reduce(p_log,axis=axis)
+    lognorms = logsumexp(p_log,axis=axis)
     cumvals = np.exp(p_log - np.expand_dims(lognorms,axis)).cumsum(axis)
     thesize = np.array(p_log.shape)
     thesize[axis] = 1

@@ -1,9 +1,12 @@
 from distutils.core import setup
+from Cython.Build import cythonize
+import numpy as np
 
 PYBASICBAYES_VERSION = "0.1.2"
 
 # NOTE: cython and moviepy are optional dependencies
 
+ext_modules = cythonize('pybasicbayes/**/*.pyx')
 setup(name='pybasicbayes',
       version=PYBASICBAYES_VERSION,
       description="Basic utilities for Bayesian inference",
@@ -28,5 +31,6 @@ setup(name='pybasicbayes',
       classifiers=[
           'Intended Audience :: Science/Research',
           'Programming Language :: Python',
-      ])
-
+      ],
+      ext_modules=ext_modules,
+      include_dirs=[np.get_include()])
