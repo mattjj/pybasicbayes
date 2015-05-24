@@ -215,7 +215,7 @@ class TestRegressionNonconj(BasicTester,BigDataGibbsTester,GewekeGibbsTester):
         def make_hyps(m,n):
             return dict(nu_0=m+1, S_0=m*np.eye(m),
                         M_0=np.zeros((m,n)), Sigma_0=np.eye(m*n))
-        return [make_hyps(m,n) for m, n in [(2,3)]]  # [(2,3), (3,2)]]
+        return [make_hyps(m,n) for m, n in [(2,3), (3,2)]]
 
     def params_close(self,d1,d2):
         return np.linalg.norm(d1.A-d2.A) < 0.1 and np.linalg.norm(d1.sigma-d2.sigma) < 0.1
@@ -237,7 +237,6 @@ class TestRegressionNonconj(BasicTester,BigDataGibbsTester,GewekeGibbsTester):
     @property
     def geweke_resample_kwargs(self):
         return dict(niter=2)
-
 
 @attr('gaussian')
 class TestGaussian(BigDataGibbsTester,GewekeGibbsTester):
