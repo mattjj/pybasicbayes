@@ -566,9 +566,6 @@ class Gaussian(_GaussianBase, GibbsSampling, MeanField, MeanFieldSVI, Collapsed,
         if mu is sigma is None \
                 and not any(_ is None for _ in (mu_0,sigma_0,kappa_0,nu_0)):
             self.resample() # initialize from prior
-        else:
-            self.mu_mf = mu
-            self.sigma_mf = sigma * (self.nu_0 - self.mu_mf.shape[0] - 1)
 
     @property
     def hypparams(self):
