@@ -269,6 +269,12 @@ class TestGaussian(BigDataGibbsTester,GewekeGibbsTester):
     def geweke_numerical_slice(self,d,setting_idx):
         return slice(0,d.mu.shape[0])
 
+    ### class-specific
+
+    def test_empirical_bayes(self):
+        data = np.random.randn(50,2)
+        distributions.Gaussian().empirical_bayes(data).hypparams
+
 @attr('diagonalgaussian')
 class TestDiagonalGaussian(BigDataGibbsTester,GewekeGibbsTester,BasicTester):
     @property
