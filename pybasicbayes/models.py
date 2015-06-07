@@ -1,8 +1,6 @@
 from __future__ import division
 import numpy as np
 na = np.newaxis
-from matplotlib import pyplot as plt
-from matplotlib import cm
 import scipy.special as special
 import abc, copy
 from warnings import warn
@@ -516,6 +514,8 @@ class Mixture(ModelGibbsSampling, ModelMeanField, ModelEM, ModelParallelTemperin
         return used_labels
 
     def plot(self,color=None,legend=False,alpha=None,update=False,draw=True):
+        import matplotlib.pyplot as plt
+        from matplotlib import cm
         artists = []
 
         ### get colors
@@ -726,6 +726,8 @@ class CollapsedMixture(ModelGibbsSampling):
         return reduce(set.union,(l._get_occupied() for l in self.labels_list),set([]))
 
     def plot(self):
+        import matplotlib.pyplot as plt
+        from matplotlib import cm
         plt.figure()
         cmap = cm.get_cmap()
         used_labels = self._get_occupied()
