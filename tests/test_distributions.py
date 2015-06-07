@@ -158,6 +158,10 @@ class TestRegression(BasicTester,BigDataGibbsTester,MaxLikelihoodTester,GewekeGi
     def params_close(self,d1,d2):
         return np.linalg.norm(d1.A-d2.A) < 0.1 and np.linalg.norm(d1.sigma-d2.sigma) < 0.1
 
+    @property
+    def big_data_size(self):
+        return 40000
+
     def geweke_statistics(self,d,data):
         return np.concatenate((d.A.flatten(),np.diag(d.sigma)))
 
