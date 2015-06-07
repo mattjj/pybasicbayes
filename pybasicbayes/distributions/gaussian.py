@@ -11,7 +11,6 @@ from numpy.core.umath_tests import inner1d
 import scipy.linalg
 import scipy.stats as stats
 import scipy.special as special
-import matplotlib.pyplot as plt
 import copy
 
 from pybasicbayes.abstractions import GibbsSampling, MeanField, \
@@ -84,8 +83,9 @@ class _GaussianBase(object):
     def plot(self,ax=None,data=None,indices=None,color='b',
              plot_params=True,label='',alpha=1.,
              update=False,draw=True):
-        from util.plot import project_data, plot_gaussian_projection, \
-            plot_gaussian_2D
+        import matplotlib.pyplot as plt
+        from pybasicbayes.util.plot import project_data, \
+                plot_gaussian_projection, plot_gaussian_2D
         ax = ax if ax else plt.gca()
         D = self.D
         if data is not None:
@@ -1058,6 +1058,7 @@ class _ScalarGaussianBase(object):
         return self.__class__.__name__ + '(mu=%f,sigmasq=%f)' % (self.mu,self.sigmasq)
 
     def plot(self,data=None,indices=None,color='b',plot_params=True,label=None):
+        import matplotlib.pyplot as plt
         data = np.concatenate(data) if data is not None else None
         indices = np.concatenate(indices) if indices is not None else None
 
