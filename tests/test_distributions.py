@@ -158,6 +158,10 @@ class TestRegression(BasicTester,BigDataGibbsTester,MaxLikelihoodTester,GewekeGi
     def params_close(self,d1,d2):
         return np.linalg.norm(d1.A-d2.A) < 0.1 and np.linalg.norm(d1.sigma-d2.sigma) < 0.1
 
+    @property
+    def big_data_size(self):
+        return 40000
+
     def geweke_statistics(self,d,data):
         return np.concatenate((d.A.flatten(),np.diag(d.sigma)))
 
@@ -437,7 +441,7 @@ class TestGaussianFixedCov(BigDataGibbsTester,GewekeGibbsTester):
 
     @property
     def hyperparameter_settings(self):
-        return (dict(sigma=np.diag([3.,2.,1.]),mu_0=np.array([1.,2.,3.]),lmbda_0=np.eye(3)),)
+        return (dict(sigma=np.diag([3.,2.,1.]),mu_0=np.array([1.,2.,3.]),sigma_0=np.eye(3)),)
 
     def params_close(self,d1,d2):
         return np.linalg.norm(d1.mu-d2.mu) < 0.1
@@ -554,23 +558,6 @@ class TestScalarGaussianNonconjNIX(BigDataGibbsTester,GewekeGibbsTester):
     def geweke_numerical_slice(self,d,setting_idx):
         return slice(0,1)
 
-@attr('CRP')
-class TestCRP(BigDataGibbsTester):
-    @property
-    def distribution_class(self):
-        return distributions.CRP
-
-    @property
-    def hyperparameter_settings(self):
-        return (dict(a_0=1.,b_0=1./10),)
-
-    @property
-    def big_data_size(self):
-        return [50]*200
-
-    def params_close(self,d1,d2):
-        return np.abs(d1.concentration - d2.concentration) < 1.0
-
 @attr('GammaCompoundDirichlet')
 class TestDirichletCompoundGamma(object):
     def test_weaklimit(self):
@@ -594,7 +581,7 @@ class TestDirichletCompoundGamma(object):
         plt.ylim(0,10)
 
         import os
-        from mixins import mkdir
+        from pybasicbayes.testing.mixins import mkdir
         figpath = os.path.join(os.path.dirname(__file__),'figures',
                 self.__class__.__name__,'weaklimittest.pdf')
         mkdir(os.path.dirname(figpath))

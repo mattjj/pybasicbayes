@@ -269,16 +269,25 @@ def ndarrayhash(v):
 
 ### numerical linear algebra
 
-def inv_psd(A):
-    # L = lapack.dpotri(np.linalg.cholesky(A),lower=1)[0]
-    # return L + L.T - np.diag(np.diag(L))
-    return np.linalg.inv(A)
+def inv_psd(A, return_chol=False):
+    L = np.linalg.cholesky(A)
+    Ainv = lapack.dpotri(L, lower=True)[0]
+    copy_lower_to_upper(Ainv)
+    if not np.allclose(Ainv, np.linalg.inv(A)):
+        import ipdb; ipbd.set_trace()
+    if return_chol:
+        return Ainv, L
+    else:
+        return Ainv
 
 def solve_psd(A,b,chol=None,lower=True,overwrite_b=False,overwrite_A=False):
     if chol is None:
         return lapack.dposv(A,b,overwrite_b=overwrite_b,overwrite_a=overwrite_A)[1]
     else:
         return lapack.dpotrs(chol,b,lower,overwrite_b)[0]
+
+def copy_lower_to_upper(A):
+    A += np.tril(A,k=-1).T
 
 
 # NOTE: existing numpy object array construction acts a bit weird, e.g.

@@ -1,7 +1,6 @@
 from __future__ import division
 import numpy as np
 from numpy import newaxis as na
-from matplotlib import pyplot as plt
 
 import stats, general
 
@@ -28,6 +27,8 @@ def populations_eq_quantile_plot(pop1, pop2, fig=None, percentilecutoff=5):
         pop1 = pop1[:pop2.shape[0]]
 
     def plot_1d_scaled_quantiles(p1,p2,plot_midline=True):
+        import matplotlib.pyplot as plt
+
         # scaled quantiles so that multiple calls line up
         p1.sort(), p2.sort() # NOTE: destructive! but that's cool
         xmin,xmax = general.scoreatpercentile(p1,percentilecutoff), \
@@ -60,7 +61,7 @@ def populations_eq_quantile_plot(pop1, pop2, fig=None, percentilecutoff=5):
 
         ims1, ims2 = pop1.dot(projs.T), pop2.dot(projs.T)
         for i, (im1, im2) in enumerate(zip(ims1.T,ims2.T)):
-            plt.subplot(2,D,i)
+            plt.subplot(2,D,i+1)
             plot_1d_scaled_quantiles(im1,im2,plot_midline=firsttime)
 
 ### numerical
