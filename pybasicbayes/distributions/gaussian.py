@@ -1020,17 +1020,20 @@ class IsotropicGaussian(GibbsSampling):
     ### Gibbs sampling
 
     def resample(self,data=[]):
-        mu_n, nu_n, alpha_n, beta_n = self._posterior_hypparams(*self._get_statistics(data))
+        mu_n, nu_n, alpha_n, beta_n = self._posterior_hypparams(
+            *self._get_statistics(data, D=self.mu_0.shape[0]))
         D = mu_n.shape[0]
         self.sigma = 1/np.random.gamma(alpha_n,scale=1/beta_n)
         self.mu = np.sqrt(self.sigma/nu_n)*np.random.randn(D)+mu_n
         return self
 
-    def _get_statistics(self,data):
+    def _get_statistics(self,data, D=None):
         n = getdatasize(data)
         if n > 0:
-            D = getdatadimension(data)
+            D = D if D else getdatadimension(data)
             if isinstance(data,np.ndarray):
+                assert (data.ndim == 1 and data.shape == (D,)) \
+                    or (data.ndim == 2 and data.shape[1] == D)
                 data = np.reshape(data,(-1,D))
                 xbar = data.mean(0)
                 sumsq = ((data-xbar)**2).sum()
