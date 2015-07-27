@@ -34,7 +34,8 @@ class Regression(GibbsSampling, MaxLikelihood):
         return (self.A, self.sigma)
 
     @parameters.setter
-    def parameters(self,(A,sigma)):
+    def parameters(self, A_sigma_tuple):
+        (A,sigma) = A_sigma_tuple
         self.A = A
         self.sigma = sigma
 
@@ -304,7 +305,8 @@ class ARDRegression(Regression):
         return (self.A, self.sigma, self.K_0)
 
     @parameters.setter
-    def parameters(self,(A,sigma,K_0)):
+    def parameters(self, A_sigma_K_0_tuple1):
+        (A,sigma,K_0) = A_sigma_K_0_tuple1
         self.A = A
         self.sigma = sigma
         self.K_0 = K_0
