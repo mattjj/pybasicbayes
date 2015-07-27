@@ -1,4 +1,5 @@
 from __future__ import division
+from __future__ import print_function
 import numpy as np
 import numpy.random as npr
 from matplotlib import pyplot as plt
@@ -68,6 +69,6 @@ import itertools, sys, json
 for i in itertools.count():
     model.resample_model()
     if i % 3 == 0:
-        print json.dumps(model.to_json_dict())
+        print(json.dumps(model.to_json_dict()))
         sys.stdout.flush()
 

@@ -1,16 +1,18 @@
 from __future__ import division
+from __future__ import absolute_import
 import numpy as np
+from functools import reduce
 na = np.newaxis
 import scipy.special as special
 import abc, copy
 from warnings import warn
 from scipy.misc import logsumexp
 
-from abstractions import ModelGibbsSampling, ModelMeanField, ModelEM
-from abstractions import Distribution, GibbsSampling, MeanField, Collapsed, \
+from .abstractions import ModelGibbsSampling, ModelMeanField, ModelEM
+from .abstractions import Distribution, GibbsSampling, MeanField, Collapsed, \
         MeanFieldSVI, MaxLikelihood, ModelParallelTempering
-from distributions import Categorical, CategoricalAndConcentration
-from util.stats import getdatasize, sample_discrete_from_log, sample_discrete
+from .distributions import Categorical, CategoricalAndConcentration
+from .util.stats import getdatasize, sample_discrete_from_log, sample_discrete
 
 
 #############################
@@ -342,7 +344,7 @@ class Mixture(ModelGibbsSampling, ModelMeanField, ModelEM, ModelParallelTemperin
 
     def _resample_components_joblib(self,num_procs):
         from joblib import Parallel, delayed
-        import parallel
+        from . import parallel
 
         parallel.model = self
         parallel.labels_list = self.labels_list
@@ -357,7 +359,7 @@ class Mixture(ModelGibbsSampling, ModelMeanField, ModelEM, ModelParallelTemperin
 
     def _resample_labels_joblib(self,num_procs):
         from joblib import Parallel, delayed
-        import parallel
+        from . import parallel
 
         if len(self.labels_list) > 0:
             parallel.model = self
@@ -607,7 +609,7 @@ class MixtureDistribution(Mixture, GibbsSampling, MeanField, MeanFieldSVI, Distr
         if np.isnan(data).any():
             return 0.
 
-        from util.stats import sample_discrete
+        from .util.stats import sample_discrete
         likes = np.array([c.log_likelihood(data) for c in self.components]).reshape((-1,))
         likes += np.log(self.weights.weights)
         label = sample_discrete(np.exp(likes - likes.max()))

@@ -1,4 +1,5 @@
 from __future__ import division
+from __future__ import print_function
 import numpy as np
 np.seterr(invalid='raise')
 from matplotlib import pyplot as plt
@@ -35,12 +36,12 @@ allscores = []
 allmodels = []
 for superitr in range(5):
     # Gibbs sampling to wander around the posterior
-    print 'Gibbs Sampling'
+    print('Gibbs Sampling')
     for itr in progprint_xrange(100):
         posteriormodel.resample_model()
 
     # mean field to lock onto a mode
-    print 'Mean Field'
+    print('Mean Field')
     scores = [posteriormodel.meanfield_coordinate_descent_step()
                 for itr in progprint_xrange(100)]
 

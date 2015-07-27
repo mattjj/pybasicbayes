@@ -7,6 +7,7 @@ import copy, collections, os, shutil, hashlib
 from contextlib import closing
 from urllib2 import urlopen
 from itertools import izip, chain, count, ifilter
+from functools import reduce
 
 
 def blockarray(*args,**kwargs):
@@ -137,7 +138,7 @@ def stateseq_hamming_error(sampledstates,truestates):
 
 def _sieve(stream):
     # just for fun; doesn't work over a few hundred
-    val = stream.next()
+    val = next(stream)
     yield val
     for x in ifilter(lambda x: x%val != 0, _sieve(stream)):
         yield x
@@ -296,13 +297,13 @@ def copy_lower_to_upper(A):
 # constructed the construction doesn't "recurse" as in the first example
 class ObjArray(np.ndarray):
     def __new__(cls,lst):
-        if isinstance(lst,(np.ndarray,types.FloatType,types.IntType)):
+        if isinstance(lst,(np.ndarray,float,int)):
             return lst
         else:
             return np.ndarray.__new__(cls,len(lst),dtype=np.object)
 
     def __init__(self,lst):
-        if not isinstance(lst,(np.ndarray,types.FloatType,types.IntType)):
+        if not isinstance(lst,(np.ndarray,float,int)):
             for i, elt in enumerate(lst):
                 self[i] = self.__class__(elt)
 

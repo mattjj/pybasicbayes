@@ -1,3 +1,4 @@
+from __future__ import print_function
 import abc
 import numpy as np
 import copy
@@ -202,7 +203,7 @@ class ModelMeanField(Model):
             if scores[-1] is not None and len(scores) > 1:
                 if np.abs(scores[-1]-scores[-2]) < tol:
                     return scores
-        print 'WARNING: meanfield_coordinate_descent hit maxiter of %d' % maxiter
+        print('WARNING: meanfield_coordinate_descent hit maxiter of %d' % maxiter)
         return scores
 
 class ModelMeanFieldSVI(Model):
@@ -235,7 +236,7 @@ class _EMBase(Model):
                     method()
                     likes.append(self.log_likelihood())
                     return likes
-        print 'WARNING: EM_fit reached maxiter of %d' % maxiter
+        print('WARNING: EM_fit reached maxiter of %d' % maxiter)
         return likes
 
 class ModelEM(_EMBase):

@@ -1,8 +1,9 @@
 from __future__ import division
+from __future__ import absolute_import
 import numpy as np
 from numpy import newaxis as na
 
-import stats, general
+from . import stats, general
 
 #########################
 #  statistical testing  #
