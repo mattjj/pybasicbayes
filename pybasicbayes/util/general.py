@@ -1,13 +1,22 @@
 from __future__ import division
+import sys
 import numpy as np
 from numpy.lib.stride_tricks import as_strided as ast
 import scipy.linalg
 import scipy.linalg.lapack as lapack
 import copy, collections, os, shutil, hashlib
 from contextlib import closing
-from urllib2 import urlopen
-from itertools import izip, chain, count, ifilter
+from itertools import chain, count
 from functools import reduce
+
+PY2 = sys.version_info[0] == 2
+
+if PY2:
+    from urllib2 import urlopen
+    from itertools import izip as zip
+    from itertools import ifilter as filter
+else:
+    from urllib.request import urlopen
 
 
 def blockarray(*args,**kwargs):
@@ -140,7 +149,7 @@ def _sieve(stream):
     # just for fun; doesn't work over a few hundred
     val = next(stream)
     yield val
-    for x in ifilter(lambda x: x%val != 0, _sieve(stream)):
+    for x in filter(lambda x: x%val != 0, _sieve(stream)):
         yield x
 
 def primes():
@@ -203,7 +212,7 @@ def count_transitions(stateseq,minlength=None):
     if minlength is None:
         minlength = stateseq.max() + 1
     out = np.zeros((minlength,minlength),dtype=np.int32)
-    for a,b in izip(stateseq[:-1],stateseq[1:]):
+    for a,b in zip(stateseq[:-1],stateseq[1:]):
         out[a,b] += 1
     return out
 
@@ -226,11 +235,11 @@ def sgd_passes(tau,kappa,datalist,minibatchsize=1,npasses=1):
     for superitr in xrange(npasses):
         if minibatchsize == 1:
             perm = np.random.permutation(N)
-            for idx, rho_t in izip(perm,sgd_steps(tau,kappa)):
+            for idx, rho_t in zip(perm,sgd_steps(tau,kappa)):
                 yield datalist[idx], rho_t
         else:
             minibatch_indices = np.array_split(np.random.permutation(N),N/minibatchsize)
-            for indices, rho_t in izip(minibatch_indices,sgd_steps(tau,kappa)):
+            for indices, rho_t in zip(minibatch_indices,sgd_steps(tau,kappa)):
                 yield [datalist[idx] for idx in indices], rho_t
 
 def sgd_sampling(tau,kappa,datalist,minibatchsize=1):
