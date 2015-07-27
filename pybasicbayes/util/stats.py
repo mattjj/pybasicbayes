@@ -1,4 +1,5 @@
 from __future__ import division
+from __future__ import absolute_import
 import numpy as np
 from numpy.random import random
 na = np.newaxis
@@ -8,8 +9,8 @@ import scipy.linalg
 from scipy.misc import logsumexp
 from numpy.core.umath_tests import inner1d
 
-import general
-from general import any_none, all_none
+from . import general
+from .general import any_none, all_none
 
 ### data abstraction
 

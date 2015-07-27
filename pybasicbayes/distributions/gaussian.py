@@ -710,7 +710,8 @@ class DiagonalGaussian(_GaussianBase,GibbsSampling,MaxLikelihood,MeanField,Tempe
         return self.mu, self.sigmas
 
     @parameters.setter
-    def parameters(self,(mu,sigmas)):
+    def parameters(self, mu_sigmas_tuple):
+        (mu,sigmas) = mu_sigmas_tuple
         self.mu, self.sigmas = mu, sigmas
 
     @property
