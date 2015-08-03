@@ -99,7 +99,8 @@ class Categorical(GibbsSampling, MeanField, MeanFieldSVI, MaxLikelihood, MAP):
 
     def resample(self,data=[],counts=None):
         counts = self._get_statistics(data) if counts is None else counts
-        self.weights = np.random.dirichlet(np.maximum(1e-5,self.alphav_0 + counts))
+        self.weights = np.random.dirichlet(self.alphav_0 + counts)
+        np.clip(self.weights, np.spacing(1.), np.inf, out=self.weights)
         # NOTE: next line is so we can use Gibbs sampling to initialize mean field
         self._alpha_mf = self.weights * self.alphav_0.sum()
         assert (self._alpha_mf >= 0.).all()
@@ -257,13 +258,19 @@ class Multinomial(Categorical):
 
     A Poisson process conditioned on the number of points emitted.
     '''
+    def __init__(self,weights=None,alpha_0=None,K=None,alphav_0=None,alpha_mf=None,
+                 N=1):
+        self.N = N
+        super(Multinomial, self).__init__(weights,alpha_0,K,alphav_0,alpha_mf)
+
     def log_likelihood(self,x):
         assert isinstance(x,np.ndarray) and x.ndim == 2 and x.shape[1] == self.K
         return np.where(x,x*np.log(self.weights),0.).sum(1) \
             + special.gammaln(x.sum(1)+1) - special.gammaln(x+1).sum(1)
 
-    def rvs(self,size=None):
-        return np.bincount(super(Multinomial,self).rvs(size=size),minlength=self.K)
+    def rvs(self,size=None,N=None):
+        N = N if N else self.N
+        return np.random.multinomial(N, self.weights, size=size)
 
     def _get_statistics(self,data,K=None):
         K = K if K else self.K
