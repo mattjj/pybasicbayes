@@ -1,7 +1,11 @@
 from __future__ import division
 from __future__ import absolute_import
+from builtins import zip
+from builtins import range
+from builtins import object
 import numpy as np
 from functools import reduce
+from future.utils import with_metaclass
 na = np.newaxis
 import scipy.special as special
 import abc, copy
@@ -553,7 +557,7 @@ class Mixture(ModelGibbsSampling, ModelMeanField, ModelEM, ModelParallelTemperin
         if legend and color is None:
             plt.legend(
                 [plt.Rectangle((0,0),1,1,fc=c)
-                    for i,c in label_colors.iteritems() if i in used_labels],
+                    for i,c in label_colors.items() if i in used_labels],
                 [i for i in label_colors if i in used_labels],
                 loc='best', ncol=2)
 
@@ -569,7 +573,7 @@ class Mixture(ModelGibbsSampling, ModelMeanField, ModelEM, ModelParallelTemperin
 
         return  {
                     'points':[{'x':x,'y':y,'label':int(label)} for x,y,label in zip(data[:,0],data[:,1],z)],
-                    'ellipses':[dict(c.to_json_dict().items() + [('label',i)])
+                    'ellipses':[dict(list(c.to_json_dict().items()) + [('label',i)])
                         for i,c in enumerate(self.components) if i in z]
                 }
 
@@ -716,8 +720,7 @@ class MixtureDistribution(Mixture, GibbsSampling, MeanField, MeanFieldSVI, Distr
             self.labels_list.pop()
 
 
-class CollapsedMixture(ModelGibbsSampling):
-    __metaclass__ = abc.ABCMeta
+class CollapsedMixture(with_metaclass(abc.ABCMeta, ModelGibbsSampling)):
     def _get_counts(self,k):
         return sum(l._get_counts(k) for l in self.labels_list)
 

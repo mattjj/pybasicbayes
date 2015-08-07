@@ -1,4 +1,6 @@
 from __future__ import division
+from builtins import map
+from builtins import range
 __all__ = ['UniformOneSided', 'Uniform']
 
 import numpy as np
@@ -118,7 +120,7 @@ class Uniform(UniformOneSided):
             self.low = -sample_pareto(-self.x_m_low,self.alpha_low)
             self.high = sample_pareto(self.x_m_high,self.alpha_high)
         else:
-            for itr in xrange(niter):
+            for itr in range(niter):
                 # resample high, fixing low
                 self.x_m, self.alpha = self.x_m_high, self.alpha_high
                 super(Uniform,self).resample(data)
@@ -132,4 +134,4 @@ class Uniform(UniformOneSided):
         if isinstance(data,np.ndarray):
             return self.x_m_low - data
         else:
-            return map(self._flip_data,data)
+            return list(map(self._flip_data,data))

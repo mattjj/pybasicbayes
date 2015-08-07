@@ -1,4 +1,5 @@
 from __future__ import print_function
+from builtins import range
 import numpy as np
 import sys, time
 
@@ -21,7 +22,7 @@ def sec2str(seconds):
         return '%0.2f' % seconds
 
 def progprint_xrange(*args,**kwargs):
-    xr = xrange(*args)
+    xr = range(*args)
     return progprint(xr,total=len(xr),**kwargs)
 
 def progprint(iterator,total=None,perline=25,show_times=True):

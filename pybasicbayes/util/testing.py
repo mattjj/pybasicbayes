@@ -1,5 +1,6 @@
 from __future__ import division
 from __future__ import absolute_import
+from builtins import zip
 import numpy as np
 from numpy import newaxis as na
 

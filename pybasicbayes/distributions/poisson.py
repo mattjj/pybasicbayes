@@ -1,4 +1,5 @@
 from __future__ import division
+from builtins import zip
 __all__ = ['Poisson']
 import numpy as np
 import scipy.stats as stats

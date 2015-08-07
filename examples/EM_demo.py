@@ -1,4 +1,5 @@
 from __future__ import division
+from builtins import range
 import numpy as np
 np.seterr(invalid='raise')
 from matplotlib import pyplot as plt
@@ -37,7 +38,7 @@ BICs = []
 examplemodels = []
 for idx, num_components in enumerate(progprint_xrange(min_num_components,max_num_components+1)):
     theseBICs = []
-    for i in xrange(num_tries_each):
+    for i in range(num_tries_each):
         fitmodel = models.Mixture(
                 alpha_0=10000, # used for random initialization Gibbs sampling, big means use all components
                 components=[distributions.Gaussian(**obs_hypparams) for itr in range(num_components)])
@@ -45,11 +46,11 @@ for idx, num_components in enumerate(progprint_xrange(min_num_components,max_num
         fitmodel.add_data(data)
 
         # use Gibbs sampling for initialization
-        for itr in xrange(100):
+        for itr in range(100):
             fitmodel.resample_model()
 
         # use EM to fit a model
-        for itr in xrange(50):
+        for itr in range(50):
             fitmodel.EM_step()
 
         theseBICs.append(fitmodel.BIC())
