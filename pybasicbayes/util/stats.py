@@ -1,5 +1,6 @@
 from __future__ import division
 from __future__ import absolute_import
+from builtins import range
 import numpy as np
 from numpy.random import random
 na = np.newaxis
@@ -245,7 +246,7 @@ def sample_crp_tablecounts(concentration,customers,colweights):
 
     for (i,j), n in np.ndenumerate(customers):
         w = colweights[j]
-        for k in xrange(n):
+        for k in range(n):
             m[i,j] += randseq[starts[i,j]+k] \
                     < (concentration * w) / (k + concentration * w)
 

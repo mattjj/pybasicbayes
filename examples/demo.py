@@ -1,5 +1,7 @@
 from __future__ import division
 from __future__ import print_function
+from builtins import zip
+from builtins import range
 import numpy as np
 np.seterr(invalid='raise')
 from matplotlib import pyplot as plt

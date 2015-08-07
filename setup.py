@@ -26,6 +26,7 @@ setup(name='pybasicbayes',
           "scipy",
           "matplotlib",
           "nose",
+          "future",
       ],
       classifiers=[
           'Intended Audience :: Science/Research',

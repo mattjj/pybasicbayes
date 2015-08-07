@@ -1,4 +1,7 @@
 from __future__ import division
+from builtins import zip
+from builtins import range
+from builtins import object
 __all__ = [
     'NegativeBinomial', 'NegativeBinomialFixedR', 'NegativeBinomialIntegerR2',
     'NegativeBinomialIntegerR', 'NegativeBinomialFixedRVariant',
@@ -490,7 +493,7 @@ class NegativeBinomialIntegerR(NegativeBinomialFixedR, GibbsSampling, MaxLikelih
 
     def rvs(self,size=None):
         out = np.random.geometric(1-self.p,size=size)-1
-        for i in xrange(self.r-1):
+        for i in range(self.r-1):
             out += np.random.geometric(1-self.p,size=size)-1
         return out
 

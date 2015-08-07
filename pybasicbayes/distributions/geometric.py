@@ -1,4 +1,5 @@
 from __future__ import division
+from builtins import zip
 __all__ = ['Geometric']
 
 import numpy as np

@@ -1,4 +1,8 @@
 from __future__ import division
+from builtins import map
+from builtins import zip
+from builtins import range
+from builtins import object
 __all__ = \
     ['Gaussian', 'GaussianFixedMean', 'GaussianFixedCov', 'GaussianFixed',
      'GaussianNonConj', 'DiagonalGaussian', 'DiagonalGaussianNonconjNIG',
@@ -224,7 +228,7 @@ class Gaussian(
             out[-2,-2] = out[-1,-1] = data.shape[0]
             return out
         else:
-            return sum(map(self._get_statistics,data),out)
+            return sum(list(map(self._get_statistics,data)),out)
 
     def _get_weighted_statistics(self,data,weights,D=None):
         D = getdatadimension(data) if D is None else D
@@ -235,7 +239,7 @@ class Gaussian(
             out[-2,-2] = out[-1,-1] = weights.sum()
             return out
         else:
-            return sum(map(self._get_weighted_statistics,data,weights),out)
+            return sum(list(map(self._get_weighted_statistics,data,weights)),out)
 
     def _get_empty_statistics(self, D):
         out = np.zeros((D+2,D+2))
@@ -648,7 +652,7 @@ class GaussianNonConj(_GaussianBase, GibbsSampling):
 
         # TODO this is kinda dumb because it collects statistics over and over
         # instead of updating them...
-        for itr in xrange(niter):
+        for itr in range(niter):
             # resample mu
             self._mu_distn.sigma = self._sigma_distn.sigma
             self._mu_distn.resample(data)
@@ -942,7 +946,7 @@ class DiagonalGaussianNonconjNIG(_GaussianBase,GibbsSampling):
             self.mu = np.sqrt(self.sigmas_0) * np.random.randn(self.mu_0.shape[0]) + self.mu_0
             self.sigmas = 1./np.random.gamma(self.alpha_0,scale=1./self.beta_0)
         else:
-            for itr in xrange(self.niter):
+            for itr in range(self.niter):
                 sigmas_n = 1./(1./self.sigmas_0 + n / self.sigmas)
                 mu_n = (self.mu_0 / self.sigmas_0 + y / self.sigmas) * sigmas_n
                 self.mu = np.sqrt(sigmas_n) * np.random.randn(mu_n.shape[0]) + mu_n
@@ -1368,7 +1372,7 @@ class ScalarGaussianNonconjNIG(_ScalarGaussianBase, MeanField, MeanFieldSVI):
     def meanfieldupdate(self,data,weights,niter=None):
         niter = niter if niter is not None else self.niter
         neff, y, ysq = self._get_weighted_statistics(data,weights)
-        for niter in xrange(niter):
+        for niter in range(niter):
             # update q(sigmasq)
             Emu, _ = self._E_mu
 

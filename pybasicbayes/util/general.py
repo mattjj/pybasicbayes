@@ -1,4 +1,9 @@
 from __future__ import division
+from future import standard_library
+standard_library.install_aliases()
+from builtins import next
+from builtins import zip
+from builtins import range
 import sys
 import numpy as np
 from numpy.lib.stride_tricks import as_strided as ast
@@ -8,15 +13,7 @@ import copy, collections, os, shutil, hashlib
 from contextlib import closing
 from itertools import chain, count
 from functools import reduce
-
-PY2 = sys.version_info[0] == 2
-
-if PY2:
-    from urllib2 import urlopen
-    from itertools import izip as zip
-    from itertools import ifilter as filter
-else:
-    from urllib.request import urlopen
+from urllib.request import urlopen  # py2.7 covered by standard_library.install_aliases()
 
 
 def blockarray(*args,**kwargs):
@@ -82,7 +79,7 @@ def nice_indices(arr):
     # surprisingly, this is slower for very small (and very large) inputs:
     # u,f,i = np.unique(arr,return_index=True,return_inverse=True)
     # arr[:] = np.arange(u.shape[0])[np.argsort(f)][i]
-    ids = collections.defaultdict(count().next)
+    ids = collections.defaultdict(count().__next__)
     for idx,x in enumerate(arr):
         arr[idx] = ids[x]
     return arr
@@ -149,7 +146,7 @@ def _sieve(stream):
     # just for fun; doesn't work over a few hundred
     val = next(stream)
     yield val
-    for x in filter(lambda x: x%val != 0, _sieve(stream)):
+    for x in [x for x in _sieve(stream) if x % val != 0]:
         yield x
 
 def primes():
@@ -176,7 +173,7 @@ def top_eigenvector(A,niter=1000,force_iteration=False):
     else:
         x1 = np.repeat(1./n,n)
         x2 = x1.copy()
-        for itr in xrange(niter):
+        for itr in range(niter):
             np.dot(A.T,x1,out=x2)
             x2 /= x2.sum()
             x1,x2 = x2,x1
@@ -232,7 +229,7 @@ def hold_out(datalist,frac):
 def sgd_passes(tau,kappa,datalist,minibatchsize=1,npasses=1):
     N = len(datalist)
 
-    for superitr in xrange(npasses):
+    for superitr in range(npasses):
         if minibatchsize == 1:
             perm = np.random.permutation(N)
             for idx, rho_t in zip(perm,sgd_steps(tau,kappa)):
@@ -261,7 +258,7 @@ def minibatchsize(lst):
 
 def random_subset(lst,sz):
     perm = np.random.permutation(len(lst))
-    return [lst[perm[idx]] for idx in xrange(sz)]
+    return [lst[perm[idx]] for idx in range(sz)]
 
 def get_file(remote_url,local_path):
     if not os.path.isfile(local_path):

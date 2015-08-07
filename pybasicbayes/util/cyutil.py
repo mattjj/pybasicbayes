@@ -1,3 +1,5 @@
+from builtins import map
+from builtins import str
 import Cython.Build
 from Cython.Build.Dependencies import *
 
@@ -14,7 +16,7 @@ def create_extension_list(patterns, exclude=[], ctx=None, aliases=None, quiet=Fa
     if not isinstance(exclude, list):
         exclude = [exclude]
     for pattern in exclude:
-        to_exclude.update(map(os.path.abspath, extended_iglob(pattern)))
+        to_exclude.update(list(map(os.path.abspath, extended_iglob(pattern))))
 
     module_list = []
     for pattern in patterns:
@@ -60,7 +62,7 @@ def create_extension_list(patterns, exclude=[], ctx=None, aliases=None, quiet=Fa
                         continue
                     raise
                 if base is not None:
-                    for key, value in base.values.items():
+                    for key, value in list(base.values.items()):
                         if key not in kwds:
                             kwds[key] = value
 

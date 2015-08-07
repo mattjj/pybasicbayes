@@ -1,4 +1,7 @@
 from __future__ import division
+from builtins import zip
+from builtins import range
+from builtins import object
 import numpy as np
 import abc, os
 
@@ -6,10 +9,9 @@ from nose.plugins.attrib import attr
 
 import pybasicbayes
 from pybasicbayes.util import testing
+from future.utils import with_metaclass
 
-class DistributionTester(object):
-    __metaclass__ = abc.ABCMeta
-
+class DistributionTester(with_metaclass(abc.ABCMeta, object)):
     @abc.abstractproperty
     def distribution_class(self):
         pass
@@ -75,9 +77,7 @@ class BasicTester(DistributionTester):
 
             self._check_stats(s1,s2)
 
-class BigDataGibbsTester(DistributionTester):
-    __metaclass__ = abc.ABCMeta
-
+class BigDataGibbsTester(with_metaclass(abc.ABCMeta, DistributionTester)):
     @abc.abstractmethod
     def params_close(self,distn1,distn2):
         pass
@@ -110,9 +110,7 @@ class BigDataGibbsTester(DistributionTester):
 
         assert self.params_close(d1,d2)
 
-class MaxLikelihoodTester(DistributionTester):
-    __metaclass__ = abc.ABCMeta
-
+class MaxLikelihoodTester(with_metaclass(abc.ABCMeta, DistributionTester)):
     @abc.abstractmethod
     def params_close(self,distn1,distn2):
         pass
@@ -145,9 +143,7 @@ class MaxLikelihoodTester(DistributionTester):
 
         assert self.params_close(d1,d2)
 
-class GewekeGibbsTester(DistributionTester):
-    __metaclass__ = abc.ABCMeta
-
+class GewekeGibbsTester(with_metaclass(abc.ABCMeta, DistributionTester)):
     @abc.abstractmethod
     def geweke_statistics(self,distn,data):
         pass
@@ -213,10 +209,10 @@ class GewekeGibbsTester(DistributionTester):
         sample_dim = np.atleast_1d(self.geweke_statistics(d,d.rvs(size=10))).shape[0]
 
         num_statistic_fails = 0
-        for trial in xrange(ntrials):
+        for trial in range(ntrials):
             # collect forward-generated statistics
             forward_statistics = np.squeeze(np.empty((nsamples,sample_dim)))
-            for i in xrange(nsamples):
+            for i in range(nsamples):
                 d = self.distribution_class(**hypparam_dict)
                 data = d.rvs(size=data_size)
                 forward_statistics[i] = self.geweke_statistics(d,data)
@@ -225,7 +221,7 @@ class GewekeGibbsTester(DistributionTester):
             gibbs_statistics = np.squeeze(np.empty((nsamples,sample_dim)))
             d = self.distribution_class(**hypparam_dict)
             data = d.rvs(size=data_size)
-            for i in xrange(nsamples):
+            for i in range(nsamples):
                 d.resample(data,**self.geweke_resample_kwargs)
                 data = d.rvs(size=data_size)
                 gibbs_statistics[i] = self.geweke_statistics(d,data)

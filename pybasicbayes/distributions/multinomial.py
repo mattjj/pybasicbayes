@@ -1,4 +1,7 @@
 from __future__ import division
+from builtins import zip
+from builtins import map
+from builtins import range
 __all__ = ['Categorical', 'CategoricalAndConcentration', 'Multinomial',
            'MultinomialAndConcentration', 'GammaCompoundDirichlet', 'CRP']
 
@@ -380,7 +383,7 @@ class CRP(GibbsSampling):
             total_num_distinct = 0
         else:
             if isinstance(data[0],list):
-                sample_numbers = np.array(map(sum,data))
+                sample_numbers = np.array(list(map(sum,data)))
                 total_num_distinct = sum(map(len,data))
             else:
                 sample_numbers = np.array(sum(data))

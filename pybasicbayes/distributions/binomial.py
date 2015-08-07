@@ -1,4 +1,5 @@
 from __future__ import division
+from builtins import zip
 __all__ = ['Binomial']
 
 import numpy as np

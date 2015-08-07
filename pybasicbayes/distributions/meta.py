@@ -1,4 +1,6 @@
 from __future__ import division
+from builtins import zip
+from builtins import range
 __all__ = ['_FixedParamsMixin', 'ProductDistribution']
 
 import numpy as np
@@ -31,7 +33,7 @@ class ProductDistribution(
     def __init__(self, distns, slices=None):
         self._distns = distns
         self._slices = slices if slices is not None else \
-            [slice(i, i+1) for i in xrange(len(distns))]
+            [slice(i, i+1) for i in range(len(distns))]
 
     @property
     def params(self):

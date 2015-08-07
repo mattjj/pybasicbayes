@@ -1,4 +1,6 @@
 from __future__ import division
+from builtins import zip
+from builtins import range
 __all__ = ['Regression', 'RegressionNonconj', 'ARDRegression']
 
 import numpy as np
@@ -228,7 +230,7 @@ class RegressionNonconj(Regression):
             self.sigma = sample_invwishart(self.S_0,self.nu_0)
         else:
             yyT, yxT, xxT, n = self._get_statistics(data)
-            for itr in xrange(niter):
+            for itr in range(niter):
                 self._resample_A(xxT, yxT, self.sigma)
                 self._resample_sigma(xxT, yxT, yyT, n, self.A)
 
@@ -273,7 +275,7 @@ class ARDRegression(Regression):
     def resample(self,data=[],stats=None):
         if len(data) > 0 or stats is not None:
             stats = self._get_statistics(data) if stats is None else stats
-            for itr in xrange(self.niter):
+            for itr in range(self.niter):
                 self.A, self.sigma = \
                     sample_mniw(*self._natural_to_standard(
                         self.natural_hypparam + stats))

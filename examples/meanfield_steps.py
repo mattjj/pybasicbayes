@@ -1,4 +1,6 @@
 from __future__ import division
+from builtins import input
+from builtins import range
 import numpy as np
 from matplotlib import pyplot as plt
 plt.interactive(True)
@@ -23,7 +25,7 @@ plt.figure()
 plt.plot(data[:,0],data[:,1],'kx')
 plt.title('data')
 
-raw_input() # pause for effect
+input() # pause for effect
 
 ###############
 #  inference  #
@@ -39,7 +41,7 @@ plt.figure(2,figsize=(8,6))
 posteriormodel.plot()
 plt.figure(3,figsize=(8,6))
 while True:
-    if raw_input().lower() == 'break': # pause at each iteration
+    if input().lower() == 'break': # pause at each iteration
         break
 
     vlb = posteriormodel.meanfield_coordinate_descent_step()

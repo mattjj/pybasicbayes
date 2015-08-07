@@ -1,7 +1,9 @@
 from __future__ import division
 from __future__ import print_function
+from future import standard_library
+standard_library.install_aliases()
 import numpy as np
-import sys, StringIO, inspect, os, functools, time, collections
+import sys, io, inspect, os, functools, time, collections
 
 ### use @timed for really basic timing
 
@@ -22,7 +24,7 @@ def show_timings(stream=None):
     if len(_timings) > 0:
         results = [(inspect.getsourcefile(f),f.__name__,
             len(vals),np.sum(vals),np.mean(vals),np.std(vals))
-            for f, vals in _timings.iteritems()]
+            for f, vals in _timings.items()]
         filename_lens = max(len(filename) for filename, _, _, _, _, _ in results)
         name_lens = max(len(name) for _, name, _, _, _, _ in results)
 
