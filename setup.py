@@ -2,9 +2,7 @@ from distutils.core import setup
 from Cython.Build import cythonize
 import numpy as np
 
-PYBASICBAYES_VERSION = "0.1.2"
-
-# NOTE: cython and moviepy are optional dependencies
+PYBASICBAYES_VERSION = "0.1.3"
 
 ext_modules = cythonize('pybasicbayes/**/*.pyx')
 setup(name='pybasicbayes',
@@ -15,18 +13,20 @@ setup(name='pybasicbayes',
       url="http://github.com/mattjj/pybasicbayes",
       maintainer='Matthew James Johnson',
       maintainer_email='mattjj@csail.mit.edu',
-      packages=['pybasicbayes',
-                  'pybasicbayes.distributions',
-                  'pybasicbayes.util',
-                  'pybasicbayes.testing'],
+      packages=[
+            'pybasicbayes',
+            'pybasicbayes.distributions',
+            'pybasicbayes.util',
+            'pybasicbayes.testing'],
       platforms='ALL',
       keywords=['bayesian', 'inference'],
       install_requires=[
-          "numpy",
-          "scipy",
-          "matplotlib",
-          "nose",
-          "future",
+            # cython and moviepy are optional dependencies
+            "numpy",
+            "scipy",
+            "matplotlib",
+            "nose",
+            "future",
       ],
       classifiers=[
           'Intended Audience :: Science/Research',
