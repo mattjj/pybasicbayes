@@ -210,7 +210,7 @@ class Regression(GibbsSampling, MeanField, MaxLikelihood):
         if stats is None:
             stats = self._get_weighted_statistics(data, weights)
         self.mf_natural_hypparam = self.natural_hypparam + stats
-        self._resample_from_mf()
+        self.resample_from_mf()
 
     def meanfield_sgdstep(self, data, weights, prob, stepsize, stats=None):
         if stats is None:
@@ -271,7 +271,7 @@ class Regression(GibbsSampling, MeanField, MaxLikelihood):
         return mniw_expectedstats(
             *self._natural_to_standard(self.mf_natural_hypparam))
 
-    def _resample_from_mf(self):
+    def resample_from_mf(self):
         self.A, self.sigma = sample_mniw(
             *self._natural_to_standard(self.mf_natural_hypparam))
 
