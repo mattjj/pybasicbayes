@@ -10,8 +10,7 @@ import scipy.linalg
 from scipy.misc import logsumexp
 from numpy.core.umath_tests import inner1d
 
-from . import general
-from .general import any_none, all_none
+from .general import any_none
 
 ### data abstraction
 
@@ -26,7 +25,8 @@ def atleast_2d(data):
     return data
 
 def mask_data(data):
-    return np.ma.masked_array(np.nan_to_num(data),np.isnan(data),fill_value=0.,hard_mask=True)
+    return np.ma.masked_array(
+        np.nan_to_num(data),np.isnan(data),fill_value=0.,hard_mask=True)
 
 def gi(data):
     out = (np.isnan(atleast_2d(data)).sum(1) == 0).ravel()
@@ -192,7 +192,7 @@ def sample_wishart(sigma, nu):
 
     return np.dot(X,X.T)
 
-def sample_mn(M,U=None,Uinv=None,V=None,Vinv=None):
+def sample_mn(M, U=None, Uinv=None, V=None, Vinv=None):
     assert (U is None) ^ (Uinv is None)
     assert (V is None) ^ (Vinv is None)
 
@@ -210,7 +210,7 @@ def sample_mn(M,U=None,Uinv=None,V=None,Vinv=None):
 
     return M + G
 
-def sample_mniw(nu,S,M,K=None,Kinv=None):
+def sample_mniw(nu, S, M, K=None, Kinv=None):
     assert (K is None) ^ (Kinv is None)
     Sigma = sample_invwishart(S,nu)
     if K is not None:
@@ -218,7 +218,7 @@ def sample_mniw(nu,S,M,K=None,Kinv=None):
     else:
         return sample_mn(M=M,U=Sigma,Vinv=Kinv), Sigma
 
-def mniw_expectedstats(nu,S,M,K=None,Kinv=None):
+def mniw_expectedstats(nu, S, M, K=None, Kinv=None):
     # NOTE: could speed this up with chol factorizing S, not re-solving
     assert (K is None) ^ (Kinv is None)
     m = M.shape[0]
@@ -231,6 +231,11 @@ def mniw_expectedstats(nu,S,M,K=None,Kinv=None):
         + m*np.log(2) - np.linalg.slogdet(S)[1]
 
     return E_Sigmainv, E_Sigmainv_A, E_AT_Sigmainv_A, E_logdetSigmainv
+
+def mniw_log_partitionfunction(nu, S, M, K):
+    n = M.shape[0]
+    return n*nu/2*np.log(2) + special.multigammaln(nu/2., n) \
+        - nu/2*np.linalg.slogdet(S)[1] - n/2*np.linalg.slogdet(K)[1]
 
 def sample_pareto(x_m,alpha):
     return x_m + np.random.pareto(alpha)

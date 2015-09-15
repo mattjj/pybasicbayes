@@ -6,14 +6,15 @@ __all__ = ['Regression', 'RegressionNonconj', 'ARDRegression']
 import numpy as np
 from numpy import newaxis as na
 
-from pybasicbayes.abstractions import GibbsSampling, MaxLikelihood
+from pybasicbayes.abstractions import GibbsSampling, MaxLikelihood, \
+    MeanField, MeanFieldSVI
 from pybasicbayes.util.stats import sample_gaussian, sample_mniw, \
-    sample_invwishart, getdatasize
+    sample_invwishart, getdatasize, mniw_expectedstats
 from pybasicbayes.util.general import blockarray, inv_psd, cumsum, \
     all_none, any_none
 
 
-class Regression(GibbsSampling, MaxLikelihood):
+class Regression(GibbsSampling, MeanField, MaxLikelihood):
     def __init__(
             self, nu_0=None,S_0=None,M_0=None,K_0=None,
             affine=False,
@@ -26,7 +27,8 @@ class Regression(GibbsSampling, MaxLikelihood):
         have_hypers = not any_none(nu_0,S_0,M_0,K_0)
 
         if have_hypers:
-            self.natural_hypparam = self._standard_to_natural(nu_0,S_0,M_0,K_0)
+            self.natural_hypparam = self.mf_natural_hypparam = \
+                self._standard_to_natural(nu_0,S_0,M_0,K_0)
 
         if A is sigma is None and have_hypers:
             self.resample()  # initialize from prior
@@ -140,8 +142,7 @@ class Regression(GibbsSampling, MaxLikelihood):
         sigma_inv, L = inv_psd(sigma, return_chol=True)
         parammat = -1./2 * blockarray([
             [A.T.dot(sigma_inv).dot(A), -A.T.dot(sigma_inv)],
-            [-sigma_inv.dot(A), sigma_inv]
-        ])
+            [-sigma_inv.dot(A), sigma_inv]])
         out = np.einsum('ni,ni->n',xy.dot(parammat),xy)
         out -= D/2*np.log(2*np.pi) + np.log(np.diag(L)).sum()
 
@@ -201,6 +202,56 @@ class Regression(GibbsSampling, MaxLikelihood):
         assert np.all(np.linalg.eigvalsh(self.sigma) > 0.)
 
         return self
+
+    ### Mean Field
+
+    def meanfieldupdate(self, data=None, weights=None, stats=None):
+        assert stats is not None or (data is not None and weights is not None)
+        if stats is None:
+            stats = self._get_weighted_statistics(data, weights)
+        self.mf_natural_hypparam = self.natural_hypparam + stats
+
+    def meanfield_sgdstep(self, data, weights, prob, stepsize, stats=None):
+        if stats is None:
+            stats = self._get_weighted_statistics(data, weights)
+        self.mf_natural_hypparam = \
+            (1-stepsize) * self.mf_natural_hypparam + stepsize \
+            * (self.natural_hypparam + 1./prob * stats)
+
+    def expected_log_likelihood(self, xy):
+        # TODO unify with log_likelihood
+        D = self.D_out
+        x, y = xy[:,:-D], xy[:,-D:]
+
+        E_Sigmainv, E_Sigmainv_A, E_AT_Sigmainv_A, E_logdetSigmainv = \
+            self._mf_expected_statistics()
+
+        if self.affine:
+            E_Sigmainv_A, E_Sigmainv_b = \
+                E_Sigmainv_A[:,:-1], E_Sigmainv_A[:,-1]
+            E_AT_Sigmainv_A, E_AT_Sigmainv_b, E_bT_Sigmainv_b = \
+                E_AT_Sigmainv_A[:-1,:-1], E_AT_Sigmainv_A[:-1,-1], \
+                E_AT_Sigmainv_A[-1,-1]
+
+        parammat = -1./2 * blockarray([
+            [E_AT_Sigmainv_A, -E_Sigmainv_A.T],
+            [-E_Sigmainv_A, E_Sigmainv]])
+        out = np.einsum('ni,ni->n', xy.dot(parammat), xy)
+        out -= D/2*np.log(2*np.pi) + E_logdetSigmainv
+
+        if self.affine:
+            out += y.dot(E_Sigmainv_b)
+            out -= x.dot(E_AT_Sigmainv_b)
+            out -= 1./2 * E_bT_Sigmainv_b
+
+        return out
+
+    def get_vlb(self):
+        return 0.  # TODO
+
+    def _mf_expected_statistics(self):
+        return mniw_expectedstats(
+            *self._natural_to_standard(self.mf_natural_hypparam))
 
 
 class RegressionNonconj(Regression):
