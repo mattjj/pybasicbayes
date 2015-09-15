@@ -89,7 +89,7 @@ class TestRegressionNonconj(BasicTester,BigDataGibbsTester,GewekeGibbsTester):
         return [make_hyps(m,n) for m, n in [(2,3), (3,2)]]
 
     def params_close(self,d1,d2):
-        return np.linalg.norm(d1.A-d2.A) < 0.1 and np.linalg.norm(d1.sigma-d2.sigma) < 0.1
+        return np.linalg.norm(d1.A-d2.A) < 0.5 and np.linalg.norm(d1.sigma-d2.sigma) < 0.5
 
     def geweke_statistics(self,d,data):
         return np.concatenate((d.A.flatten(),np.diag(d.sigma)))

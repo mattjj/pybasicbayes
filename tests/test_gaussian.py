@@ -279,7 +279,7 @@ class TestScalarGaussianNIX(BigDataGibbsTester,GewekeGibbsTester):
         return (dict(mu_0=2.7,kappa_0=2.,sigmasq_0=4.,nu_0=2),)
 
     def params_close(self,d1,d2):
-        return np.abs(d1.mu-d2.mu) < 0.1 and np.abs(d2.sigmasq - d2.sigmasq) < 0.25
+        return np.abs(d1.mu-d2.mu) < 0.5 and np.abs(d2.sigmasq - d2.sigmasq) < 0.5
 
     def geweke_statistics(self,d,data):
         return np.array((d.mu,d.sigmasq))
