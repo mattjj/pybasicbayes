@@ -1,248 +1,12 @@
 from __future__ import division
-from builtins import range
-from builtins import object
 import numpy as np
 
 from nose.plugins.attrib import attr
 
-import pybasicbayes
 import pybasicbayes.distributions as distributions
-from pybasicbayes.testing.mixins import BigDataGibbsTester, MaxLikelihoodTester, \
-        GewekeGibbsTester, BasicTester
+from pybasicbayes.testing.mixins import BigDataGibbsTester, \
+    GewekeGibbsTester, BasicTester
 
-@attr('geometric')
-class TestGeometric(BigDataGibbsTester,GewekeGibbsTester):
-    @property
-    def distribution_class(self):
-        return distributions.Geometric
-
-    @property
-    def hyperparameter_settings(self):
-        return (dict(alpha_0=2,beta_0=20),dict(alpha_0=5,beta_0=5))
-
-    def params_close(self,d1,d2):
-        return np.allclose(d1.p,d2.p,rtol=0.05)
-
-    def geweke_statistics(self,d,data):
-        return d.p
-
-    @property
-    def geweke_pval(self):
-        return 0.5
-
-@attr('poisson')
-class TestPoisson(BigDataGibbsTester,GewekeGibbsTester):
-    @property
-    def distribution_class(self):
-        return distributions.Poisson
-
-    @property
-    def hyperparameter_settings(self):
-        return (dict(alpha_0=30,beta_0=3),)
-
-    def params_close(self,d1,d2):
-        return np.allclose(d1.lmbda,d2.lmbda,rtol=0.05)
-
-    def geweke_statistics(self,d,data):
-        return d.lmbda
-
-@attr('negbinfixedr')
-class TestNegativeBinomialFixedR(BigDataGibbsTester,GewekeGibbsTester):
-    @property
-    def distribution_class(self):
-        return distributions.NegativeBinomialFixedR
-
-    @property
-    def hyperparameter_settings(self):
-        return (dict(r=5,alpha_0=1,beta_0=9),)
-
-    def params_close(self,d1,d2):
-        return np.allclose(d1.p,d2.p,rtol=0.1)
-
-    def geweke_statistics(self,d,data):
-        return d.p
-
-@attr('negbinintr')
-class TestNegativeBinomialIntegerR(BigDataGibbsTester,GewekeGibbsTester):
-    @property
-    def distribution_class(self):
-        return distributions.NegativeBinomialIntegerR
-
-    @property
-    def hyperparameter_settings(self):
-        return (dict(r_discrete_distn=np.r_[0.,0,0,1,1,1],alpha_0=5,beta_0=5),)
-
-    def params_close(self,d1,d2):
-        # since it's easy to be off by 1 in r and still look like the same
-        # distribution, best just to check moment parameters
-        def mean(d):
-            return d.r*d.p/(1.-d.p)
-        def var(d):
-            return mean(d)/(1.-d.p)
-        return np.allclose(mean(d1),mean(d2),rtol=0.1) and np.allclose(var(d1),var(d2),rtol=0.1)
-
-    def geweke_statistics(self,d,data):
-        return d.p
-
-    @property
-    def geweke_pval(self):
-        return 0.005 # since the statistic is on (0,1), it's really sensitive, or something
-
-@attr('negbinintr2')
-class TestNegativeBinomialIntegerR2(BigDataGibbsTester,GewekeGibbsTester):
-    @property
-    def distribution_class(self):
-        return distributions.NegativeBinomialIntegerR2
-
-    @property
-    def hyperparameter_settings(self):
-        return (dict(r_discrete_distn=np.r_[0.,0,0,1,1,1],alpha_0=5,beta_0=5),)
-
-    def params_close(self,d1,d2):
-        # since it's easy to be off by 1 in r and still look like the same
-        # distribution, best just to check moment parameters
-        def mean(d):
-            return d.r*d.p/(1.-d.p)
-        def var(d):
-            return mean(d)/(1.-d.p)
-        return np.allclose(mean(d1),mean(d2),rtol=0.1) and np.allclose(var(d1),var(d2),rtol=0.1)
-
-    def geweke_statistics(self,d,data):
-        return d.p
-
-    @property
-    def geweke_pval(self):
-        return 0.005 # since the statistic is on (0,1), it's really sensitive, or something
-
-
-@attr('negbinintrvariant')
-class TestNegativeBinomialIntegerRVariant(TestNegativeBinomialIntegerR):
-    @property
-    def distribution_class(self):
-        return distributions.NegativeBinomialIntegerRVariant
-
-@attr('categorical')
-class TestCategorical(BigDataGibbsTester,GewekeGibbsTester):
-    @property
-    def distribution_class(self):
-        return distributions.Categorical
-
-    @property
-    def hyperparameter_settings(self):
-        return (dict(alpha_0=5.,K=5),)
-
-    @property
-    def big_data_size(self):
-        return 20000
-
-    def params_close(self,d1,d2):
-        return np.allclose(d1.weights,d2.weights,atol=0.05)
-
-    def geweke_statistics(self,d,data):
-        return d.weights
-
-    @property
-    def geweke_pval(self):
-        return 0.05
-
-@attr('regression')
-class TestRegression(BasicTester,BigDataGibbsTester,MaxLikelihoodTester,GewekeGibbsTester):
-    @property
-    def distribution_class(self):
-        return distributions.Regression
-
-    @property
-    def hyperparameter_settings(self):
-        return (dict(nu_0=3,S_0=np.eye(1),M_0=np.zeros((1,2)),K_0=np.eye(2)),
-                dict(nu_0=5,S_0=np.eye(2),M_0=np.zeros((2,4)),K_0=2*np.eye(4)),
-                dict(nu_0=5,S_0=np.eye(2),M_0=np.zeros((2,5)),K_0=2*np.eye(5),affine=True),)
-
-    def params_close(self,d1,d2):
-        return np.linalg.norm(d1.A-d2.A) < 0.1 and np.linalg.norm(d1.sigma-d2.sigma) < 0.1
-
-    @property
-    def big_data_size(self):
-        return 40000
-
-    def geweke_statistics(self,d,data):
-        return np.concatenate((d.A.flatten(),np.diag(d.sigma)))
-
-    def geweke_numerical_slice(self,d,setting_idx):
-        return slice(0,d.A.flatten().shape[0])
-
-    @property
-    def geweke_ntrials(self):
-        return 1  # because it's slow
-
-    @property
-    def geweke_num_statistic_fails_to_tolerate(self):
-        return 0
-
-    ### class-specific
-
-    def test_affine_loglike(self):
-        A = np.random.randn(2,3)
-        b = np.random.randn(2)
-        sigma = np.random.randn(2,2); sigma = sigma.dot(sigma.T)
-        data = np.random.randn(25,5)
-
-        d1 = self.distribution_class(A=np.hstack((A,b[:,None])),sigma=sigma,affine=True)
-        d2 = self.distribution_class(A=A,sigma=sigma)
-
-        likes1 = d1.log_likelihood(data)
-        data[:,-2:] -= b
-        likes2 = d2.log_likelihood(data)
-
-        assert np.allclose(likes1,likes2)
-
-    def test_loglike_against_gaussian(self):
-        mu = np.random.randn(3)
-        A = mu[:,None]
-        sigma = np.random.randn(3,3); sigma = sigma.dot(sigma.T)
-
-        data = np.random.randn(25,mu.shape[0])
-
-        d1 = distributions.Gaussian(mu=mu,sigma=sigma)
-        likes1 = d1.log_likelihood(data)
-
-        d2 = self.distribution_class(A=A,sigma=sigma)
-        likes2 = d2.log_likelihood(np.hstack((np.ones((data.shape[0],1)),data)))
-
-        assert np.allclose(likes1,likes2)
-
-@attr('regressionnonconj')
-class TestRegressionNonconj(BasicTester,BigDataGibbsTester,GewekeGibbsTester):
-    @property
-    def distribution_class(self):
-        return distributions.RegressionNonconj
-
-    @property
-    def hyperparameter_settings(self):
-        def make_hyps(m,n):
-            return dict(nu_0=m+1, S_0=m*np.eye(m),
-                        M_0=np.zeros((m,n)), Sigma_0=np.eye(m*n))
-        return [make_hyps(m,n) for m, n in [(2,3), (3,2)]]
-
-    def params_close(self,d1,d2):
-        return np.linalg.norm(d1.A-d2.A) < 0.1 and np.linalg.norm(d1.sigma-d2.sigma) < 0.1
-
-    def geweke_statistics(self,d,data):
-        return np.concatenate((d.A.flatten(),np.diag(d.sigma)))
-
-    def geweke_numerical_slices(self,d,setting_idx):
-        return slice(0,d.A.flatten().shape[0])
-
-    @property
-    def geweke_ntrials(self):
-        return 1  # because it's slow
-
-    @property
-    def geweke_num_statistic_fails_to_tolerate(self):
-        return 0
-
-    @property
-    def geweke_resample_kwargs(self):
-        return dict(niter=2)
 
 @attr('gaussian')
 class TestGaussian(BigDataGibbsTester,GewekeGibbsTester):
@@ -280,6 +44,7 @@ class TestGaussian(BigDataGibbsTester,GewekeGibbsTester):
     def test_empirical_bayes(self):
         data = np.random.randn(50,2)
         distributions.Gaussian().empirical_bayes(data).hypparams
+
 
 @attr('diagonalgaussian')
 class TestDiagonalGaussian(BigDataGibbsTester,GewekeGibbsTester,BasicTester):
@@ -341,6 +106,7 @@ class TestDiagonalGaussian(BigDataGibbsTester,GewekeGibbsTester,BasicTester):
         pdf2 = stats.norm.logpdf(data,loc=mu,scale=np.sqrt(sigmas)).sum(1)
 
         assert np.allclose(pdf1,pdf2)
+
 
 @attr('diagonalgaussiannonconj')
 class TestDiagonalGaussianNonconjNIG(BigDataGibbsTester,GewekeGibbsTester,BasicTester):
@@ -407,6 +173,7 @@ class TestDiagonalGaussianNonconjNIG(BigDataGibbsTester,GewekeGibbsTester,BasicT
 
         assert np.allclose(pdf1,pdf2)
 
+
 @attr('gaussianfixedmean')
 class TestGaussianFixedMean(BigDataGibbsTester,GewekeGibbsTester):
     @property
@@ -435,6 +202,7 @@ class TestGaussianFixedMean(BigDataGibbsTester,GewekeGibbsTester):
     def geweke_pval(self):
         return 0.05
 
+
 @attr('gaussianfixedcov')
 class TestGaussianFixedCov(BigDataGibbsTester,GewekeGibbsTester):
     @property
@@ -462,6 +230,7 @@ class TestGaussianFixedCov(BigDataGibbsTester,GewekeGibbsTester):
     @property
     def geweke_pval(self):
         return 0.05
+
 
 @attr('gaussiannonconj')
 class TestGaussianNonConj(BigDataGibbsTester,GewekeGibbsTester):
@@ -498,6 +267,7 @@ class TestGaussianNonConj(BigDataGibbsTester,GewekeGibbsTester):
     def resample_kwargs(self):
         return dict(niter=10)
 
+
 @attr('scalargaussiannix')
 class TestScalarGaussianNIX(BigDataGibbsTester,GewekeGibbsTester):
     @property
@@ -529,6 +299,7 @@ class TestScalarGaussianNIX(BigDataGibbsTester,GewekeGibbsTester):
     def geweke_numerical_slice(self,d,setting_idx):
         return slice(0,1)
 
+
 @attr('scalargaussiannonconjnix')
 class TestScalarGaussianNonconjNIX(BigDataGibbsTester,GewekeGibbsTester):
     @property
@@ -559,33 +330,3 @@ class TestScalarGaussianNonconjNIX(BigDataGibbsTester,GewekeGibbsTester):
 
     def geweke_numerical_slice(self,d,setting_idx):
         return slice(0,1)
-
-@attr('GammaCompoundDirichlet')
-class TestDirichletCompoundGamma(object):
-    def test_weaklimit(self):
-        a = distributions.CRP(10,1)
-        b = distributions.GammaCompoundDirichlet(1000,10,1)
-
-        a.concentration = b.concentration = 10.
-
-        from matplotlib import pyplot as plt
-
-        plt.figure()
-        crp_counts = np.zeros(10)
-        gcd_counts = np.zeros(10)
-        for itr in range(500):
-            crp_rvs = np.sort(a.rvs(25))[::-1][:10]
-            crp_counts[:len(crp_rvs)] += crp_rvs
-            gcd_counts += np.sort(b.rvs(25))[::-1][:10]
-
-        plt.plot(crp_counts/200,gcd_counts/200,'bx-')
-        plt.xlim(0,10)
-        plt.ylim(0,10)
-
-        import os
-        from pybasicbayes.testing.mixins import mkdir
-        figpath = os.path.join(os.path.dirname(__file__),'figures',
-                self.__class__.__name__,'weaklimittest.pdf')
-        mkdir(os.path.dirname(figpath))
-        plt.savefig(figpath)
-
