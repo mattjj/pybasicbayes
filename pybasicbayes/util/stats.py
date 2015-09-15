@@ -10,7 +10,7 @@ import scipy.linalg
 from scipy.misc import logsumexp
 from numpy.core.umath_tests import inner1d
 
-from .general import any_none
+from .general import any_none, blockarray
 
 ### data abstraction
 
@@ -218,7 +218,7 @@ def sample_mniw(nu, S, M, K=None, Kinv=None):
     else:
         return sample_mn(M=M,U=Sigma,Vinv=Kinv), Sigma
 
-def mniw_expectedstats(nu, S, M, K=None, Kinv=None):
+def mniw_expectedstats(nu, S, M, K=None, Kinv=None, packed=True):
     # NOTE: could speed this up with chol factorizing S, not re-solving
     assert (K is None) ^ (Kinv is None)
     m = M.shape[0]

@@ -9,7 +9,7 @@ from numpy import newaxis as na
 from pybasicbayes.abstractions import GibbsSampling, MaxLikelihood, \
     MeanField, MeanFieldSVI
 from pybasicbayes.util.stats import sample_gaussian, sample_mniw, \
-    sample_invwishart, getdatasize, mniw_expectedstats
+    sample_invwishart, getdatasize, mniw_expectedstats, mniw_log_partitionfunction
 from pybasicbayes.util.general import blockarray, inv_psd, cumsum, \
     all_none, any_none
 
@@ -210,6 +210,7 @@ class Regression(GibbsSampling, MeanField, MaxLikelihood):
         if stats is None:
             stats = self._get_weighted_statistics(data, weights)
         self.mf_natural_hypparam = self.natural_hypparam + stats
+        self._resample_from_mf()
 
     def meanfield_sgdstep(self, data, weights, prob, stepsize, stats=None):
         if stats is None:
@@ -219,7 +220,6 @@ class Regression(GibbsSampling, MeanField, MaxLikelihood):
             * (self.natural_hypparam + 1./prob * stats)
 
     def expected_log_likelihood(self, xy):
-        # TODO unify with log_likelihood
         D = self.D_out
         x, y = xy[:,:-D], xy[:,-D:]
 
@@ -247,10 +247,31 @@ class Regression(GibbsSampling, MeanField, MaxLikelihood):
         return out
 
     def get_vlb(self):
-        return 0.  # TODO
+        out = 0.
+
+        E_Sigmainv, E_Sigmainv_A, E_AT_Sigmainv_A, E_logdetSigmainv = \
+            self._mf_expected_statistics()
+        A, B, C, d = self.natural_hypparam - self.mf_natural_hypparam
+        out += -1./2 * np.trace(A.dot(E_Sigmainv)) \
+            + np.trace(B.T.dot(E_Sigmainv_A)) \
+            - 1./2 * np.trace(C.dot(E_AT_Sigmainv_A)) \
+            + 1./2 * d * E_logdetSigmainv
+
+        Z = mniw_log_partitionfunction(*self._natural_to_standard(
+            self.natural_hypparam))
+        Z_mf = mniw_log_partitionfunction(*self._natural_to_standard(
+            self.mf_natural_hypparam))
+        out -= Z - Z_mf
+
+        return out
+
 
     def _mf_expected_statistics(self):
         return mniw_expectedstats(
+            *self._natural_to_standard(self.mf_natural_hypparam))
+
+    def _resample_from_mf(self):
+        self.A, self.sigma = sample_mniw(
             *self._natural_to_standard(self.mf_natural_hypparam))
 
 
