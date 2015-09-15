@@ -249,6 +249,7 @@ class Regression(GibbsSampling, MeanField, MaxLikelihood):
     def get_vlb(self):
         out = 0.
 
+        # bilinear term
         E_Sigmainv, E_Sigmainv_A, E_AT_Sigmainv_A, E_logdetSigmainv = \
             self._mf_expected_statistics()
         A, B, C, d = self.natural_hypparam - self.mf_natural_hypparam
@@ -257,6 +258,7 @@ class Regression(GibbsSampling, MeanField, MaxLikelihood):
             - 1./2 * np.trace(C.dot(E_AT_Sigmainv_A)) \
             + 1./2 * d * E_logdetSigmainv
 
+        # log normalizer term
         Z = mniw_log_partitionfunction(*self._natural_to_standard(
             self.natural_hypparam))
         Z_mf = mniw_log_partitionfunction(*self._natural_to_standard(
@@ -264,7 +266,6 @@ class Regression(GibbsSampling, MeanField, MaxLikelihood):
         out -= Z - Z_mf
 
         return out
-
 
     def _mf_expected_statistics(self):
         return mniw_expectedstats(
