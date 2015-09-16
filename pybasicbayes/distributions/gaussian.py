@@ -283,12 +283,12 @@ class Gaussian(
             self.natural_hypparam + self._get_weighted_statistics(
                 data, weights, D)
 
-    def meanfield_sgdstep(self,data,weights,minibatchfrac,stepsize):
+    def meanfield_sgdstep(self,data,weights,prob,stepsize):
         D = len(self.mu_0)
         self.mf_natural_hypparam = \
             (1-stepsize) * self.mf_natural_hypparam + stepsize * (
                 self.natural_hypparam
-                + 1./minibatchfrac
+                + 1./prob
                 * self._get_weighted_statistics(data,weights,D))
 
     @property
@@ -857,11 +857,11 @@ class DiagonalGaussian(_GaussianBase,GibbsSampling,MaxLikelihood,MeanField,Tempe
         self.mf_natural_hypparam = \
             self.natural_hypparam + self._get_weighted_statistics(data,weights)
 
-    def meanfield_sgdstep(self,data,weights,minibatchfrac,stepsize):
+    def meanfield_sgdstep(self,data,weights,prob,stepsize):
         self.mf_natural_hypparam = \
             (1-stepsize) * self.mf_natural_hypparam + stepsize * (
                 self.natural_hypparam
-                + 1./minibatchfrac * self._get_weighted_statistics(data,weights))
+                + 1./prob * self._get_weighted_statistics(data,weights))
 
     def get_vlb(self):
         natparam_diff = self.natural_hypparam - self.mf_natural_hypparam
@@ -1338,7 +1338,7 @@ class ScalarGaussianNonconjNIG(_ScalarGaussianBase, MeanField, MeanFieldSVI):
 
         return p_mu_avgengy + q_mu_entropy + p_sigmasq_avgengy + q_sigmasq_entropy
 
-    def meanfield_sgdstep(self,data,weights,minibatchfrac,stepsize):
+    def meanfield_sgdstep(self,data,weights,prob,stepsize):
         # like meanfieldupdate except we step the factors simultaneously
 
         # NOTE: unlike the fully conjugate case, there are interaction terms, so
@@ -1349,11 +1349,11 @@ class ScalarGaussianNonconjNIG(_ScalarGaussianBase, MeanField, MeanFieldSVI):
 
 
         # form new natural hyperparameters as if doing a batch update
-        alpha_new = self.alpha_0 + 1./minibatchfrac * 1./2*neff
-        beta_new = self.beta_0 + 1./minibatchfrac * 1./2*(ysq + neff*Emu**2 - 2*Emu*y)
+        alpha_new = self.alpha_0 + 1./prob * 1./2*neff
+        beta_new = self.beta_0 + 1./prob * 1./2*(ysq + neff*Emu**2 - 2*Emu*y)
 
-        h_new = self.h_0 + 1./minibatchfrac * Esigmasqinv * y
-        J_new = self.J_0 + 1./minibatchfrac * Esigmasqinv * neff
+        h_new = self.h_0 + 1./prob * Esigmasqinv * y
+        J_new = self.J_0 + 1./prob * Esigmasqinv * neff
 
 
         # take a step

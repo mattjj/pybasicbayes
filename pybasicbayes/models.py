@@ -430,7 +430,7 @@ class Mixture(ModelGibbsSampling, ModelMeanField, ModelEM, ModelParallelTemperin
 
     ### SVI
 
-    def meanfield_sgdstep(self,minibatch,minibatchfrac,stepsize,**kwargs):
+    def meanfield_sgdstep(self,minibatch,prob,stepsize,**kwargs):
         minibatch = minibatch if isinstance(minibatch,list) else [minibatch]
         mb_labels_list = []
         for data in minibatch:
@@ -440,23 +440,23 @@ class Mixture(ModelGibbsSampling, ModelMeanField, ModelEM, ModelParallelTemperin
         for l in mb_labels_list:
             l.meanfieldupdate()
 
-        self._meanfield_sgdstep_parameters(mb_labels_list,minibatchfrac,stepsize)
+        self._meanfield_sgdstep_parameters(mb_labels_list,prob,stepsize)
 
-    def _meanfield_sgdstep_parameters(self,mb_labels_list,minibatchfrac,stepsize):
-        self._meanfield_sgdstep_components(mb_labels_list,minibatchfrac,stepsize)
-        self._meanfield_sgdstep_weights(mb_labels_list,minibatchfrac,stepsize)
+    def _meanfield_sgdstep_parameters(self,mb_labels_list,prob,stepsize):
+        self._meanfield_sgdstep_components(mb_labels_list,prob,stepsize)
+        self._meanfield_sgdstep_weights(mb_labels_list,prob,stepsize)
 
-    def _meanfield_sgdstep_components(self,mb_labels_list,minibatchfrac,stepsize):
+    def _meanfield_sgdstep_components(self,mb_labels_list,prob,stepsize):
         for idx, c in enumerate(self.components):
             c.meanfield_sgdstep(
                     [l.data for l in mb_labels_list],
                     [l.r[:,idx] for l in mb_labels_list],
-                    minibatchfrac,stepsize)
+                    prob,stepsize)
 
-    def _meanfield_sgdstep_weights(self,mb_labels_list,minibatchfrac,stepsize):
+    def _meanfield_sgdstep_weights(self,mb_labels_list,prob,stepsize):
         self.weights.meanfield_sgdstep(
                 None,[l.r for l in mb_labels_list],
-                minibatchfrac,stepsize)
+                prob,stepsize)
 
     ### EM
 
@@ -686,7 +686,7 @@ class MixtureDistribution(Mixture, GibbsSampling, MeanField, MeanFieldSVI, Distr
 
         self.labels_list = old_labels
 
-    def meanfield_sgdstep(self,minibatch,weights,minibatchfrac,stepsize):
+    def meanfield_sgdstep(self,minibatch,weights,prob,stepsize):
         # NOTE: difference from parent's method is the inclusion of weights
         if not isinstance(minibatch,list):
             minibatch = [minibatch]
@@ -700,7 +700,7 @@ class MixtureDistribution(Mixture, GibbsSampling, MeanField, MeanFieldSVI, Distr
             l.meanfieldupdate()
             l.r *= w[:,na] # here's where weights are used
 
-        self._meanfield_sgdstep_parameters(mb_labels_list,minibatchfrac,stepsize)
+        self._meanfield_sgdstep_parameters(mb_labels_list,prob,stepsize)
 
     def plot(self,data=[],color='b',label='',plot_params=True,indices=None):
         # TODO handle indices for 1D

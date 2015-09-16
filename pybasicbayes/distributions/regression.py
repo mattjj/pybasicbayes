@@ -76,6 +76,7 @@ class Regression(GibbsSampling, MeanField, MaxLikelihood):
 
         # numerical padding here...
         K += 1e-8*np.eye(K.shape[0])
+        S += 1e-8*np.eye(S.shape[0])
         assert np.all(0 < np.linalg.eigvalsh(S))
         assert np.all(0 < np.linalg.eigvalsh(K))
 
@@ -174,6 +175,7 @@ class Regression(GibbsSampling, MeanField, MaxLikelihood):
         stats = self._get_statistics(data) if stats is None else stats
         self.A, self.sigma = sample_mniw(
             *self._natural_to_standard(self.natural_hypparam + stats))
+        self._initialize_mean_field()
 
     ### Max likelihood
 
@@ -201,16 +203,17 @@ class Regression(GibbsSampling, MeanField, MaxLikelihood):
         assert np.allclose(self.sigma,self.sigma.T)
         assert np.all(np.linalg.eigvalsh(self.sigma) > 0.)
 
+        self._initialize_mean_field()
+
         return self
 
     ### Mean Field
 
     def meanfieldupdate(self, data=None, weights=None, stats=None):
-        assert stats is not None or (data is not None and weights is not None)
         if stats is None:
             stats = self._get_weighted_statistics(data, weights)
         self.mf_natural_hypparam = self.natural_hypparam + stats
-        self.resample_from_mf()
+        self._set_params_from_mf()
 
     def meanfield_sgdstep(self, data, weights, prob, stepsize, stats=None):
         if stats is None:
@@ -218,6 +221,7 @@ class Regression(GibbsSampling, MeanField, MaxLikelihood):
         self.mf_natural_hypparam = \
             (1-stepsize) * self.mf_natural_hypparam + stepsize \
             * (self.natural_hypparam + 1./prob * stats)
+        self._set_params_from_mf()
 
     def expected_log_likelihood(self, xy):
         D = self.D_out
@@ -274,6 +278,16 @@ class Regression(GibbsSampling, MeanField, MaxLikelihood):
     def resample_from_mf(self):
         self.A, self.sigma = sample_mniw(
             *self._natural_to_standard(self.mf_natural_hypparam))
+
+    def _set_params_from_mf(self):
+        nu, S, M, K = self._natural_to_standard(self.mf_natural_hypparam)
+        self.A, self.sigma = M, S / nu
+
+    def _initialize_mean_field(self):
+        A, Sigma = self.A, self.sigma
+        nu, S, M, K = self._natural_to_standard(self.natural_hypparam)
+        self.mf_natural_hypparam = self._standard_to_natural(
+            nu, nu*Sigma, A, K)
 
 
 class RegressionNonconj(Regression):

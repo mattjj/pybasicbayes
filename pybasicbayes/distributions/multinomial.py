@@ -168,11 +168,11 @@ class Categorical(GibbsSampling, MeanField, MeanFieldSVI, MaxLikelihood, MAP):
 
     ### Mean Field SGD
 
-    def meanfield_sgdstep(self,data,weights,minibatchfrac,stepsize):
+    def meanfield_sgdstep(self,data,weights,prob,stepsize):
         self._alpha_mf = \
             (1-stepsize) * self._alpha_mf + stepsize * (
                 self.alphav_0
-                + 1./minibatchfrac * self._get_weighted_statistics(data,weights))
+                + 1./prob * self._get_weighted_statistics(data,weights))
         self.weights = self._alpha_mf / self._alpha_mf.sum()  # for plotting
         return self
 

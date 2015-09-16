@@ -210,10 +210,10 @@ class NegativeBinomialFixedR(_NegativeBinomialBase, GibbsSampling, MeanField, Me
                 self._posterior_hypparams(*self._get_weighted_statistics(data,weights))
         self.p = self.alpha_mf / (self.alpha_mf + self.beta_mf)
 
-    def meanfield_sgdstep(self,data,weights,minibatchfrac,stepsize):
+    def meanfield_sgdstep(self,data,weights,prob,stepsize):
         alpha_new, beta_new = \
                 self._posterior_hypparams(*(
-                    1./minibatchfrac * self._get_weighted_statistics(data,weights)))
+                    1./prob * self._get_weighted_statistics(data,weights)))
         self.alpha_mf = (1-stepsize)*self.alpha_mf + stepsize*alpha_new
         self.beta_mf = (1-stepsize)*self.beta_mf + stepsize*beta_new
         self.p = self.alpha_mf / (self.alpha_mf + self.beta_mf)
@@ -398,16 +398,16 @@ class NegativeBinomialIntegerR2(_NegativeBinomialBase,MeanField,MeanFieldSVI,Gib
         return sum(np.exp(rho-lognorm)*d.expected_log_likelihood(x)
                 for rho,d in zip(self.rho_mf,self._fixedr_distns))
 
-    def meanfield_sgdstep(self,data,weights,minibatchfrac,stepsize):
+    def meanfield_sgdstep(self,data,weights,prob,stepsize):
         rho_mf_orig = self.rho_mf.copy()
         if isinstance(data,np.ndarray):
-            self._update_rho_mf(data,minibatchfrac*weights)
+            self._update_rho_mf(data,prob*weights)
         else:
-            self._update_rho_mf(data,[w*minibatchfrac for w in weights])
+            self._update_rho_mf(data,[w*prob for w in weights])
         rho_mf_new = self.rho_mf
 
         for d in self._fixedr_distns:
-            d.meanfield_sgdstep(data,weights,minibatchfrac,stepsize)
+            d.meanfield_sgdstep(data,weights,prob,stepsize)
 
         self.rho_mf = (1-stepsize)*rho_mf_orig + stepsize*rho_mf_new
 

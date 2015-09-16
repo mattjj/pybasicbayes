@@ -108,11 +108,11 @@ class Poisson(GibbsSampling, Collapsed, MaxLikelihood, MeanField, MeanFieldSVI):
                 self.natural_hypparam + self._get_weighted_statistics(data,weights)
         self.lmbda = self.mf_alpha_0 / self.mf_beta_0
 
-    def meanfield_sgdstep(self,data,weights,minibatchfrac,stepsize):
+    def meanfield_sgdstep(self,data,weights,prob,stepsize):
         self.mf_natural_hypparam = \
                 (1-stepsize) * self.mf_natural_hypparam + stepsize * (
                         self.natural_hypparam
-                        + 1./minibatchfrac * self._get_weighted_statistics(data,weights))
+                        + 1./prob * self._get_weighted_statistics(data,weights))
 
     def get_vlb(self):
         return (self.natural_hypparam - self.mf_natural_hypparam).dot(self._mf_expected_statistics) \

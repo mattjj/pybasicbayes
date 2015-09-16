@@ -76,7 +76,7 @@ class MeanField(with_metaclass(abc.ABCMeta, BayesianDistribution)):
 
 class MeanFieldSVI(with_metaclass(abc.ABCMeta, BayesianDistribution)):
     @abc.abstractmethod
-    def meanfield_sgdstep(self,expected_suff_stats,minibatchfrac,stepsize):
+    def meanfield_sgdstep(self,expected_suff_stats,prob,stepsize):
         pass
 
 class Collapsed(with_metaclass(abc.ABCMeta, BayesianDistribution)):
@@ -189,7 +189,7 @@ class ModelMeanField(with_metaclass(abc.ABCMeta, Model)):
 
 class ModelMeanFieldSVI(with_metaclass(abc.ABCMeta, Model)):
     @abc.abstractmethod
-    def meanfield_sgdstep(self,minibatch,minibatchfrac,stepsize):
+    def meanfield_sgdstep(self,minibatch,prob,stepsize):
         pass
 
 class _EMBase(with_metaclass(abc.ABCMeta, Model)):

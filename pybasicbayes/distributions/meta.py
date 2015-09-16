@@ -108,14 +108,14 @@ class ProductDistribution(
 
     ### SVI
 
-    def meanfield_sgdstep(self,data,weights,minibatchfrac,stepsize):
+    def meanfield_sgdstep(self,data,weights,prob,stepsize):
         assert isinstance(data,(np.ndarray,list))
         if isinstance(data,np.ndarray):
             for distn,sl in zip(self._distns,self._slices):
                 distn.meanfield_sgdstep(
-                    data[...,sl],weights,minibatchfrac,stepsize)
+                    data[...,sl],weights,prob,stepsize)
         else:
             for distn,sl in zip(self._distns,self._slices):
                 distn.meanfield_sgdstep(
-                    [d[...,sl] for d in data],weights,minibatchfrac,stepsize)
+                    [d[...,sl] for d in data],weights,prob,stepsize)
         return self
