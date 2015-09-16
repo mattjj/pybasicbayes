@@ -264,7 +264,8 @@ class Regression(GibbsSampling, MeanField, MaxLikelihood):
         assert xy is None ^ stats is None
 
         E_Sigmainv, E_Sigmainv_A, E_AT_Sigmainv_A, E_logdetSigmainv = \
-            mniw_expectedstats(*self._natural_to_standard(self.mf_natural_hypparam))
+            mniw_expectedstats(
+                *self._natural_to_standard(self.mf_natural_hypparam))
 
         if xy is not None:
             D = self.D_out
