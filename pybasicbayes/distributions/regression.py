@@ -260,30 +260,40 @@ class Regression(GibbsSampling, MeanField, MaxLikelihood):
             * (self.natural_hypparam + 1./prob * stats)
         self._set_params_from_mf()
 
-    def expected_log_likelihood(self, xy):
-        D = self.D_out
-        x, y = xy[:,:-D], xy[:,-D:]
+    def expected_log_likelihood(self, xy=None, stats=None):
+        assert xy is None ^ stats is None
 
         E_Sigmainv, E_Sigmainv_A, E_AT_Sigmainv_A, E_logdetSigmainv = \
-            self._mf_expected_statistics()
+            mniw_expectedstats(*self._natural_to_standard(self.mf_natural_hypparam))
 
-        if self.affine:
-            E_Sigmainv_A, E_Sigmainv_b = \
-                E_Sigmainv_A[:,:-1], E_Sigmainv_A[:,-1]
-            E_AT_Sigmainv_A, E_AT_Sigmainv_b, E_bT_Sigmainv_b = \
-                E_AT_Sigmainv_A[:-1,:-1], E_AT_Sigmainv_A[:-1,-1], \
-                E_AT_Sigmainv_A[-1,-1]
+        if xy is not None:
+            D = self.D_out
+            x, y = xy[:,:-D], xy[:,-D:]
 
-        parammat = -1./2 * blockarray([
-            [E_AT_Sigmainv_A, -E_Sigmainv_A.T],
-            [-E_Sigmainv_A, E_Sigmainv]])
-        out = np.einsum('ni,ni->n', xy.dot(parammat), xy)
-        out -= D/2*np.log(2*np.pi) + E_logdetSigmainv
+            if self.affine:
+                E_Sigmainv_A, E_Sigmainv_b = \
+                    E_Sigmainv_A[:,:-1], E_Sigmainv_A[:,-1]
+                E_AT_Sigmainv_A, E_AT_Sigmainv_b, E_bT_Sigmainv_b = \
+                    E_AT_Sigmainv_A[:-1,:-1], E_AT_Sigmainv_A[:-1,-1], \
+                    E_AT_Sigmainv_A[-1,-1]
 
-        if self.affine:
-            out += y.dot(E_Sigmainv_b)
-            out -= x.dot(E_AT_Sigmainv_b)
-            out -= 1./2 * E_bT_Sigmainv_b
+            parammat = -1./2 * blockarray([
+                [E_AT_Sigmainv_A, -E_Sigmainv_A.T],
+                [-E_Sigmainv_A, E_Sigmainv]])
+            out = np.einsum('ni,ni->n', xy.dot(parammat), xy)
+            out -= D/2*np.log(2*np.pi) + 1./2*E_logdetSigmainv
+
+            if self.affine:
+                out += y.dot(E_Sigmainv_b)
+                out -= x.dot(E_AT_Sigmainv_b)
+                out -= 1./2 * E_bT_Sigmainv_b
+        else:
+            yyT, yxT, xxT, n = stats
+
+            out = -1./2 * np.einsum('nij,nij->n', E_AT_Sigmainv_A, xxT)
+            out += np.einsum('nij,nij->n', E_Sigmainv_A, yxT)
+            out -= 1./2 * np.einsum('nij,nij->n', E_Sigmainv, yyT)
+            out -= D/2*np.log(2*np.pi) + n/2.*E_logdetSigmainv
 
         return out
 
@@ -292,7 +302,7 @@ class Regression(GibbsSampling, MeanField, MaxLikelihood):
 
         # bilinear term
         E_Sigmainv, E_Sigmainv_A, E_AT_Sigmainv_A, E_logdetSigmainv = \
-            self._mf_expected_statistics()
+            mniw_expectedstats(*self._natural_to_standard(self.mf_natural_hypparam))
         A, B, C, d = self.natural_hypparam - self.mf_natural_hypparam
         out += -1./2 * np.trace(A.dot(E_Sigmainv)) \
             + np.trace(B.T.dot(E_Sigmainv_A)) \
@@ -307,10 +317,6 @@ class Regression(GibbsSampling, MeanField, MaxLikelihood):
         out -= Z - Z_mf
 
         return out
-
-    def _mf_expected_statistics(self):
-        return mniw_expectedstats(
-            *self._natural_to_standard(self.mf_natural_hypparam))
 
     def resample_from_mf(self):
         self.A, self.sigma = sample_mniw(
