@@ -290,7 +290,7 @@ class Regression(GibbsSampling, MeanField, MaxLikelihood):
                 out -= 1./2 * E_bT_Sigmainv_b
         else:
             yyT, yxT, xxT, n = stats
-            contract = 'nij,nij->n' if yyT.ndim == 3 else 'ij,ij->'
+            contract = 'ij,nij->n' if yyT.ndim == 3 else 'ij,ij->'
 
             out = -1./2 * np.einsum(contract, E_AT_Sigmainv_A, xxT)
             out += np.einsum(contract, E_Sigmainv_A, yxT)

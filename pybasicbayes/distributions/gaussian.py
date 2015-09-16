@@ -23,7 +23,7 @@ from pybasicbayes.distributions.meta import _FixedParamsMixin
 from pybasicbayes.util.stats import sample_niw, invwishart_entropy, \
     sample_invwishart, invwishart_log_partitionfunction, \
     getdatasize, flattendata, getdatadimension, \
-    combinedata, multivariate_t_loglik, gi
+    combinedata, multivariate_t_loglik, gi, niw_expectedstats
 
 weps = 1e-12
 
@@ -337,15 +337,32 @@ class Gaussian(
 
         return p_avgengy + q_entropy
 
-    def expected_log_likelihood(self,x):
-        mu_n, kappa_n, nu_n = self.mu_mf, self.kappa_mf, self.nu_mf
-        D = len(mu_n)
-        x = np.reshape(x,(-1,D)) - mu_n  # x is now centered
-        xs = np.linalg.solve(self.sigma_mf_chol,x.T)
+    def expected_log_likelihood(self, x=None, stats=None):
+        assert x is None ^ stats is None
 
-        # see Eqs. 10.64, 10.67, and 10.71 in Bishop
-        return self._loglmbdatilde()/2 - D/(2*kappa_n) - nu_n/2 * \
-            inner1d(xs.T,xs.T) - D/2*np.log(2*np.pi)
+        if x is not None:
+            mu_n, kappa_n, nu_n = self.mu_mf, self.kappa_mf, self.nu_mf
+            D = len(mu_n)
+            x = np.reshape(x,(-1,D)) - mu_n  # x is now centered
+            xs = np.linalg.solve(self.sigma_mf_chol,x.T)
+
+            # see Eqs. 10.64, 10.67, and 10.71 in Bishop
+            return self._loglmbdatilde()/2 - D/(2*kappa_n) - nu_n/2 * \
+                inner1d(xs.T,xs.T) - D/2*np.log(2*np.pi)
+        else:
+            D = self.mu_mf.shape[0]
+
+            E_J, E_h, E_muJmuT, E_logdetJ = \
+                niw_expectedstats(
+                    self.nu_mf, self.sigma_mf, self.mu_mf, self.kappa_mf)
+            parammat = np.zerps((D+2,D+2))
+            parammat[:D,:D] = E_J
+            parammat[:D,-2] = parammat[-2,:D] = -E_h
+            parammat[-2,-2] = E_muJmuT
+            parammat[-1,-1] = -E_logdetJ
+
+            contract = 'ij,nij->n' if stats.ndim == 3 else 'ij,ij->'
+            return np.einsum(contract, parammat, stats) - D/2.*np.log(2*np.pi)
 
     def _loglmbdatilde(self):
         # see Eq. 10.65 in Bishop
