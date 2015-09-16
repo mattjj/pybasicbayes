@@ -85,10 +85,28 @@ class Regression(GibbsSampling, MeanField, MaxLikelihood):
     ### getting statistics
 
     def _get_statistics(self,data):
+        assert isinstance(data, (list, tuple, np.ndarray))
         if isinstance(data,list):
             return sum((self._get_statistics(d) for d in data),
                        self._empty_statistics())
+        elif isinstance(data, tuple):
+            x, y = data
+            bad = np.isnan(x).any(1) | np.isnan(y).any(1)
+            x, y = x[~bad], y[~bad]
+
+            n, D = y.shape
+
+            xxT, yxT, yyT = \
+                x.T.dot(x), y.T.dot(x), y.T.dot(y)
+
+            if self.affine:
+                x, y = x.sum(0), y.sum(0)
+                xxT = blockarray([[xxT,x[:,na]],[x[na,:],np.atleast_2d(n)]])
+                yxT = np.hstack((yxT,y[:,na]))
+
+            return np.array([yyT, yxT, xxT, n])
         else:
+            # data passed in like np.hstack((x, y)), handle more efficiently
             data = data[~np.isnan(data).any(1)]
             n, D = data.shape[0], self.D_out
 
@@ -105,10 +123,29 @@ class Regression(GibbsSampling, MeanField, MaxLikelihood):
             return np.array([yyT, yxT, xxT, n])
 
     def _get_weighted_statistics(self,data,weights):
+        assert isinstance(data, (list, tuple, np.ndarray))
         if isinstance(data,list):
             return sum((self._get_statistics(d) for d in data),
                        self._empty_statistics())
+        elif isinstance(data, tuple):
+            x, y = data
+            bad = np.isnan(x).any(1) | np.isnan(y).any(1)
+            x, y, weights = x[~bad], y[~bad], weights[~bad]
+
+            n, D = weights.sum(), y.shape[1]
+            wx = weights[:,na]*x
+
+            xxT, yxT, yyT = \
+                x.T.dot(wx), y.T.dot(wx), y.T.dot(weights[:,na]*y)
+
+            if self.affine:
+                x, y = weights.dot(x), weights.dot(y)
+                xxT = blockarray([[xxT,x[:,na]],[x[na,:],np.atleast_2d(n)]])
+                yxT = np.hstack((yxT,y[:,na]))
+
+            return np.array([yyT, yxT, xxT, n])
         else:
+            # data passed in like np.hstack((x, y)), handle more efficiently
             gi = ~np.isnan(data).any(1)
             data, weights = data[gi], weights[gi]
             n, D = weights.sum(), self.D_out
