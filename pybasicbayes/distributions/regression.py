@@ -106,7 +106,7 @@ class Regression(GibbsSampling, MeanField, MaxLikelihood):
 
             return np.array([yyT, yxT, xxT, n])
         else:
-            # data passed in like np.hstack((x, y)), handle more efficiently
+            # data passed in like np.hstack((x, y))
             data = data[~np.isnan(data).any(1)]
             n, D = data.shape[0], self.D_out
 
@@ -145,7 +145,7 @@ class Regression(GibbsSampling, MeanField, MaxLikelihood):
 
             return np.array([yyT, yxT, xxT, n])
         else:
-            # data passed in like np.hstack((x, y)), handle more efficiently
+            # data passed in like np.hstack((x, y))
             gi = ~np.isnan(data).any(1)
             data, weights = data[gi], weights[gi]
             n, D = weights.sum(), self.D_out
@@ -171,8 +171,9 @@ class Regression(GibbsSampling, MeanField, MaxLikelihood):
     ### distribution
 
     def log_likelihood(self,xy):
+        assert isinstance(xy,(tuple,np.ndarray))
         A, sigma, D = self.A, self.sigma, self.D_out
-        x, y = xy[:,:-D], xy[:,-D:]
+        x, y = (xy[:,:-D], xy[:,-D:]) if isinstance(xy,np.ndarray) else xy
 
         if self.affine:
             A, b = A[:,:-1], A[:,-1]
@@ -181,7 +182,15 @@ class Regression(GibbsSampling, MeanField, MaxLikelihood):
         parammat = -1./2 * blockarray([
             [A.T.dot(sigma_inv).dot(A), -A.T.dot(sigma_inv)],
             [-sigma_inv.dot(A), sigma_inv]])
-        out = np.einsum('ni,ni->n',xy.dot(parammat),xy)
+
+        contract = 'ni,ni->n' if x.ndim == 2 else 'i,i->'
+        if isinstance(xy, np.ndarray):
+            out = np.einsum(contract,xy.dot(parammat),xy)
+        else:
+            out = np.einsum(contract,x.dot(parammat[:-D,:-D]),x)
+            out += np.einsum(contract,y.dot(parammat[-D:,-D:]),y)
+            out += 2*np.einsum(contract,x.dot(parammat[:-D,-D:]),y)
+
         out -= D/2*np.log(2*np.pi) + np.log(np.diag(L)).sum()
 
         if self.affine:
