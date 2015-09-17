@@ -338,7 +338,7 @@ class Gaussian(
         return p_avgengy + q_entropy
 
     def expected_log_likelihood(self, x=None, stats=None):
-        assert x is None ^ stats is None
+        assert (x is None) ^ (stats is None)
 
         if x is not None:
             mu_n, kappa_n, nu_n = self.mu_mf, self.kappa_mf, self.nu_mf
@@ -355,14 +355,16 @@ class Gaussian(
             E_J, E_h, E_muJmuT, E_logdetJ = \
                 niw_expectedstats(
                     self.nu_mf, self.sigma_mf, self.mu_mf, self.kappa_mf)
-            parammat = np.zerps((D+2,D+2))
+
+            parammat = np.zeros((D+2,D+2))
             parammat[:D,:D] = E_J
             parammat[:D,-2] = parammat[-2,:D] = -E_h
             parammat[-2,-2] = E_muJmuT
             parammat[-1,-1] = -E_logdetJ
 
             contract = 'ij,nij->n' if stats.ndim == 3 else 'ij,ij->'
-            return np.einsum(contract, parammat, stats) - D/2.*np.log(2*np.pi)
+            return -1./2*np.einsum(contract, parammat, stats) \
+                - D/2.*np.log(2*np.pi)
 
     def _loglmbdatilde(self):
         # see Eq. 10.65 in Bishop

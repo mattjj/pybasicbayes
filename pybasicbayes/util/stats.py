@@ -144,6 +144,19 @@ def sample_markov(T,trans_matrix,init_state_distn):
         out[t] = sample_discrete(trans_matrix[out[t-1]])
     return out
 
+def niw_expectedstats(nu, S, m, kappa):
+    D = m.shape[0]
+
+    # TODO speed this up with cholesky of S
+    E_J = nu * np.linalg.inv(S)
+    E_h = nu * np.linalg.solve(S,m)
+    E_muJmuT = D/kappa + m.dot(E_h)
+    E_logdetSigmainv = special.digamma((nu-np.arange(D))/2.).sum() \
+        + D*np.log(2.) - np.linalg.slogdet(S)[1]
+
+    return E_J, E_h, E_muJmuT, E_logdetSigmainv
+
+
 def sample_niw(mu,lmbda,kappa,nu):
     '''
     Returns a sample from the normal/inverse-wishart distribution, conjugate
@@ -218,7 +231,7 @@ def sample_mniw(nu, S, M, K=None, Kinv=None):
     else:
         return sample_mn(M=M,U=Sigma,Vinv=Kinv), Sigma
 
-def mniw_expectedstats(nu, S, M, K=None, Kinv=None, packed=True):
+def mniw_expectedstats(nu, S, M, K=None, Kinv=None):
     # NOTE: could speed this up with chol factorizing S, not re-solving
     assert (K is None) ^ (Kinv is None)
     m = M.shape[0]

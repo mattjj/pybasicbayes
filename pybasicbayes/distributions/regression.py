@@ -261,7 +261,7 @@ class Regression(GibbsSampling, MeanField, MaxLikelihood):
         self._set_params_from_mf()
 
     def expected_log_likelihood(self, xy=None, stats=None):
-        assert xy is None ^ stats is None
+        assert (xy is None) ^ (stats is None)
 
         E_Sigmainv, E_Sigmainv_A, E_AT_Sigmainv_A, E_logdetSigmainv = \
             mniw_expectedstats(
