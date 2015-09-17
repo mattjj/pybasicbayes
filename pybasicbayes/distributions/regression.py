@@ -270,7 +270,7 @@ class Regression(GibbsSampling, MeanField, MaxLikelihood):
         self._set_params_from_mf()
 
     def expected_log_likelihood(self, xy=None, stats=None):
-        assert (xy is None) ^ (stats is None)
+        assert isinstance(xy, (tuple, np.ndarray)) ^ isinstance(stats, tuple)
 
         E_Sigmainv, E_Sigmainv_A, E_AT_Sigmainv_A, E_logdetSigmainv = \
             mniw_expectedstats(
@@ -278,7 +278,8 @@ class Regression(GibbsSampling, MeanField, MaxLikelihood):
 
         if xy is not None:
             D = self.D_out
-            x, y = xy[:,:-D], xy[:,-D:]
+            x, y = (xy[:,:-D], xy[:,-D:]) if isinstance(xy, np.ndarray) \
+                else xy
 
             if self.affine:
                 E_Sigmainv_A, E_Sigmainv_b = \
@@ -290,7 +291,15 @@ class Regression(GibbsSampling, MeanField, MaxLikelihood):
             parammat = -1./2 * blockarray([
                 [E_AT_Sigmainv_A, -E_Sigmainv_A.T],
                 [-E_Sigmainv_A, E_Sigmainv]])
-            out = np.einsum('ni,ni->n', xy.dot(parammat), xy)
+
+            contract = 'ni,ni->n' if x.ndim == 2 else 'i,i->'
+            if isinstance(xy, np.ndarray):
+                out = np.einsum('ni,ni->n', xy.dot(parammat), xy)
+            else:
+                out = np.einsum(contract,x.dot(parammat[:-D,:-D]),x)
+                out += np.einsum(contract,y.dot(parammat[-D:,-D:]),y)
+                out += 2*np.einsum(contract,x.dot(parammat[:-D,-D:]),y)
+
             out -= D/2*np.log(2*np.pi) + 1./2*E_logdetSigmainv
 
             if self.affine:
@@ -298,13 +307,19 @@ class Regression(GibbsSampling, MeanField, MaxLikelihood):
                 out -= x.dot(E_AT_Sigmainv_b)
                 out -= 1./2 * E_bT_Sigmainv_b
         else:
-            yyT, yxT, xxT, n = stats
+            if self.affine:
+                Ey, Ex = stats[:2]
+            yyT, yxT, xxT, n = stats[-4:]
+
             contract = 'ij,nij->n' if yyT.ndim == 3 else 'ij,ij->'
 
             out = -1./2 * np.einsum(contract, E_AT_Sigmainv_A, xxT)
             out += np.einsum(contract, E_Sigmainv_A, yxT)
-            out -= 1./2 * np.einsum(contract, E_Sigmainv, yyT)
-            out -= D/2*np.log(2*np.pi) + n/2.*E_logdetSigmainv
+            out += -1./2 * np.einsum(contract, E_Sigmainv, yyT)
+            out += -D/2*np.log(2*np.pi) + n/2.*E_logdetSigmainv
+
+            if self.affine:
+                raise NotImplementedError  # TODO
 
         return out
 

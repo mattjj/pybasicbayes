@@ -338,7 +338,7 @@ class Gaussian(
         return p_avgengy + q_entropy
 
     def expected_log_likelihood(self, x=None, stats=None):
-        assert (x is None) ^ (stats is None)
+        assert (x is not None) ^ isinstance(stats, (tuple, np.ndarray))
 
         if x is not None:
             mu_n, kappa_n, nu_n = self.mu_mf, self.kappa_mf, self.nu_mf
@@ -356,15 +356,27 @@ class Gaussian(
                 niw_expectedstats(
                     self.nu_mf, self.sigma_mf, self.mu_mf, self.kappa_mf)
 
-            parammat = np.zeros((D+2,D+2))
-            parammat[:D,:D] = E_J
-            parammat[:D,-2] = parammat[-2,:D] = -E_h
-            parammat[-2,-2] = E_muJmuT
-            parammat[-1,-1] = -E_logdetJ
+            if isinstance(stats, np.ndarray):
+                parammat = np.zeros((D+2,D+2))
+                parammat[:D,:D] = E_J
+                parammat[:D,-2] = parammat[-2,:D] = -E_h
+                parammat[-2,-2] = E_muJmuT
+                parammat[-1,-1] = -E_logdetJ
 
-            contract = 'ij,nij->n' if stats.ndim == 3 else 'ij,ij->'
-            return -1./2*np.einsum(contract, parammat, stats) \
-                - D/2.*np.log(2*np.pi)
+                contract = 'ij,nij->n' if stats.ndim == 3 else 'ij,ij->'
+                return -1./2*np.einsum(contract, parammat, stats) \
+                    - D/2.*np.log(2*np.pi)
+            else:
+                x, xxT, n = stats
+                c1, c2 = ('i,i->', 'ij,ij->') if x.ndim == 2 \
+                    else ('i,ni->n', 'ij,nij->n')
+
+                out = -1./2 * np.einsum(c2, E_J, xxT)
+                out += np.einsum(c1, E_h, x)
+                out += -n/2.*E_muJmuT
+                out += -D/2.*np.log(2*np.pi) + n/2.*E_logdetJ
+
+                return out
 
     def _loglmbdatilde(self):
         # see Eq. 10.65 in Bishop
