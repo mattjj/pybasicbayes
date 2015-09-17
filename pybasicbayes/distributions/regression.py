@@ -171,7 +171,7 @@ class Regression(GibbsSampling, MeanField, MaxLikelihood):
     ### distribution
 
     def log_likelihood(self,xy):
-        assert isinstance(xy,(tuple,np.ndarray))
+        assert isinstance(xy, (tuple,np.ndarray))
         A, sigma, D = self.A, self.sigma, self.D_out
         x, y = (xy[:,:-D], xy[:,-D:]) if isinstance(xy,np.ndarray) else xy
 
