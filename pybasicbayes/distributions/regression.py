@@ -270,6 +270,7 @@ class Regression(GibbsSampling, MeanField, MaxLikelihood):
         self._set_params_from_mf()
 
     def expected_log_likelihood(self, xy=None, stats=None):
+        # TODO test values, test for the affine case
         assert isinstance(xy, (tuple, np.ndarray)) ^ isinstance(stats, tuple)
 
         D = self.D_out
@@ -277,16 +278,16 @@ class Regression(GibbsSampling, MeanField, MaxLikelihood):
             mniw_expectedstats(
                 *self._natural_to_standard(self.mf_natural_hypparam))
 
+        if self.affine:
+            E_Sigmainv_A, E_Sigmainv_b = \
+                E_Sigmainv_A[:,:-1], E_Sigmainv_A[:,-1]
+            E_AT_Sigmainv_A, E_AT_Sigmainv_b, E_bT_Sigmainv_b = \
+                E_AT_Sigmainv_A[:-1,:-1], E_AT_Sigmainv_A[:-1,-1], \
+                E_AT_Sigmainv_A[-1,-1]
+
         if xy is not None:
             x, y = (xy[:,:-D], xy[:,-D:]) if isinstance(xy, np.ndarray) \
                 else xy
-
-            if self.affine:
-                E_Sigmainv_A, E_Sigmainv_b = \
-                    E_Sigmainv_A[:,:-1], E_Sigmainv_A[:,-1]
-                E_AT_Sigmainv_A, E_AT_Sigmainv_b, E_bT_Sigmainv_b = \
-                    E_AT_Sigmainv_A[:-1,:-1], E_AT_Sigmainv_A[:-1,-1], \
-                    E_AT_Sigmainv_A[-1,-1]
 
             parammat = -1./2 * blockarray([
                 [E_AT_Sigmainv_A, -E_Sigmainv_A.T],
@@ -319,7 +320,9 @@ class Regression(GibbsSampling, MeanField, MaxLikelihood):
             out += -D/2*np.log(2*np.pi) + n/2.*E_logdetSigmainv
 
             if self.affine:
-                raise NotImplementedError  # TODO
+                out += Ey.dot(E_Sigmainv_b)
+                out -= Ex.dot(E_AT_Sigmainv_b)
+                out -= 1./2 * E_bT_Sigmainv_b
 
         return out
 
