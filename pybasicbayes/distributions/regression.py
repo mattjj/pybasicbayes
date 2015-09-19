@@ -274,7 +274,7 @@ class Regression(GibbsSampling, MeanField, MaxLikelihood):
 
     def meanfieldupdate(self, data=None, weights=None, stats=None):
         assert (data is not None and weights is not None) ^ (stats is not None)
-        stats = self._stats_ensure_array(stats) if stats is None \
+        stats = self._stats_ensure_array(stats) if stats is not None \
             else self._get_weighted_statistics(data, weights)
         self.mf_natural_hypparam = self.natural_hypparam + stats
         self._set_params_from_mf()
