@@ -381,7 +381,7 @@ class Gaussian(
                     - D/2.*np.log(2*np.pi)
             else:
                 x, xxT, n = stats
-                c1, c2 = ('i,i->', 'ij,ij->') if x.ndim == 2 \
+                c1, c2 = ('i,i->', 'ij,ij->') if x.ndim == 1 \
                     else ('i,ni->n', 'ij,nij->n')
 
                 out = -1./2 * np.einsum(c2, E_J, xxT)
