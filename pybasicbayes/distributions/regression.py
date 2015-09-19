@@ -84,6 +84,9 @@ class Regression(GibbsSampling, MeanField, MaxLikelihood):
 
     ### getting statistics
 
+    # NOTE: stats object arrays depend on the last element being a scalar,
+    # otherwise numpy will try to create a dense array and fail
+
     def _get_statistics(self,data):
         assert isinstance(data, (list, tuple, np.ndarray))
         if isinstance(data,list):
@@ -167,6 +170,20 @@ class Regression(GibbsSampling, MeanField, MaxLikelihood):
         return np.array(
             [np.zeros((D_out,D_out)), np.zeros((D_out,D_in)),
              np.zeros((D_in,D_in)),0])
+
+    @staticmethod
+    def _stats_ensure_array(stats):
+        if isinstance(stats, np.ndarray):
+            return stats
+        affine = len(stats) > 4
+
+        yyT, yxT, xxT, n = stats[-4:]
+        if affine:
+            y, x = stats[:2]
+            yxT = np.hstack((yxT, y[:,None]))
+            xxT = blockarray([[xxT, x[:,None]], [x[None,:], 1.]])
+
+        return np.array([yyT, yxT, xxT, n])
 
     ### distribution
 
@@ -256,8 +273,9 @@ class Regression(GibbsSampling, MeanField, MaxLikelihood):
     ### Mean Field
 
     def meanfieldupdate(self, data=None, weights=None, stats=None):
-        if stats is None:
-            stats = self._get_weighted_statistics(data, weights)
+        assert (data is not None and weights is not None) ^ (stats is not None)
+        stats = self._stats_ensure_array(stats) if stats is None \
+            else self._get_weighted_statistics(data, weights)
         self.mf_natural_hypparam = self.natural_hypparam + stats
         self._set_params_from_mf()
 

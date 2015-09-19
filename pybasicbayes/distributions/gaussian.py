@@ -250,6 +250,18 @@ class Gaussian(
         self.resample()  # intialize from prior given new hyperparameters
         return self
 
+    @staticmethod
+    def _stats_ensure_array(stats):
+        if isinstance(stats, np.ndarray):
+            return stats
+        x, xxT, n = stats
+        D = x.shape[-1]
+        out = np.zeros((D+2,D+2))
+        out[:D,:D] = xxT
+        out[-2,:D] = out[:D,-2] = x
+        out[-2,-2] = out[-1,-1] = n
+        return out
+
     ### Gibbs sampling
 
     def resample(self,data=[]):
@@ -277,11 +289,12 @@ class Gaussian(
                 self.mf_natural_hypparam))
         return self
 
-    def meanfieldupdate(self,data,weights):
-        D = len(self.mu_0)
+    def meanfieldupdate(self, data=None, weights=None, stats=None):
+        assert (data is not None and weights is not None) ^ (stats is not None)
+        stats = self._stats_ensure_array(stats) if stats is not None else \
+            self._get_weighted_statistics(data, weights, self.mu_0.shape[0])
         self.mf_natural_hypparam = \
-            self.natural_hypparam + self._get_weighted_statistics(
-                data, weights, D)
+            self.natural_hypparam + stats
 
     def meanfield_sgdstep(self,data,weights,prob,stepsize):
         D = len(self.mu_0)
