@@ -345,13 +345,10 @@ class Regression(GibbsSampling, MeanField, MaxLikelihood):
         return out
 
     def get_vlb(self):
-        out = 0.
-
-        # bilinear term
         E_Sigmainv, E_Sigmainv_A, E_AT_Sigmainv_A, E_logdetSigmainv = \
             mniw_expectedstats(*self._natural_to_standard(self.mf_natural_hypparam))
         A, B, C, d = self.natural_hypparam - self.mf_natural_hypparam
-        out += -1./2 * np.trace(A.dot(E_Sigmainv)) \
+        bilinear_term = -1./2 * np.trace(A.dot(E_Sigmainv)) \
             + np.trace(B.T.dot(E_Sigmainv_A)) \
             - 1./2 * np.trace(C.dot(E_AT_Sigmainv_A)) \
             + 1./2 * d * E_logdetSigmainv
@@ -361,9 +358,8 @@ class Regression(GibbsSampling, MeanField, MaxLikelihood):
             self.natural_hypparam))
         Z_mf = mniw_log_partitionfunction(*self._natural_to_standard(
             self.mf_natural_hypparam))
-        out -= Z - Z_mf
 
-        return out
+        return bilinear_term - (Z - Z_mf)
 
     def resample_from_mf(self):
         self.A, self.sigma = sample_mniw(
