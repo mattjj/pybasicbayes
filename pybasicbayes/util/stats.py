@@ -110,7 +110,7 @@ def sample_gaussian(mu=None,Sigma=None,J=None,h=None):
         from scipy.linalg.lapack import dpotrs
         L = np.linalg.cholesky(J)
         x = np.random.randn(h.shape[0])
-        return scipy.linalg.solve_triangular(L,x,lower=True) \
+        return scipy.linalg.solve_triangular(L,x,lower=True,trans='T') \
             + dpotrs(L,h,lower=True)[0]
 
 def sample_discrete(distn,size=[],dtype=np.int32):
