@@ -1,36 +1,63 @@
-from distutils.core import setup
-from Cython.Build import cythonize
-import numpy as np
+from setuptools import setup, Extension
+from setuptools.command.build_ext import build_ext as _build_ext
+from distutils.errors import CompileError
+from warnings import warn
+import os.path
 
-PYBASICBAYES_VERSION = "0.1.3"
+try:
+    from Cython.Distutils import build_ext as _build_ext
+except ImportError:
+    use_cython = False
+else:
+    use_cython = True
 
-ext_modules = cythonize('pybasicbayes/**/*.pyx')
+
+class build_ext(_build_ext):
+    # see http://stackoverflow.com/q/19919905 for explanation
+    def finalize_options(self):
+        _build_ext.finalize_options(self)
+        __builtins__.__NUMPY_SETUP__ = False
+        import numpy as np
+        self.include_dirs.append(np.get_include())
+
+    # if extension modules fail to build, keep going anyway
+    def run(self):
+        try:
+            _build_ext.run(self)
+        except CompileError:
+            warn('Failed to build extension modules')
+
+
+extension_pathspec = os.path.join('pybasicbayes','**','*.pyx')
+if use_cython:
+    from Cython.Build import cythonize
+    ext_modules = cythonize(extension_pathspec)
+else:
+    ext_modules=[
+        Extension('pybasicbayes.util.cstats', ['pybasicbayes/util/cstats.c'],
+        extra_compile_args=['-O3','-w']),
+    ]
+
+
 setup(name='pybasicbayes',
-      version=PYBASICBAYES_VERSION,
+      version='0.1.4',
       description="Basic utilities for Bayesian inference",
       author='Matthew James Johnson',
       author_email='mattjj@csail.mit.edu',
       url="http://github.com/mattjj/pybasicbayes",
-      maintainer='Matthew James Johnson',
-      maintainer_email='mattjj@csail.mit.edu',
       packages=[
-            'pybasicbayes',
-            'pybasicbayes.distributions',
-            'pybasicbayes.util',
-            'pybasicbayes.testing'],
+          'pybasicbayes', 'pybasicbayes.distributions',
+          'pybasicbayes.util', 'pybasicbayes.testing'],
       platforms='ALL',
-      keywords=['bayesian', 'inference'],
-      install_requires=[
-            # cython and moviepy are optional dependencies
-            "numpy",
-            "scipy",
-            "matplotlib",
-            "nose",
-            "future",
-      ],
+      keywords=[
+          'bayesian', 'inference', 'mcmc', 'variational inference',
+          'mean field', 'vb'],
+      install_requires=["numpy", "scipy", "matplotlib", "nose", "future"],
+      setup_requires=['numpy'],
       classifiers=[
           'Intended Audience :: Science/Research',
           'Programming Language :: Python',
       ],
       ext_modules=ext_modules,
-      include_dirs=[np.get_include()])
+      cmdclass={'build_ext': build_ext},
+)
