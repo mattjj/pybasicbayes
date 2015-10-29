@@ -21,6 +21,8 @@ class Regression(GibbsSampling, MeanField, MaxLikelihood):
             A=None,sigma=None):
         self.affine = affine
 
+        self._check_shapes(A, sigma, nu_0, S_0, M_0, K_0)
+
         self.A = A
         self.sigma = sigma
 
@@ -32,6 +34,20 @@ class Regression(GibbsSampling, MeanField, MaxLikelihood):
 
         if A is sigma is None and have_hypers:
             self.resample()  # initialize from prior
+
+    @staticmethod
+    def _check_shapes(A, sigma, nu, S, M, K):
+        is_2d = lambda x: isinstance(x, np.ndarray) and x.ndim == 2
+        assert all(is_2d(x) for x in [A, sigma, S, M, K])
+
+        get_dim = lambda x, i: x.shape[i] if x is not None else None
+        not_none = lambda x: x is not None
+        get_dim_list = lambda pairs: filter(not_none, map(get_dim, *zip(*pairs)))
+        is_consistent = lambda dimlist: len(set(dimlist)) == 1
+        dims_agree = lambda pairs: is_consistent(get_dim_list(pairs))
+        assert dims_agree([(A, 1), (M, 1), (K, 1)]), 'Input dimensions not consistent'
+        assert dims_agree([(A, 0), (sigma, 0), (sigma, 1), (S, 0), (S, 1), (M, 0)]), \
+            'Output dimensions not consistent'
 
     @property
     def parameters(self):
