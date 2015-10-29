@@ -38,7 +38,7 @@ class Regression(GibbsSampling, MeanField, MaxLikelihood):
     @staticmethod
     def _check_shapes(A, sigma, nu, S, M, K):
         is_2d = lambda x: isinstance(x, np.ndarray) and x.ndim == 2
-        assert all(is_2d(x) for x in [A, sigma, S, M, K])
+        assert all(is_2d(x) for x in [A, sigma, S, M, K]), 'Matrices must be 2D'
 
         get_dim = lambda x, i: x.shape[i] if x is not None else None
         not_none = lambda x: x is not None
