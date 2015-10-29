@@ -45,7 +45,7 @@ class Regression(GibbsSampling, MeanField, MaxLikelihood):
         get_dim_list = lambda pairs: filter(not_none, map(get_dim, *zip(*pairs)))
         is_consistent = lambda dimlist: len(set(dimlist)) == 1
         dims_agree = lambda pairs: is_consistent(get_dim_list(pairs))
-        assert dims_agree([(A, 1), (M, 1), (K, 1)]), 'Input dimensions not consistent'
+        assert dims_agree([(A, 1), (M, 1), (K, 0), (K, 1)]), 'Input dimensions not consistent'
         assert dims_agree([(A, 0), (sigma, 0), (sigma, 1), (S, 0), (S, 1), (M, 0)]), \
             'Output dimensions not consistent'
 
