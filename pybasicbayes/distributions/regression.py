@@ -38,10 +38,10 @@ class Regression(GibbsSampling, MeanField, MaxLikelihood):
     @staticmethod
     def _check_shapes(A, sigma, nu, S, M, K):
         is_2d = lambda x: isinstance(x, np.ndarray) and x.ndim == 2
-        assert all(is_2d(x) for x in [A, sigma, S, M, K]), 'Matrices must be 2D'
+        not_none = lambda x: x is not None
+        assert all(map(is_2d, filter(not_none, [A, sigma, S, M, K]))), 'Matrices must be 2D'
 
         get_dim = lambda x, i: x.shape[i] if x is not None else None
-        not_none = lambda x: x is not None
         get_dim_list = lambda pairs: filter(not_none, map(get_dim, *zip(*pairs)))
         is_consistent = lambda dimlist: len(set(dimlist)) == 1
         dims_agree = lambda pairs: is_consistent(get_dim_list(pairs))
