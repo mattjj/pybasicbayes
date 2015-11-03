@@ -8,7 +8,7 @@ from nose.plugins.attrib import attr
 import pybasicbayes.distributions as distributions
 
 
-@attr('GammaCompoundDirichlet')
+@attr('GammaCompoundDirichlet', 'slow')
 class TestDirichletCompoundGamma(object):
     def test_weaklimit(self):
         a = distributions.CRP(10,1)

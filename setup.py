@@ -47,7 +47,7 @@ ext_modules=[
 if use_cython:
     from Cython.Build import cythonize
     try:
-        ext_modules = cythonize(join('pybasicbayes','**','*.pyx'))
+        ext_modules = cythonize(os.path.join('pybasicbayes','**','*.pyx'))
     except:
         warn('Failed to generate extension module code from Cython files')
 
