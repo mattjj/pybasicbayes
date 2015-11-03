@@ -122,8 +122,8 @@ class TestDiagonalGaussianNonconjNIG(BigDataGibbsTester,GewekeGibbsTester,BasicT
                 )
 
     def params_close(self,d1,d2):
-        return np.linalg.norm(d1.mu - d2.mu) < 0.1*np.sqrt(d1.mu.shape[0]) \
-                and np.linalg.norm(d1.sigmas-d2.sigmas) < 0.25*d1.sigmas.shape[0]
+        return np.linalg.norm(d1.mu - d2.mu) < 0.25*np.sqrt(d1.mu.shape[0]) \
+                and np.linalg.norm(d1.sigmas-d2.sigmas) < 0.5*d1.sigmas.shape[0]
 
     def geweke_statistics(self,d,data):
         return np.concatenate((d.mu,d.sigmas))
