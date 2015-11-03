@@ -12,7 +12,6 @@ except ImportError:
 else:
     use_cython = True
 
-
 class build_ext(_build_ext):
     # see http://stackoverflow.com/q/19919905 for explanation
     def finalize_options(self):
@@ -32,7 +31,7 @@ class sdist(_sdist):
     def run(self):
         try:
             from Cython.Build import cythonize
-            cythonize(os.path.join('pyhsmm','**','*.pyx'))
+            cythonize(os.path.join('pybasicbayes','**','*.pyx'))
         except:
             warn('Failed to generate extension files from Cython sources')
         finally:
