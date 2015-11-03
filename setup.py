@@ -1,5 +1,6 @@
 from setuptools import setup, Extension
 from setuptools.command.build_ext import build_ext as _build_ext
+from setuptools.command.sdist import sdist as _sdist
 from distutils.errors import CompileError
 from warnings import warn
 import os.path
@@ -27,17 +28,28 @@ class build_ext(_build_ext):
         except CompileError:
             warn('Failed to build extension modules')
 
+class sdist(_sdist):
+    def run(self):
+        try:
+            from Cython.Build import cythonize
+            cythonize(os.path.join('pyhsmm','**','*.pyx'))
+        except:
+            warn('Failed to generate extension files from Cython sources')
+        finally:
+            _sdist.run(self)
 
-extension_pathspec = os.path.join('pybasicbayes','**','*.pyx')
+ext_modules=[
+    Extension(
+        'pybasicbayes.util.cstats', ['pybasicbayes/util/cstats.c'],
+        extra_compile_args=['-O3','-w']),
+]
+
 if use_cython:
     from Cython.Build import cythonize
-    ext_modules = cythonize(extension_pathspec)
-else:
-    ext_modules=[
-        Extension('pybasicbayes.util.cstats', ['pybasicbayes/util/cstats.c'],
-        extra_compile_args=['-O3','-w']),
-    ]
-
+    try:
+        ext_modules = cythonize(join('pybasicbayes','**','*.pyx'))
+    except:
+        warn('Failed to generate extension module code from Cython files')
 
 setup(name='pybasicbayes',
       version='0.1.4',
@@ -59,5 +71,4 @@ setup(name='pybasicbayes',
           'Programming Language :: Python',
       ],
       ext_modules=ext_modules,
-      cmdclass={'build_ext': build_ext},
-)
+      cmdclass={'build_ext': build_ext, 'sdist': sdist})
