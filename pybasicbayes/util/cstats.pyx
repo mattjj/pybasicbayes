@@ -45,12 +45,15 @@ def sample_markov(
 
 def sample_crp_tablecounts(
         floating concentration,
-        integral[:,::1] customers,
-        floating[::1] colweights,
+        integral[:,:] customers,
+        colweights = None,
         ):
-    cdef integral[:,::1] m = np.zeros_like(customers)
+    cdef integral[:,::1] _customers = np.require(customers, requirements='C')
+    cdef integral[:,::1] m = np.zeros_like(_customers)
+    cdef floating[::1] _colweights = np.require(colweights, requirements='C') \
+        if colweights is not None else np.ones(customers.shape[1])
     cdef int i, j, k
-    cdef integral tot = np.sum(customers)
+    cdef integral tot = np.sum(_customers)
 
     cdef floating[::1] randseq
     if floating is double:
@@ -58,17 +61,17 @@ def sample_crp_tablecounts(
     else:
         randseq = np.random.random(tot).astype(np.float)
 
-    tmp = np.empty_like(customers)
+    tmp = np.empty_like(_customers)
     tmp[0,0] = 0
-    tmp.flat[1:] = np.cumsum(np.ravel(customers)[:customers.size-1],dtype=tmp.dtype)
+    tmp.flat[1:] = np.cumsum(np.ravel(customers)[:_customers.size-1],dtype=tmp.dtype)
     cdef integral[:,::1] starts = tmp
 
     with nogil:
-        for i in prange(customers.shape[0]):
-            for j in range(customers.shape[1]):
-                for k in range(customers[i,j]):
+        for i in prange(_customers.shape[0]):
+            for j in range(_customers.shape[1]):
+                for k in range(_customers[i,j]):
                     m[i,j] += randseq[starts[i,j]+k] \
-                        < (concentration * colweights[j]) / (k+concentration*colweights[j])
+                        < (concentration * _colweights[j]) / (k+concentration*_colweights[j])
 
     return np.asarray(m)
 

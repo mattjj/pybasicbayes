@@ -17,7 +17,7 @@ from warnings import warn
 from pybasicbayes.abstractions import Distribution, GibbsSampling, \
     MeanField, MeanFieldSVI, MaxLikelihood
 from pybasicbayes.util.stats import getdatasize, flattendata, \
-    sample_discrete_from_log, sample_discrete
+    sample_discrete_from_log, sample_discrete, atleast_2d
 
 try:
     from pybasicbayes.util.cstats import sample_crp_tablecounts
@@ -108,11 +108,11 @@ class NegativeBinomial(_NegativeBinomialBase, GibbsSampling):
             self.p = np.random.beta(self.alpha_0,self.beta_0)
             self.r = np.random.gamma(self.k_0,self.theta_0)
         else:
-            data = np.atleast_2d(flattendata(data))
-            ones = np.ones(data.shape[1],dtype=float)
+            data = atleast_2d(flattendata(data))
+            N = len(data)
             for itr in range(niter):
                 ### resample r
-                msum = sample_crp_tablecounts(float(self.r),data,ones).sum()
+                msum = sample_crp_tablecounts(self.r,data).sum()
                 self.r = np.random.gamma(self.k_0 + msum, 1/(1/self.theta_0 - N*np.log(1-self.p)))
                 ### resample p
                 self.p = np.random.beta(self.alpha_0 + data.sum(), self.beta_0 + N*self.r)
