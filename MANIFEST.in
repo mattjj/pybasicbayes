@@ -1,2 +1,1 @@
-recursive-include pybasicbayes *.pyx
-
+recursive-include pybasicbayes *.pyx *.c *.cpp *.h
