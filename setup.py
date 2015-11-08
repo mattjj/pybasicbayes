@@ -51,7 +51,7 @@ if use_cython:
         warn('Failed to generate extension module code from Cython files')
 
 setup(name='pybasicbayes',
-      version='0.1.4',
+      version='0.1.5',
       description="Basic utilities for Bayesian inference",
       author='Matthew James Johnson',
       author_email='mattjj@csail.mit.edu',
