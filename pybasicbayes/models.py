@@ -238,6 +238,7 @@ class Mixture(ModelGibbsSampling, ModelMeanField, ModelEM, ModelParallelTemperin
 
     def add_data(self,data,**kwargs):
         self.labels_list.append(self._labels_class(data=np.asarray(data),model=self,**kwargs))
+        return self.labels_list[-1]
 
     @property
     def N(self):
@@ -765,6 +766,7 @@ class CRPMixture(CollapsedMixture):
         assert len(self.labels_list) == 0
         self.labels_list.append(self._labels_class(model=self,data=np.asarray(data),
             alpha_0=self.alpha_0,obs_distn=self.obs_distn))
+        return self.labels_list[-1]
 
     def resample_model(self):
         for l in self.labels_list:
