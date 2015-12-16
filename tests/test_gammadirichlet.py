@@ -49,3 +49,7 @@ class TestDirichletCompoundGamma(GewekeGibbsTester):
 
     def geweke_statistics(self, d, data):
         return np.array([d.concentration])
+
+    @property
+    def geweke_resample_kwargs(self):
+        return dict(niter=1)
