@@ -420,7 +420,9 @@ class GammaCompoundDirichlet(CRP):
     def hypparams(self):
         return dict(a_0=self.a_0,b_0=self.b_0,K=self.K)
 
-    def rvs(self,sample_counts):
+    def rvs(self, sample_counts=None, size=None):
+        if sample_counts is None:
+            sample_counts = size
         if isinstance(sample_counts,int):
             sample_counts = [sample_counts]
         out = np.empty((len(sample_counts),self.K),dtype=int)
