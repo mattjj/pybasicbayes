@@ -27,7 +27,7 @@ class TestRegression(
 
     @property
     def big_data_size(self):
-        return 40000
+        return 50000
 
     def geweke_statistics(self,d,data):
         return np.concatenate((d.A.flatten(),np.diag(d.sigma)))
