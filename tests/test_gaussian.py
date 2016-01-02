@@ -26,7 +26,7 @@ class TestGaussian(BigDataGibbsTester,GewekeGibbsTester):
 
     @property
     def geweke_nsamples(self):
-        return 30000
+        return 50000
 
     @property
     def geweke_data_size(self):

@@ -82,7 +82,6 @@ class BigDataGibbsTester(with_metaclass(abc.ABCMeta, DistributionTester)):
     def params_close(self,distn1,distn2):
         pass
 
-
     @property
     def big_data_size(self):
         return 20000
@@ -95,7 +94,7 @@ class BigDataGibbsTester(with_metaclass(abc.ABCMeta, DistributionTester)):
     def big_data_hyperparameter_settings(self):
         return self.hyperparameter_settings
 
-
+    @attr('random')
     def big_data_Gibbs_tests(self):
         for setting_idx, hypparam_dict in enumerate(self.big_data_hyperparameter_settings):
             for i in range(self.big_data_repeats_per_setting):
@@ -185,7 +184,7 @@ class GewekeGibbsTester(with_metaclass(abc.ABCMeta, DistributionTester)):
         return 1
 
 
-    @attr('slow')
+    @attr('slow', 'random')
     def geweke_tests(self):
         for setting_idx, hypparam_dict in enumerate(self.geweke_hyperparameter_settings):
             yield self.check_geweke, setting_idx, hypparam_dict
