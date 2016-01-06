@@ -280,7 +280,7 @@ def inv_psd(A, return_chol=False):
     L = np.linalg.cholesky(A)
     Ainv = lapack.dpotri(L, lower=True)[0]
     copy_lower_to_upper(Ainv)
-    if not np.allclose(Ainv, np.linalg.inv(A)):
+    if not np.allclose(Ainv, np.linalg.inv(A), rtol=1e-6, atol=1e-6):
         import ipdb; ipbd.set_trace()
     if return_chol:
         return Ainv, L
