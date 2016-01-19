@@ -386,10 +386,11 @@ class Regression(GibbsSampling, MeanField, MaxLikelihood):
         self.A, self.sigma = M, S / nu
 
     def _initialize_mean_field(self):
-        A, Sigma = self.A, self.sigma
-        nu, S, M, K = self._natural_to_standard(self.natural_hypparam)
-        self.mf_natural_hypparam = self._standard_to_natural(
-            nu, nu*Sigma, A, K)
+        if hasattr(self, 'natural_hypparam'):
+            A, Sigma = self.A, self.sigma
+            nu, S, M, K = self._natural_to_standard(self.natural_hypparam)
+            self.mf_natural_hypparam = self._standard_to_natural(
+                nu, nu*Sigma, A, K)
 
 
 class RegressionNonconj(Regression):
