@@ -93,8 +93,10 @@ class Categorical(GibbsSampling, MeanField, MeanFieldSVI, MaxLikelihood, MAP):
         return sample_discrete(self.weights,size)
 
     def log_likelihood(self,x):
+        out = np.zeros_like(x, dtype=np.double)
+        nanidx = np.isnan(x)
         err = np.seterr(divide='ignore')
-        out = np.log(self.weights)[x]  # log(0) can happen, no warning
+        out[~nanidx] = np.log(self.weights)[list(x[~nanidx])]  # log(0) can happen, no warning
         np.seterr(**err)
         return out
 
