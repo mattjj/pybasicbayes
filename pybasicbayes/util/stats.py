@@ -88,6 +88,9 @@ def flattendata(data):
         return np.atleast_1d(data)
 
 ### misc
+def update_param(oldv, newv, stepsize):
+    return oldv * (1 - stepsize) + newv * stepsize
+
 
 def cov(a):
     # return np.cov(a,rowvar=0,bias=1)

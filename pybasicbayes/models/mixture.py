@@ -12,11 +12,11 @@ import abc, copy
 from warnings import warn
 from scipy.misc import logsumexp
 
-from .abstractions import ModelGibbsSampling, ModelMeanField, ModelEM
-from .abstractions import Distribution, GibbsSampling, MeanField, Collapsed, \
+from pybasicbayes.abstractions import ModelGibbsSampling, ModelMeanField, ModelEM
+from pybasicbayes.abstractions import Distribution, GibbsSampling, MeanField, Collapsed, \
         MeanFieldSVI, MaxLikelihood, ModelParallelTempering
-from .distributions import Categorical, CategoricalAndConcentration
-from .util.stats import getdatasize, sample_discrete_from_log, sample_discrete
+from pybasicbayes.distributions import Categorical, CategoricalAndConcentration
+from pybasicbayes.util.stats import getdatasize, sample_discrete_from_log, sample_discrete
 
 
 #############################
@@ -349,14 +349,14 @@ class Mixture(ModelGibbsSampling, ModelMeanField, ModelEM, ModelParallelTemperin
 
     def _resample_components_joblib(self,num_procs):
         from joblib import Parallel, delayed
-        from . import parallel
+        from . import parallel_mixture
 
-        parallel.model = self
-        parallel.labels_list = self.labels_list
+        parallel_mixture.model = self
+        parallel_mixture.labels_list = self.labels_list
 
         if len(self.components) > 0:
             params = Parallel(n_jobs=num_procs,backend='multiprocessing')\
-                    (delayed(parallel._get_sampled_component_params)(idx)
+                    (delayed(parallel_mixture._get_sampled_component_params)(idx)
                             for idx in range(len(self.components)))
 
         for c, p in zip(self.components,params):
@@ -364,13 +364,13 @@ class Mixture(ModelGibbsSampling, ModelMeanField, ModelEM, ModelParallelTemperin
 
     def _resample_labels_joblib(self,num_procs):
         from joblib import Parallel, delayed
-        from . import parallel
+        from . import parallel_mixture
 
         if len(self.labels_list) > 0:
-            parallel.model = self
+            parallel_mixture.model = self
 
             raw = Parallel(n_jobs=num_procs,backend='multiprocessing')\
-                    (delayed(parallel._get_sampled_labels)(idx)
+                    (delayed(parallel_mixture._get_sampled_labels)(idx)
                             for idx in range(len(self.labels_list)))
 
             for l, (z,normalizer) in zip(self.labels_list,raw):

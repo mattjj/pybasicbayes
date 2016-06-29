@@ -11,7 +11,7 @@ from pybasicbayes.abstractions import GibbsSampling, MaxLikelihood, \
     MeanField, MeanFieldSVI
 from pybasicbayes.util.stats import sample_gaussian, sample_mniw, \
     sample_invwishart, getdatasize, mniw_expectedstats, mniw_log_partitionfunction, \
-    sample_invgamma
+    sample_invgamma, update_param
 
 from pybasicbayes.util.general import blockarray, inv_psd, cumsum, \
     all_none, any_none, AR_striding
@@ -531,11 +531,9 @@ class DiagonalRegression(Regression, MeanFieldSVI):
         self.niter = niter
 
         if all_none(A, sigmasq):
-            self.resample((np.zeros((0,self.D_in)),
-                           np.zeros((0,self.D_out))))  # initialize from prior
-
-        if sigmasq is not None:
-            assert sigmasq.shape == (self.D_out,)
+            self.A = np.zeros((D_out, D_in))
+            self.sigmasq_flat = np.ones((D_out,))
+            self.resample(data=None)  # initialize from prior
 
         # Store the natural parameters and expose the standard versions as properties
         self.mf_J_A = np.array([self.J_0.copy() for _ in range(D_out)])
@@ -588,120 +586,109 @@ class DiagonalRegression(Regression, MeanFieldSVI):
         return mf_E_A, mf_E_AAT, mf_E_sigmasq_inv, mf_E_log_sigmasq
 
 
-    def log_likelihood(self,xy):
+    def log_likelihood(self, xy, mask=None):
         # TODO: Update this!
-        assert isinstance(xy, (tuple,np.ndarray))
-        A, sigma, D = self.A, self.sigma, self.D_out
-        x, y = (xy[:,:-D], xy[:,-D:]) if isinstance(xy,np.ndarray) else xy
+        raise NotImplementedError
 
-        if self.affine:
-            A, b = A[:,:-1], A[:,-1]
+    def _get_statistics(self, data, mask=None):
+        if data is None:
+            return (np.zeros((self.D_out,)),
+                    np.zeros((self.D_out, self.D_in)),
+                    np.zeros((self.D_out, self.D_in, self.D_in)),
+                    np.zeros((self.D_out,)))
 
-        sigma_inv, L = inv_psd(sigma, return_chol=True)
-        parammat = -1./2 * blockarray([
-            [A.T.dot(sigma_inv).dot(A), -A.T.dot(sigma_inv)],
-            [-sigma_inv.dot(A), sigma_inv]])
-
-        contract = 'ni,ni->n' if x.ndim == 2 else 'i,i->'
-        if isinstance(xy, np.ndarray):
-            out = np.einsum(contract,xy.dot(parammat),xy)
-        else:
-            out = np.einsum(contract,x.dot(parammat[:-D,:-D]),x)
-            out += np.einsum(contract,y.dot(parammat[-D:,-D:]),y)
-            out += 2*np.einsum(contract,x.dot(parammat[:-D,-D:]),y)
-
-        out -= D/2*np.log(2*np.pi) + np.log(np.diag(L)).sum()
-
-        if self.affine:
-            out += y.dot(sigma_inv).dot(b)
-            out -= x.dot(A.T).dot(sigma_inv).dot(b)
-            out -= 1./2*b.dot(sigma_inv).dot(b)
-
-        return out
-
-
-    ### Gibbs
-
-    def resample(self, data, mask=None, niter=None):
-        """
-        Introduce a mask that allows for missing data
-        """
-        assert isinstance(data, tuple), \
-            "DiagonalRegression not yet supporting lists of inputs"
+        # TODO: handle tuples or hstack-ed arrays
+        assert isinstance(data, tuple)
         x, y = data
 
         if mask is None:
             mask = np.ones_like(y, dtype=bool)
 
+        ysq = np.sum(y**2 * mask, axis=0)
+        yxT = (y*mask).T.dot(x)
+        xxT = np.array([(x * mask[:,d][:,None]).T.dot(x)
+                        for d in range(self.D_out)])
+        n = np.sum(mask, axis=0)
+        return ysq, yxT, xxT, n
+
+    ### Gibbs
+    def resample(self, data, stats=None, mask=None, niter=None):
+        """
+        Introduce a mask that allows for missing data
+        """
+        assert data is None or isinstance(data, tuple), \
+            "DiagonalRegression not yet supporting lists of inputs"
+        stats = self._get_statistics(data, mask=mask) if stats is None else stats
+
         niter = niter if niter else self.niter
-        if y.shape[0] == 0:
-            self.A = np.array([
-                sample_gaussian(J=self.J_0, h=self.h_0) for _ in range(self.D_out)])
+        for itr in range(niter):
+            self._resample_A(stats)
+            self._resample_sigma(stats)
 
-            self.sigmasq_flat = sample_invgamma(
-                self.alpha_0 * np.ones(self.D_out),
-                self.beta_0 * np.ones(self.D_out))
-        else:
-            for itr in range(niter):
-                self._resample_A(data, mask, self.sigmasq_flat)
-                self._resample_sigma(data, mask, self.A)
+    def _resample_A(self, stats):
 
-    def _resample_A(self, data, mask, sigmasq_flat):
-        # TODO: handle tuples or hstack-ed arrays
-        x,y = data
+        _, yxT, xxT, _ = stats
 
         # Sample each row of W
         for d in range(self.D_out):
             # Get sufficient statistics from the data
-            Jlkhd = (x * mask[:,d][:,None]).T.dot(x) / sigmasq_flat[d]
-            hlkhd = (y[:,d] * mask[:,d]).T.dot(x) / sigmasq_flat[d]
-
-            Jd = Jlkhd + self.J_0
-            hd = hlkhd + self.h_0
+            Jd = self.J_0 + xxT[d] / self.sigmasq_flat[d]
+            hd = self.h_0 + yxT[d] / self.sigmasq_flat[d]
             self.A[d] = sample_gaussian(J=Jd, h=hd)
 
-    def _resample_sigma(self, data, mask, A):
-        # TODO: handle tuples or hstack-ed arrays
-        x, y = data
+    def _resample_sigma(self, stats):
+        ysq, yxT, xxT, n = stats
+        AAT = np.array([np.outer(a,a) for a in self.A])
 
-        assert y.shape == mask.shape
-        alpha_hat, beta_hat = self.alpha_0, self.beta_0
-        alpha_hat += 0.5 * np.sum(mask, axis=0)
-        mu = np.dot(x, A.T)
-        beta_hat += 0.5 * np.sum((y - mu) ** 2 * mask, axis=0)
+        alpha = self.alpha_0 + n / 2.0
 
-        self.sigmasq_flat = sample_invgamma(alpha_hat, beta_hat)
+        beta = self.beta_0
+        beta += 0.5 * ysq
+        beta += -1.0 * np.sum(yxT * self.A, axis=1)
+        beta += 0.5 * np.sum(AAT * xxT, axis=(1,2))
+
+        self.sigmasq_flat = sample_invgamma(alpha, beta)
+
+    ### Max likelihood
+    def max_likelihood(self,data, weights=None, stats=None, mask=None):
+        if stats is None:
+            stats = self._get_statistics(data, mask)
+
+        ysq, yxT, xxT, n = stats
+
+        assert np.all(n > 0), "Cannot perform max likelihood with zero data points!"
+        self.A = np.array([
+            np.linalg.solve(self.J_0 + xxTd, self.h_0 + yxTd)
+            for xxTd, yxTd in zip(xxT, yxT)
+        ])
+
+        alpha = self.alpha_0 + n / 2.0
+        beta = self.beta_0
+        beta += 0.5 * ysq
+        beta += -1.0 * np.sum(yxT * self.A, axis=1)
+        AAT = np.array([np.outer(ad, ad) for ad in self.A])
+        beta += 0.5 * np.sum(AAT * xxT, axis=(1, 2))
+
+        self.sigmasq_flat = beta / (alpha + 1.0)
+        assert np.all(self.sigmasq_flat) >= 0
 
     ### Mean Field
-    @staticmethod
-    def _update_param(oldv, newv, stepsize):
-        return oldv * (1-stepsize) + newv * stepsize
+    def meanfieldupdate(self, data=None, weights=None, stats=None, mask=None):
+        assert weights is None, "Not supporting weighted data, just masked data."
+        if stats is None:
+            stats = self._get_statistics(data, mask)
 
-    def meanfieldupdate(self, expected_suff_stats, mask=None):
-        # import ipdb; ipdb.set_trace()
-        E_x, E_xxT, y = expected_suff_stats
-        if mask is None:
-            mask = np.ones_like(y, dtype=bool)
+        self._meanfieldupdate_A(stats)
+        self._meanfieldupdate_sigma(stats)
 
-        self._meanfieldupdate_A(E_x, E_xxT, y, mask)
-        self._meanfieldupdate_sigma(E_x, E_xxT, y, mask)
-
-    def _meanfieldupdate_A(self, E_x, E_xxT, y, mask, prob=1.0, stepsize=1.0):
+    def _meanfieldupdate_A(self, stats, prob=1.0, stepsize=1.0):
         E_sigmasq_inv = self.mf_alpha / self.mf_beta
-        E_xxT_vec = E_xxT.reshape(E_xxT.shape[0], -1)
+        _, E_yxT, E_xxT, _ = stats  / prob
 
         # Update statistics each row of A
         for d in range(self.D_out):
-            # Get sufficient statistics from the data
-            J_obs = mask[:,d] * E_sigmasq_inv[d]
-            # Jlkhd = np.sum(E_xxT * J_obs[:, None, None], axis=0)
-            # Multiplying by mask is slow, try an alternative approach
-            Jlkhd = np.dot(J_obs, E_xxT_vec).reshape((self.D_in, self.D_in))
-            # assert np.allclose(Jlkhd, Jlkhd2)
-            hlkhd = (y[:, d] * J_obs).T.dot(E_x)
-
-            Jd = Jlkhd / prob + self.J_0
-            hd = hlkhd / prob + self.h_0
+            Jd = self.J_0 + (E_xxT[d] * E_sigmasq_inv[d])
+            hd = self.h_0 + (E_yxT[d] * E_sigmasq_inv[d])
 
             # Update the mean field natural parameters
             self.mf_J_A[d] = self._update_param(self.mf_J_A[d], Jd, stepsize)
@@ -710,36 +697,20 @@ class DiagonalRegression(Regression, MeanFieldSVI):
         # Clear the cache
         self._mf_A_cache = {}
 
-    def _meanfieldupdate_sigma(self, E_x, E_xxT, y, mask, prob=1.0, stepsize=1.0):
-        assert y.shape == mask.shape
+    def _meanfieldupdate_sigma(self, stats, prob=1.0, stepsize=1.0):
+        E_ysq, E_yxT, E_xxT, E_n = stats / prob
         E_A, E_AAT, _, _ = self.mf_expectations
 
-        # D_out x D_in x D_in
-        E_xxT_vec = E_xxT.reshape(E_xxT.shape[0], -1)
-        sum_E_xxT = \
-            np.array([np.dot(mask[:,d], E_xxT_vec).reshape(self.D_in, self.D_in)
-                      for d in range(self.D_out)])
+        alpha = self.alpha_0 + E_n / 2.0
 
-        # Compute the expected sufficient statistics for sigmasq
-        alpha_lkhd = 0.5 * np.sum(mask, axis=0)
-
-        # Expand out the quadratic form in the log likelihood
-        # mu = np.dot(x, self.A.T)
-        # beta_hat += 0.5 * np.sum((y - mu) ** 2 * mask, axis=0)
-        beta_lkhd = 0.5 * np.sum(y**2 * mask, axis=0)
-        # beta_hat += 0.5 * np.sum(-2*y*mu * mask, axis=0)
-        beta_lkhd += 0.5 * np.sum(-2*y*np.dot(E_x, E_A.T) * mask, axis=0)
-        # beta_hat += 0.5 * np.sum(mu**2 * mask, axis=0)
-        beta_lkhd += 0.5 * np.sum(E_AAT * sum_E_xxT, axis=(1,2))
-
-        # Compute the posterior sufficient statistics
-        alpha_hat = alpha_lkhd / prob + self.alpha_0
-        beta_hat = beta_lkhd / prob + self.beta_0
+        beta = self.beta_0
+        beta += 0.5 * E_ysq
+        beta += -1.0 * np.sum(E_yxT * E_A, axis=1)
+        beta += 0.5 * np.sum(E_AAT * E_xxT, axis=(1,2))
 
         # Set the invgamma meanfield parameters
-        self.mf_alpha = self._update_param(self.mf_alpha, alpha_hat, stepsize)
-        self.mf_beta = self._update_param(self.mf_beta, beta_hat, stepsize)
-
+        self.mf_alpha = self._update_param(self.mf_alpha, alpha, stepsize)
+        self.mf_beta = self._update_param(self.mf_beta, beta, stepsize)
 
     def resample_from_mf(self):
         for d in range(self.D_out):
@@ -757,15 +728,13 @@ class DiagonalRegression(Regression, MeanFieldSVI):
         self.mf_h_A = np.array([Jd.dot(Ad) for Jd, Ad in zip(self.mf_J_A, A)])
 
     ### SVI
-    def meanfield_sgdstep(self, expected_suff_stats, prob, stepsize, mask=None):
-        # We have to take a weighted update of the meanfield parameters
-        # with the expected statistics from the latent variables
-        E_x, E_xxT, y = expected_suff_stats
-        if mask is None:
-            mask = np.ones_like(y, dtype=bool)
+    def meanfield_sgdstep(self, data, weights, prob, stepsize, stats=None, mask=None):
+        assert weights is None, "Not supporting weighted datapoints (just masked data)"
+        if stats is None:
+            stats = self._get_statistics(data, mask)
 
-        self._meanfieldupdate_A(E_x, E_xxT, y, mask, prob=prob, stepsize=stepsize)
-        self._meanfieldupdate_sigma(E_x, E_xxT, y, mask, prob=prob, stepsize=stepsize)
+        self._meanfieldupdate_A(stats, prob=prob, stepsize=stepsize)
+        self._meanfieldupdate_sigma(stats, prob=prob, stepsize=stepsize)
 
 
 class _ARMixin(object):
