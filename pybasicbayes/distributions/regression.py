@@ -510,7 +510,7 @@ class ARDRegression(Regression):
 class DiagonalRegression(Regression, MeanFieldSVI):
     """
     Special case of the regression class in which the observations
-    have diagonal Gaussian noise.
+    have diagonal Gaussian noise and, potentially, missing data.
     """
 
     def __init__(self, D_out, D_in, mu_0, Sigma_0, alpha_0, beta_0,
@@ -611,6 +611,42 @@ class DiagonalRegression(Regression, MeanFieldSVI):
         n = np.sum(mask, axis=0)
         return ysq, yxT, xxT, n
 
+    @staticmethod
+    def _stats_ensure_array(stats):
+        ysq, yxT, xxT, n = stats
+
+        if yxT.ndim != 2:
+            raise Exception("yxT.shape must be (D_out, D_in)")
+        D_out, D_in = yxT.shape
+
+        # If ysq is D_out x D_out, just take the diagonal
+        if ysq.ndim == 1:
+            assert ysq.shape == (D_out,)
+        elif ysq.ndim == 2:
+            assert ysq.shape == (D_out, D_out)
+            ysq = np.diag(ysq)
+        else:
+            raise Exception("ysq.shape must be (D_out,) or (D_out, D_out)")
+
+        # Make sure xxT is D_out x D_in x D_in
+        if xxT.ndim == 2:
+            assert xxT.shape == (D_in, D_in)
+            xxT = np.tile(xxT[None,:,:], (D_out, 1, 1))
+        elif xxT.ndim == 3:
+            assert xxT.shape == (D_out, D_in, D_in)
+        else:
+            raise Exception("xxT.shape must be (D_in, D_in) or (D_out, D_in, D_in)")
+
+        # Make sure n is of shape (D_out,)
+        if np.isscalar(n):
+            n = n * np.ones(D_out)
+        elif n.ndim == 1:
+            assert n.shape == (D_out,)
+        else:
+            raise Exception("n must be a scalar or an array of shape (D_out,)")
+
+        return ysq, yxT, xxT, n
+
     ### Gibbs
     def resample(self, data, stats=None, mask=None, niter=None):
         """
@@ -619,6 +655,7 @@ class DiagonalRegression(Regression, MeanFieldSVI):
         assert data is None or isinstance(data, tuple), \
             "DiagonalRegression not yet supporting lists of inputs"
         stats = self._get_statistics(data, mask=mask) if stats is None else stats
+        stats = self._stats_ensure_array(stats)
 
         niter = niter if niter else self.niter
         for itr in range(niter):
@@ -653,6 +690,7 @@ class DiagonalRegression(Regression, MeanFieldSVI):
     def max_likelihood(self,data, weights=None, stats=None, mask=None):
         if stats is None:
             stats = self._get_statistics(data, mask)
+        stats = self._stats_ensure_array(stats)
 
         ysq, yxT, xxT, n = stats
 
@@ -677,6 +715,7 @@ class DiagonalRegression(Regression, MeanFieldSVI):
         assert weights is None, "Not supporting weighted data, just masked data."
         if stats is None:
             stats = self._get_statistics(data, mask)
+        stats = self._stats_ensure_array(stats)
 
         self._meanfieldupdate_A(stats)
         self._meanfieldupdate_sigma(stats)
@@ -732,6 +771,7 @@ class DiagonalRegression(Regression, MeanFieldSVI):
         assert weights is None, "Not supporting weighted datapoints (just masked data)"
         if stats is None:
             stats = self._get_statistics(data, mask)
+        stats = self._stats_ensure_array(stats)
 
         self._meanfieldupdate_A(stats, prob=prob, stepsize=stepsize)
         self._meanfieldupdate_sigma(stats, prob=prob, stepsize=stepsize)

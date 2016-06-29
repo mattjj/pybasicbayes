@@ -162,7 +162,7 @@ def svi_example(true_model, true_data):
 
 if __name__ == "__main__":
     true_model, true_data = generate_synth_data()
-    # gibbs_example(true_model, true_data)
+    gibbs_example(true_model, true_data)
     em_example(true_model, true_data)
-    # meanfield_example(true_model, true_data)
-    # svi_example(true_model, true_data)
+    meanfield_example(true_model, true_data)
+    svi_example(true_model, true_data)
