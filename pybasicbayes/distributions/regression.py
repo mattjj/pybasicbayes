@@ -513,14 +513,17 @@ class DiagonalRegression(Regression, MeanFieldSVI):
     have diagonal Gaussian noise and, potentially, missing data.
     """
 
-    def __init__(self, D_out, D_in, mu_0, Sigma_0, alpha_0, beta_0,
+    def __init__(self, D_out, D_in, mu_0=None, Sigma_0=None, alpha_0=3.0, beta_0=2.0,
                  A=None, sigmasq=None, niter=1):
 
         self._D_out = D_out
         self._D_in = D_in
         self.A = A
         self.sigmasq_flat = sigmasq
+        self.affine = False # We do not yet support affine
 
+        mu_0 = np.zeros(D_in) if mu_0 is None else mu_0
+        Sigma_0 = np.eye(D_in) if Sigma_0 is None else Sigma_0
         assert mu_0.shape == (D_in,)
         assert Sigma_0.shape == (D_in, D_in)
         self.h_0 = np.linalg.solve(Sigma_0, mu_0)
@@ -530,7 +533,7 @@ class DiagonalRegression(Regression, MeanFieldSVI):
 
         self.niter = niter
 
-        if all_none(A, sigmasq):
+        if any_none(A, sigmasq):
             self.A = np.zeros((D_out, D_in))
             self.sigmasq_flat = np.ones((D_out,))
             self.resample(data=None)  # initialize from prior
@@ -597,18 +600,44 @@ class DiagonalRegression(Regression, MeanFieldSVI):
                     np.zeros((self.D_out, self.D_in, self.D_in)),
                     np.zeros((self.D_out,)))
 
-        # TODO: handle tuples or hstack-ed arrays
-        assert isinstance(data, tuple)
-        x, y = data
+        # Make sure data is a list
+        if not isinstance(data, list):
+            datas = [data]
+        else:
+            datas = data
 
-        if mask is None:
-            mask = np.ones_like(y, dtype=bool)
+        # Make sure mask is also a list if given
+        if mask is not None:
+            if not isinstance(mask, list):
+                masks = [mask]
+            else:
+                masks = mask
+        else:
+            masks = [None] * len(datas)
 
-        ysq = np.sum(y**2 * mask, axis=0)
-        yxT = (y*mask).T.dot(x)
-        xxT = np.array([(x * mask[:,d][:,None]).T.dot(x)
-                        for d in range(self.D_out)])
-        n = np.sum(mask, axis=0)
+        # Sum sufficient statistics from each dataset
+        ysq = np.zeros(self.D_out)
+        yxT = np.zeros((self.D_out, self.D_in))
+        xxT = np.zeros((self.D_out, self.D_in, self.D_in))
+        n = np.zeros(self.D_out)
+
+        for data, mask in zip(datas, masks):
+            # Dandle tuples or hstack-ed arrays
+            if isinstance(data, tuple):
+                x, y = data
+            else:
+                x, y = data[:,:self.D_in], data[:, self.D_in:]
+            assert x.shape[1] == self.D_in
+            assert y.shape[1] == self.D_out
+
+            if mask is None:
+                mask = np.ones_like(y, dtype=bool)
+
+            ysq += np.sum(y**2 * mask, axis=0)
+            yxT += (y*mask).T.dot(x)
+            xxT += np.array([(x * mask[:,d][:,None]).T.dot(x)
+                            for d in range(self.D_out)])
+            n += np.sum(mask, axis=0)
         return ysq, yxT, xxT, n
 
     @staticmethod
@@ -652,8 +681,6 @@ class DiagonalRegression(Regression, MeanFieldSVI):
         """
         Introduce a mask that allows for missing data
         """
-        assert data is None or isinstance(data, tuple), \
-            "DiagonalRegression not yet supporting lists of inputs"
         stats = self._get_statistics(data, mask=mask) if stats is None else stats
         stats = self._stats_ensure_array(stats)
 
@@ -684,7 +711,7 @@ class DiagonalRegression(Regression, MeanFieldSVI):
         beta += -1.0 * np.sum(yxT * self.A, axis=1)
         beta += 0.5 * np.sum(AAT * xxT, axis=(1,2))
 
-        self.sigmasq_flat = sample_invgamma(alpha, beta)
+        self.sigmasq_flat = np.reshape(sample_invgamma(alpha, beta), (self.D_out,))
 
     ### Max likelihood
     def max_likelihood(self,data, weights=None, stats=None, mask=None):
