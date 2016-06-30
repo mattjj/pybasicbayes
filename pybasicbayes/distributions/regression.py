@@ -14,7 +14,7 @@ from pybasicbayes.util.stats import sample_gaussian, sample_mniw, \
     sample_invgamma, update_param
 
 from pybasicbayes.util.general import blockarray, inv_psd, cumsum, \
-    all_none, any_none, AR_striding
+    all_none, any_none, AR_striding, objarray
 
 
 class Regression(GibbsSampling, MeanField, MaxLikelihood):
@@ -306,6 +306,11 @@ class Regression(GibbsSampling, MeanField, MaxLikelihood):
             * (self.natural_hypparam + 1./prob * stats)
         self._set_params_from_mf()
 
+    def meanfield_expectedstats(self):
+        from pybasicbayes.util.stats import mniw_expectedstats
+        return mniw_expectedstats(
+                *self._natural_to_standard(self.mf_natural_hypparam))
+
     def expected_log_likelihood(self, xy=None, stats=None):
         # TODO test values, test for the affine case
         assert isinstance(xy, (tuple, np.ndarray)) ^ isinstance(stats, tuple)
@@ -588,6 +593,14 @@ class DiagonalRegression(Regression, MeanFieldSVI):
 
         return mf_E_A, mf_E_AAT, mf_E_sigmasq_inv, mf_E_log_sigmasq
 
+    # TODO: This is a bit ugly... Return stats in the form expected by PyLDS
+    def meanfield_expectedstats(self):
+        mf_E_A, mf_E_AAT, mf_E_sigmasq_inv, mf_E_log_sigmasq = self.mf_expectations
+        E_Sigmainv = np.diag(mf_E_sigmasq_inv)
+        E_Sigmainv_A  = mf_E_A * mf_E_sigmasq_inv[:,None]
+        E_AT_Sigmainv_A = np.sum(E_Sigmainv * mf_E_AAT, axis=0)
+        E_logdetSigmainv = np.sum(mf_E_log_sigmasq)
+        return E_Sigmainv, E_Sigmainv_A, E_AT_Sigmainv_A, E_logdetSigmainv
 
     def log_likelihood(self, xy, mask=None):
         # TODO: Update this!
@@ -674,7 +687,7 @@ class DiagonalRegression(Regression, MeanFieldSVI):
         else:
             raise Exception("n must be a scalar or an array of shape (D_out,)")
 
-        return ysq, yxT, xxT, n
+        return objarray([ysq, yxT, xxT, n])
 
     ### Gibbs
     def resample(self, data, stats=None, mask=None, niter=None):
@@ -757,8 +770,8 @@ class DiagonalRegression(Regression, MeanFieldSVI):
             hd = self.h_0 + (E_yxT[d] * E_sigmasq_inv[d])
 
             # Update the mean field natural parameters
-            self.mf_J_A[d] = self._update_param(self.mf_J_A[d], Jd, stepsize)
-            self.mf_h_A[d] = self._update_param(self.mf_h_A[d], hd, stepsize)
+            self.mf_J_A[d] = update_param(self.mf_J_A[d], Jd, stepsize)
+            self.mf_h_A[d] = update_param(self.mf_h_A[d], hd, stepsize)
 
         # Clear the cache
         self._mf_A_cache = {}
@@ -775,13 +788,17 @@ class DiagonalRegression(Regression, MeanFieldSVI):
         beta += 0.5 * np.sum(E_AAT * E_xxT, axis=(1,2))
 
         # Set the invgamma meanfield parameters
-        self.mf_alpha = self._update_param(self.mf_alpha, alpha, stepsize)
-        self.mf_beta = self._update_param(self.mf_beta, beta, stepsize)
+        self.mf_alpha = update_param(self.mf_alpha, alpha, stepsize)
+        self.mf_beta = update_param(self.mf_beta, beta, stepsize)
+
+    def get_vlb(self):
+        # TODO: Implement this!
+        return 0
 
     def resample_from_mf(self):
         for d in range(self.D_out):
             self.A[d] = sample_gaussian(J=self.mf_J_A[d], h=self.mf_h_A[d])
-        self.sigmasq_flat = sample_invgamma(self.mf_alpha, self.mf_beta)
+        self.sigmasq_flat = sample_invgamma(self.mf_alpha, self.mf_beta) * np.ones(self.D_out)
 
     def _initialize_mean_field(self):
         A, sigmasq = self.A, self.sigmasq_flat
