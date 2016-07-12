@@ -88,6 +88,9 @@ def flattendata(data):
         return np.atleast_1d(data)
 
 ### misc
+def update_param(oldv, newv, stepsize):
+    return oldv * (1 - stepsize) + newv * stepsize
+
 
 def cov(a):
     # return np.cov(a,rowvar=0,bias=1)
@@ -143,6 +146,9 @@ def sample_markov(T,trans_matrix,init_state_distn):
     for t in range(1,T):
         out[t] = sample_discrete(trans_matrix[out[t-1]])
     return out
+
+def sample_invgamma(alpha, beta):
+    return 1./np.random.gamma(alpha, 1./beta)
 
 def niw_expectedstats(nu, S, m, kappa):
     D = m.shape[0]

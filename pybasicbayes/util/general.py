@@ -313,6 +313,12 @@ class ObjArray(np.ndarray):
             for i, elt in enumerate(lst):
                 self[i] = self.__class__(elt)
 
+# Here's an alternative to ObjArray: just construct an obj array from a list
+def objarray(lst):
+    a = np.empty(len(lst), dtype=object)
+    for i,o in enumerate(lst):
+        a[i] = o
+    return a
 
 def all_none(*args):
     return all(_ is None for _ in args)

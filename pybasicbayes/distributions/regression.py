@@ -2,7 +2,7 @@ from __future__ import division
 from builtins import zip
 from builtins import range
 __all__ = ['Regression', 'RegressionNonconj', 'ARDRegression',
-           'AutoRegression', 'ARDAutoRegression']
+           'AutoRegression', 'ARDAutoRegression', 'DiagonalRegression']
 
 import numpy as np
 from numpy import newaxis as na
@@ -10,9 +10,11 @@ from numpy import newaxis as na
 from pybasicbayes.abstractions import GibbsSampling, MaxLikelihood, \
     MeanField, MeanFieldSVI
 from pybasicbayes.util.stats import sample_gaussian, sample_mniw, \
-    sample_invwishart, getdatasize, mniw_expectedstats, mniw_log_partitionfunction
+    sample_invwishart, getdatasize, mniw_expectedstats, mniw_log_partitionfunction, \
+    sample_invgamma, update_param
+
 from pybasicbayes.util.general import blockarray, inv_psd, cumsum, \
-    all_none, any_none, AR_striding
+    all_none, any_none, AR_striding, objarray
 
 
 class Regression(GibbsSampling, MeanField, MaxLikelihood):
@@ -304,6 +306,11 @@ class Regression(GibbsSampling, MeanField, MaxLikelihood):
             * (self.natural_hypparam + 1./prob * stats)
         self._set_params_from_mf()
 
+    def meanfield_expectedstats(self):
+        from pybasicbayes.util.stats import mniw_expectedstats
+        return mniw_expectedstats(
+                *self._natural_to_standard(self.mf_natural_hypparam))
+
     def expected_log_likelihood(self, xy=None, stats=None):
         # TODO test values, test for the affine case
         assert isinstance(xy, (tuple, np.ndarray)) ^ isinstance(stats, tuple)
@@ -503,6 +510,315 @@ class ARDRegression(Regression):
         self.A = A
         self.sigma = sigma
         self.K_0 = K_0
+
+
+class DiagonalRegression(Regression, MeanFieldSVI):
+    """
+    Special case of the regression class in which the observations
+    have diagonal Gaussian noise and, potentially, missing data.
+    """
+
+    def __init__(self, D_out, D_in, mu_0=None, Sigma_0=None, alpha_0=3.0, beta_0=2.0,
+                 A=None, sigmasq=None, niter=1):
+
+        self._D_out = D_out
+        self._D_in = D_in
+        self.A = A
+        self.sigmasq_flat = sigmasq
+        self.affine = False # We do not yet support affine
+
+        mu_0 = np.zeros(D_in) if mu_0 is None else mu_0
+        Sigma_0 = np.eye(D_in) if Sigma_0 is None else Sigma_0
+        assert mu_0.shape == (D_in,)
+        assert Sigma_0.shape == (D_in, D_in)
+        self.h_0 = np.linalg.solve(Sigma_0, mu_0)
+        self.J_0 = np.linalg.inv(Sigma_0)
+        self.alpha_0 = alpha_0
+        self.beta_0 = beta_0
+
+        self.niter = niter
+
+        if any_none(A, sigmasq):
+            self.A = np.zeros((D_out, D_in))
+            self.sigmasq_flat = np.ones((D_out,))
+            self.resample(data=None)  # initialize from prior
+
+        # Store the natural parameters and expose the standard versions as properties
+        self.mf_J_A = np.array([self.J_0.copy() for _ in range(D_out)])
+        # Initializing with mean zero is pathological. Break symmetry by starting with sampled A.
+        # self.mf_h_A = np.array([self.h_0.copy() for _ in range(D_out)])
+        self.mf_h_A = np.array([Jd.dot(Ad) for Jd,Ad in zip(self.mf_J_A, self.A)])
+
+        self.mf_alpha = self.alpha_0 * np.ones(D_out)
+        self.mf_beta = self.alpha_0 * self.sigmasq_flat
+
+        # Cache the standard parameters for A as well
+        self._mf_A_cache = {}
+
+    @property
+    def D_out(self):
+        return self._D_out
+
+    @property
+    def D_in(self):
+        return self._D_in
+
+    @property
+    def sigma(self):
+        return np.diag(self.sigmasq_flat)
+
+    @property
+    def mf_expectations(self):
+        # Look for expectations in the cache
+        if ("mf_E_A" not in self._mf_A_cache) or \
+            ("mf_E_AAT" not in self._mf_A_cache):
+            mf_Sigma_A = \
+                np.array([np.linalg.inv(Jd) for Jd in self.mf_J_A])
+
+            self._mf_A_cache["mf_E_A"] = \
+                np.array([np.dot(Sd, hd)
+                          for Sd,hd in zip(mf_Sigma_A, self.mf_h_A)])
+
+            self._mf_A_cache["mf_E_AAT"] = \
+                np.array([Sd + np.outer(md,md)
+                          for Sd,md in zip(mf_Sigma_A, self._mf_A_cache["mf_E_A"])])
+
+        mf_E_A = self._mf_A_cache["mf_E_A"]
+        mf_E_AAT = self._mf_A_cache["mf_E_AAT"]
+
+        # Set the invgamma meanfield expectation
+        from scipy.special import digamma
+        mf_E_sigmasq_inv = self.mf_alpha / self.mf_beta
+        mf_E_log_sigmasq = np.log(self.mf_beta) - digamma(self.mf_alpha)
+
+        return mf_E_A, mf_E_AAT, mf_E_sigmasq_inv, mf_E_log_sigmasq
+
+    # TODO: This is a bit ugly... Return stats in the form expected by PyLDS
+    def meanfield_expectedstats(self):
+        mf_E_A, mf_E_AAT, mf_E_sigmasq_inv, mf_E_log_sigmasq = self.mf_expectations
+        E_Sigmainv = np.diag(mf_E_sigmasq_inv)
+        E_Sigmainv_A  = mf_E_A * mf_E_sigmasq_inv[:,None]
+        E_AT_Sigmainv_A = np.sum(E_Sigmainv * mf_E_AAT, axis=0)
+        E_logdetSigmainv = -np.sum(mf_E_log_sigmasq)
+        return E_Sigmainv, E_Sigmainv_A, E_AT_Sigmainv_A, E_logdetSigmainv
+
+    def log_likelihood(self, xy, mask=None):
+        # TODO: Update this!
+        raise NotImplementedError
+
+    def _get_statistics(self, data, mask=None):
+        if data is None:
+            return (np.zeros((self.D_out,)),
+                    np.zeros((self.D_out, self.D_in)),
+                    np.zeros((self.D_out, self.D_in, self.D_in)),
+                    np.zeros((self.D_out,)))
+
+        # Make sure data is a list
+        if not isinstance(data, list):
+            datas = [data]
+        else:
+            datas = data
+
+        # Make sure mask is also a list if given
+        if mask is not None:
+            if not isinstance(mask, list):
+                masks = [mask]
+            else:
+                masks = mask
+        else:
+            masks = [None] * len(datas)
+
+        # Sum sufficient statistics from each dataset
+        ysq = np.zeros(self.D_out)
+        yxT = np.zeros((self.D_out, self.D_in))
+        xxT = np.zeros((self.D_out, self.D_in, self.D_in))
+        n = np.zeros(self.D_out)
+
+        for data, mask in zip(datas, masks):
+            # Dandle tuples or hstack-ed arrays
+            if isinstance(data, tuple):
+                x, y = data
+            else:
+                x, y = data[:,:self.D_in], data[:, self.D_in:]
+            assert x.shape[1] == self.D_in
+            assert y.shape[1] == self.D_out
+
+            if mask is None:
+                mask = np.ones_like(y, dtype=bool)
+
+            ysq += np.sum(y**2 * mask, axis=0)
+            yxT += (y*mask).T.dot(x)
+            xxT += np.array([(x * mask[:,d][:,None]).T.dot(x)
+                            for d in range(self.D_out)])
+            n += np.sum(mask, axis=0)
+        return ysq, yxT, xxT, n
+
+    @staticmethod
+    def _stats_ensure_array(stats):
+        ysq, yxT, xxT, n = stats
+
+        if yxT.ndim != 2:
+            raise Exception("yxT.shape must be (D_out, D_in)")
+        D_out, D_in = yxT.shape
+
+        # If ysq is D_out x D_out, just take the diagonal
+        if ysq.ndim == 1:
+            assert ysq.shape == (D_out,)
+        elif ysq.ndim == 2:
+            assert ysq.shape == (D_out, D_out)
+            ysq = np.diag(ysq)
+        else:
+            raise Exception("ysq.shape must be (D_out,) or (D_out, D_out)")
+
+        # Make sure xxT is D_out x D_in x D_in
+        if xxT.ndim == 2:
+            assert xxT.shape == (D_in, D_in)
+            xxT = np.tile(xxT[None,:,:], (D_out, 1, 1))
+        elif xxT.ndim == 3:
+            assert xxT.shape == (D_out, D_in, D_in)
+        else:
+            raise Exception("xxT.shape must be (D_in, D_in) or (D_out, D_in, D_in)")
+
+        # Make sure n is of shape (D_out,)
+        if np.isscalar(n):
+            n = n * np.ones(D_out)
+        elif n.ndim == 1:
+            assert n.shape == (D_out,)
+        else:
+            raise Exception("n must be a scalar or an array of shape (D_out,)")
+
+        return objarray([ysq, yxT, xxT, n])
+
+    ### Gibbs
+    def resample(self, data, stats=None, mask=None, niter=None):
+        """
+        Introduce a mask that allows for missing data
+        """
+        stats = self._get_statistics(data, mask=mask) if stats is None else stats
+        stats = self._stats_ensure_array(stats)
+
+        niter = niter if niter else self.niter
+        for itr in range(niter):
+            self._resample_A(stats)
+            self._resample_sigma(stats)
+
+    def _resample_A(self, stats):
+
+        _, yxT, xxT, _ = stats
+
+        # Sample each row of W
+        for d in range(self.D_out):
+            # Get sufficient statistics from the data
+            Jd = self.J_0 + xxT[d] / self.sigmasq_flat[d]
+            hd = self.h_0 + yxT[d] / self.sigmasq_flat[d]
+            self.A[d] = sample_gaussian(J=Jd, h=hd)
+
+    def _resample_sigma(self, stats):
+        ysq, yxT, xxT, n = stats
+        AAT = np.array([np.outer(a,a) for a in self.A])
+
+        alpha = self.alpha_0 + n / 2.0
+
+        beta = self.beta_0
+        beta += 0.5 * ysq
+        beta += -1.0 * np.sum(yxT * self.A, axis=1)
+        beta += 0.5 * np.sum(AAT * xxT, axis=(1,2))
+
+        self.sigmasq_flat = np.reshape(sample_invgamma(alpha, beta), (self.D_out,))
+
+    ### Max likelihood
+    def max_likelihood(self,data, weights=None, stats=None, mask=None):
+        if stats is None:
+            stats = self._get_statistics(data, mask)
+        stats = self._stats_ensure_array(stats)
+
+        ysq, yxT, xxT, n = stats
+
+        assert np.all(n > 0), "Cannot perform max likelihood with zero data points!"
+        self.A = np.array([
+            np.linalg.solve(self.J_0 + xxTd, self.h_0 + yxTd)
+            for xxTd, yxTd in zip(xxT, yxT)
+        ])
+
+        alpha = self.alpha_0 + n / 2.0
+        beta = self.beta_0
+        beta += 0.5 * ysq
+        beta += -1.0 * np.sum(yxT * self.A, axis=1)
+        AAT = np.array([np.outer(ad, ad) for ad in self.A])
+        beta += 0.5 * np.sum(AAT * xxT, axis=(1, 2))
+
+        self.sigmasq_flat = beta / (alpha + 1.0)
+        assert np.all(self.sigmasq_flat) >= 0
+
+    ### Mean Field
+    def meanfieldupdate(self, data=None, weights=None, stats=None, mask=None):
+        assert weights is None, "Not supporting weighted data, just masked data."
+        if stats is None:
+            stats = self._get_statistics(data, mask)
+        stats = self._stats_ensure_array(stats)
+
+        self._meanfieldupdate_A(stats)
+        self._meanfieldupdate_sigma(stats)
+
+    def _meanfieldupdate_A(self, stats, prob=1.0, stepsize=1.0):
+        E_sigmasq_inv = self.mf_alpha / self.mf_beta
+        _, E_yxT, E_xxT, _ = stats  / prob
+
+        # Update statistics each row of A
+        for d in range(self.D_out):
+            Jd = self.J_0 + (E_xxT[d] * E_sigmasq_inv[d])
+            hd = self.h_0 + (E_yxT[d] * E_sigmasq_inv[d])
+
+            # Update the mean field natural parameters
+            self.mf_J_A[d] = update_param(self.mf_J_A[d], Jd, stepsize)
+            self.mf_h_A[d] = update_param(self.mf_h_A[d], hd, stepsize)
+
+        # Clear the cache
+        self._mf_A_cache = {}
+
+    def _meanfieldupdate_sigma(self, stats, prob=1.0, stepsize=1.0):
+        E_ysq, E_yxT, E_xxT, E_n = stats / prob
+        E_A, E_AAT, _, _ = self.mf_expectations
+
+        alpha = self.alpha_0 + E_n / 2.0
+
+        beta = self.beta_0
+        beta += 0.5 * E_ysq
+        beta += -1.0 * np.sum(E_yxT * E_A, axis=1)
+        beta += 0.5 * np.sum(E_AAT * E_xxT, axis=(1,2))
+
+        # Set the invgamma meanfield parameters
+        self.mf_alpha = update_param(self.mf_alpha, alpha, stepsize)
+        self.mf_beta = update_param(self.mf_beta, beta, stepsize)
+
+    def get_vlb(self):
+        # TODO: Implement this!
+        return 0
+
+    def resample_from_mf(self):
+        for d in range(self.D_out):
+            self.A[d] = sample_gaussian(J=self.mf_J_A[d], h=self.mf_h_A[d])
+        self.sigmasq_flat = sample_invgamma(self.mf_alpha, self.mf_beta) * np.ones(self.D_out)
+
+    def _initialize_mean_field(self):
+        A, sigmasq = self.A, self.sigmasq_flat
+
+        # Set mean field params such that A and sigmasq are the mean
+        self.mf_alpha = self.alpha_0
+        self.mf_beta = self.alpha_0 * sigmasq
+
+        self.mf_J_A = np.array([self.J_0.copy() for _ in range(self.D_out)])
+        self.mf_h_A = np.array([Jd.dot(Ad) for Jd, Ad in zip(self.mf_J_A, A)])
+
+    ### SVI
+    def meanfield_sgdstep(self, data, weights, prob, stepsize, stats=None, mask=None):
+        assert weights is None, "Not supporting weighted datapoints (just masked data)"
+        if stats is None:
+            stats = self._get_statistics(data, mask)
+        stats = self._stats_ensure_array(stats)
+
+        self._meanfieldupdate_A(stats, prob=prob, stepsize=stepsize)
+        self._meanfieldupdate_sigma(stats, prob=prob, stepsize=stepsize)
 
 
 class _ARMixin(object):
