@@ -748,7 +748,7 @@ class DiagonalRegression(Regression, MeanFieldSVI):
         beta += 0.5 * np.sum(AAT * xxT, axis=(1, 2))
 
         self.sigmasq_flat = beta / (alpha + 1.0)
-        assert np.all(self.sigmasq_flat) >= 0
+        assert np.all(self.sigmasq_flat >= 0)
 
     ### Mean Field
     def meanfieldupdate(self, data=None, weights=None, stats=None, mask=None):
