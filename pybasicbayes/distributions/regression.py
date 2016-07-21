@@ -603,8 +603,24 @@ class DiagonalRegression(Regression, MeanFieldSVI):
         return E_Sigmainv, E_Sigmainv_A, E_AT_Sigmainv_A, E_logdetSigmainv
 
     def log_likelihood(self, xy, mask=None):
-        # TODO: Update this!
-        raise NotImplementedError
+        if isinstance(xy, tuple):
+            x,y = xy
+        else:
+            x,y = xy[:,:self.D_in], xy[:,self.D_in:]
+            assert y.shape[1] == self.D_out
+
+        if mask is None:
+            mask = np.ones_like(y)
+        else:
+            assert mask.shape == y.shape
+
+        sqerr = -0.5 * (y-x.dot(self.A.T))**2 * mask
+        ll = np.sum(sqerr / self.sigmasq_flat, axis=1)
+
+        # Add normalizer
+        ll += np.sum(-0.5*np.log(2*np.pi*self.sigmasq_flat) * mask, axis=1)
+
+        return ll
 
     def _get_statistics(self, data, mask=None):
         if data is None:
@@ -794,6 +810,40 @@ class DiagonalRegression(Regression, MeanFieldSVI):
     def get_vlb(self):
         # TODO: Implement this!
         return 0
+
+
+    def expected_log_likelihood(self, xy=None, stats=None, mask=None):
+        if xy is not None:
+            if isinstance(xy, tuple):
+                x, y = xy
+            else:
+                x, y = xy[:, :self.D_in], xy[:, self.D_in:]
+                assert y.shape[1] == self.D_out
+
+            E_ysq = y**2
+            E_yxT = y[:,:,None] * x[:,None,:]
+            E_xxT = x[:,:,None] * x[:,None,:]
+            E_n = np.ones_like(y) if mask is None else mask
+
+        elif stats is not None:
+            E_ysq, E_yxT, E_xxT, E_n = stats
+            T = E_ysq.shape[0]
+            assert E_ysq.shape == (T,self.D_out)
+            assert E_yxT.shape == (T,self.D_out,self.D_in)
+            assert E_xxT.shape == (T,self.D_out,self.D_in,self.D_in)
+            assert E_n.shape == (T,self.D_out)
+
+        E_A, E_AAT, E_sigmasq_inv, E_log_sigmasq = self.mf_expectations
+
+        sqerr = -0.5 * E_ysq
+        sqerr += 1.0 * np.sum(E_yxT * E_A, axis=2)
+        sqerr += -0.5 * np.sum(E_xxT * E_AAT, axis=(2,3))
+
+        # Compute expected log likelihood
+        ell = np.sum(sqerr * E_sigmasq_inv, axis=1)
+        ell += np.sum(-0.5 * E_n * (E_log_sigmasq + np.log(2 * np.pi)), axis=1)
+
+        return ell
 
     def resample_from_mf(self):
         for d in range(self.D_out):
