@@ -598,7 +598,7 @@ class DiagonalRegression(Regression, MeanFieldSVI):
         mf_E_A, mf_E_AAT, mf_E_sigmasq_inv, mf_E_log_sigmasq = self.mf_expectations
         E_Sigmainv = np.diag(mf_E_sigmasq_inv)
         E_Sigmainv_A  = mf_E_A * mf_E_sigmasq_inv[:,None]
-        E_AT_Sigmainv_A = np.sum(E_Sigmainv * mf_E_AAT, axis=0)
+        E_AT_Sigmainv_A = np.sum(mf_E_sigmasq_inv[:,None,None] * mf_E_AAT, axis=0)
         E_logdetSigmainv = -np.sum(mf_E_log_sigmasq)
         return E_Sigmainv, E_Sigmainv_A, E_AT_Sigmainv_A, E_logdetSigmainv
 
