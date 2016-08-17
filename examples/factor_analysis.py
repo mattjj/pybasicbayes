@@ -140,10 +140,9 @@ def svi_example(true_model, true_data):
         )
 
     # Add the data in minibatches
-    minibatchsize = 250
-    for start in range(0, N, minibatchsize):
-        end = min(start + minibatchsize, N)
-        model.add_data(X[start:end], mask=mask[start:end])
+    N = X.shape[0]
+    minibatchsize = 200
+    prob = minibatchsize / float(N)
 
     lps = []
     angles = []
@@ -152,12 +151,18 @@ def svi_example(true_model, true_data):
     forgetting_rate = 0.75
     stepsize = (np.arange(N_iters) + delay)**(-forgetting_rate)
     for itr in progprint_xrange(N_iters):
-        lps.append(model.meanfield_sgdstep(stepsize[itr]))
+        minibatch = np.random.permutation(N)[:minibatchsize]
+        X_mb, mask_mb = X[minibatch], mask[minibatch]
+        lps.append(model.meanfield_sgdstep(X_mb, prob, stepsize[itr], masks=mask_mb))
         E_W, _, _, _ = model.regression.mf_expectations
         angles.append(principal_angle(true_model.W, E_W))
 
-    Z_inf = model.data_list[0].E_Z
-    Z_true = true_data.Z[:Z_inf.shape[0]]
+    # Compute the expected states for the first minibatch of data
+    model.add_data(X[:minibatchsize], mask[:minibatchsize])
+    statesobj = model.data_list.pop()
+    statesobj.meanfieldupdate()
+    Z_inf = statesobj.E_Z
+    Z_true = true_data.Z[:minibatchsize]
     plot_results(lps, angles, Z_true, Z_inf)
 
 if __name__ == "__main__":

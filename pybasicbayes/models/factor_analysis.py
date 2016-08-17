@@ -253,23 +253,31 @@ class _FactorAnalysisMeanField(ModelMeanField, ModelMeanFieldSVI, _FactorAnalysi
         stats = self._null_stats() + sum([d.E_emission_stats for d in self.data_list])
         self.regression.meanfieldupdate(stats=stats)
 
-    def meanfield_sgdstep(self, stepsize):
-        # import ipdb; ipdb.set_trace()
+    def meanfield_sgdstep(self, minibatch, prob, stepsize, masks=None):
         assert stepsize > 0 and stepsize <= 1
-        assert len(self.data_list) > 0
 
-        # Randomly select one of the datasets
-        minibatch = self.data_list[np.random.randint(len(self.data_list))]
-        prob = float(minibatch.N) / np.sum([d.N for d in self.data_list])
+        states_list = self._get_mb_states_list(minibatch, masks)
+        for s in states_list:
+            s.meanfieldupdate()
 
         # Compute the sufficient statistics of the latent parameters
-        minibatch.meanfieldupdate()
         self.regression.meanfield_sgdstep(
             data=None, weights=None, prob=prob, stepsize=stepsize,
-            stats=minibatch.E_emission_stats)
+            stats=(sum(s.E_emission_stats for s in states_list)))
 
         # Compute the expected log likelihood for this minibatch
-        return minibatch.expected_log_likelihood()
+        return sum([s.expected_log_likelihood() for s in states_list])
+
+    def _get_mb_states_list(self, minibatch, masks):
+        minibatch = minibatch if isinstance(minibatch, list) else [minibatch]
+        masks = [None] * len(minibatch) if masks is None else \
+            (masks if isinstance(masks, list) else [masks])
+
+        def get_states(data, mask):
+            self.add_data(data, mask=mask)
+            return self.data_list.pop()
+
+        return [get_states(data, mask) for data, mask in zip(minibatch, masks)]
 
     def resample_from_mf(self):
         for data in self.data_list:
