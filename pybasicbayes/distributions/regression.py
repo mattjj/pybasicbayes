@@ -622,12 +622,14 @@ class DiagonalRegression(Regression, MeanFieldSVI):
 
         return ll
 
-    def _get_statistics(self, data, mask=None):
+    def _get_statistics(self, data, D_out=None, D_in=None, mask=None):
+        D_out = self.D_out if D_out is None else D_out
+        D_in = self.D_in if D_in is None else D_in
         if data is None:
-            return (np.zeros((self.D_out,)),
-                    np.zeros((self.D_out, self.D_in)),
-                    np.zeros((self.D_out, self.D_in, self.D_in)),
-                    np.zeros((self.D_out,)))
+            return (np.zeros((D_out,)),
+                    np.zeros((D_out, D_in)),
+                    np.zeros((D_out, D_in, D_in)),
+                    np.zeros((D_out,)))
 
         # Make sure data is a list
         if not isinstance(data, list):
@@ -645,19 +647,19 @@ class DiagonalRegression(Regression, MeanFieldSVI):
             masks = [None] * len(datas)
 
         # Sum sufficient statistics from each dataset
-        ysq = np.zeros(self.D_out)
-        yxT = np.zeros((self.D_out, self.D_in))
-        xxT = np.zeros((self.D_out, self.D_in, self.D_in))
-        n = np.zeros(self.D_out)
+        ysq = np.zeros(D_out)
+        yxT = np.zeros((D_out, D_in))
+        xxT = np.zeros((D_out, D_in, D_in))
+        n = np.zeros(D_out)
 
         for data, mask in zip(datas, masks):
             # Dandle tuples or hstack-ed arrays
             if isinstance(data, tuple):
                 x, y = data
             else:
-                x, y = data[:,:self.D_in], data[:, self.D_in:]
-            assert x.shape[1] == self.D_in
-            assert y.shape[1] == self.D_out
+                x, y = data[:,:D_in], data[:, D_in:]
+            assert x.shape[1] == D_in
+            assert y.shape[1] == D_out
 
             if mask is None:
                 mask = np.ones_like(y, dtype=bool)
@@ -665,7 +667,7 @@ class DiagonalRegression(Regression, MeanFieldSVI):
             ysq += np.sum(y**2 * mask, axis=0)
             yxT += (y*mask).T.dot(x)
             xxT += np.array([(x * mask[:,d][:,None]).T.dot(x)
-                            for d in range(self.D_out)])
+                            for d in range(D_out)])
             n += np.sum(mask, axis=0)
         return ysq, yxT, xxT, n
 

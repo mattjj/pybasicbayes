@@ -14,8 +14,6 @@ from pybasicbayes.abstractions import Model, \
 from pybasicbayes.util.stats import sample_gaussian
 from pybasicbayes.util.general import objarray
 
-import pybasicbayes.distributions
-reload(pybasicbayes.distributions)
 from pybasicbayes.distributions import DiagonalRegression
 
 from pybasicbayes.util.profiling import line_profiled
@@ -233,7 +231,6 @@ class _FactorAnalysisEM(ModelEM, _FactorAnalysisBase):
 
         stats = self._null_stats() + sum([d.E_emission_stats for d in self.data_list])
         self.regression.max_likelihood(data=None, weights=None, stats=stats)
-        print self.log_likelihood()
 
 
 class _FactorAnalysisMeanField(ModelMeanField, ModelMeanFieldSVI, _FactorAnalysisBase):

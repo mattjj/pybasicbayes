@@ -100,6 +100,11 @@ def cov(a):
     else:
         return a.T.dot(a)/a.shape[0] - np.outer(mu,mu)
 
+def normal_cdf(x, mu=0.0, sigma=1.0):
+    z = (x - mu) / sigma
+    return 0.5 * special.erfc(-z / np.sqrt(2))
+
+
 ### Sampling functions
 
 def sample_gaussian(mu=None,Sigma=None,J=None,h=None):
@@ -115,6 +120,34 @@ def sample_gaussian(mu=None,Sigma=None,J=None,h=None):
         x = np.random.randn(h.shape[0])
         return scipy.linalg.solve_triangular(L,x,lower=True,trans='T') \
             + dpotrs(L,h,lower=True)[0]
+
+def sample_truncated_gaussian(mu=0, sigma=1, lb=-np.Inf, ub=np.Inf):
+    """
+    Sample a truncated normal with the specified params. This
+    is not the most stable way but it works as long as the
+    truncation region is not too far from the mean.
+    """
+    # Broadcast arrays to be of the same shape
+    mu, sigma, lb, ub = np.broadcast_arrays(mu, sigma, lb, ub)
+    shp = mu.shape
+    if np.allclose(sigma, 0.0):
+        return mu
+
+    cdflb = normal_cdf(lb, mu, sigma)
+    cdfub = normal_cdf(ub, mu, sigma)
+
+    # Sample uniformly from the CDF
+    cdfsamples = cdflb + np.random.rand(*shp) * (cdfub-cdflb)
+
+    # Clip the CDF samples so that we can invert them
+    cdfsamples = np.clip(cdfsamples, 1e-15, 1-1e-15)
+    zs = -np.sqrt(2) * special.erfcinv(2 * cdfsamples)
+
+    # Transform the standard normal samples
+    xs = sigma * zs + mu
+    xs = np.clip(xs, lb, ub)
+
+    return xs
 
 def sample_discrete(distn,size=[],dtype=np.int32):
     'samples from a one-dimensional finite pmf'
