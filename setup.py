@@ -58,7 +58,7 @@ setup(name='pybasicbayes',
       url="http://github.com/mattjj/pybasicbayes",
       packages=[
           'pybasicbayes', 'pybasicbayes.distributions',
-          'pybasicbayes.util', 'pybasicbayes.testing'],
+          'pybasicbayes.util', 'pybasicbayes.testing', 'pybasicbayes.models'],
       platforms='ALL',
       keywords=[
           'bayesian', 'inference', 'mcmc', 'variational inference',
