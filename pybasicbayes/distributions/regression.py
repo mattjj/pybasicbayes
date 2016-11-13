@@ -236,6 +236,17 @@ class Regression(GibbsSampling, MeanField, MaxLikelihood):
 
         return out
 
+    def predict(self, x):
+        A, sigma = self.A, self.sigma
+
+        if self.affine:
+            A, b = A[:, :-1], A[:, -1]
+            y = x.dot(A.T) + b.T
+        else:
+            y = x.dot(A.T)
+
+        return y
+
     def rvs(self,x=None,size=1,return_xy=True):
         A, sigma = self.A, self.sigma
 
@@ -243,11 +254,9 @@ class Regression(GibbsSampling, MeanField, MaxLikelihood):
             A, b = A[:,:-1], A[:,-1]
 
         x = np.random.normal(size=(size,A.shape[1])) if x is None else x
-        y = x.dot(A.T) + np.random.normal(size=(x.shape[0],self.D_out))\
+        y = self.predict(x)
+        y += np.random.normal(size=(x.shape[0], self.D_out)) \
             .dot(np.linalg.cholesky(sigma).T)
-
-        if self.affine:
-            y += b.T
 
         return np.hstack((x,y)) if return_xy else y
 
@@ -884,6 +893,9 @@ class _ARMixin(object):
     @property
     def D(self):
         return self.D_out
+
+    def predict(self, x):
+        return super(_ARMixin,self).predict(np.atleast_2d(x.ravel()))
 
     def rvs(self,lagged_data):
         return super(_ARMixin,self).rvs(
