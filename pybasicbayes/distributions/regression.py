@@ -841,8 +841,16 @@ class DiagonalRegression(Regression, MeanFieldSVI):
             T = E_ysq.shape[0]
             assert E_ysq.shape == (T,self.D_out)
             assert E_yxT.shape == (T,self.D_out,self.D_in)
-            assert E_xxT.shape == (T,self.D_out,self.D_in,self.D_in)
-            assert E_n.shape == (T,self.D_out)
+
+            if E_xxT.shape == (T, self.D_in, self.D_in):
+                E_xxT = E_xxT[:, None, :, :]
+            else:
+                assert E_xxT.shape == (T,self.D_out,self.D_in,self.D_in)
+
+            if E_n.shape == (T,):
+                E_n = E_n[:,None]
+            else:
+                assert E_n.shape == (T,self.D_out)
 
         E_A, E_AAT, E_sigmasq_inv, E_log_sigmasq = self.mf_expectations
 
