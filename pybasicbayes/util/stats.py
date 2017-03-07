@@ -221,7 +221,7 @@ def sample_invwishart(S,nu):
     chol = np.linalg.cholesky(S)
 
     if (nu <= 81+n) and (nu == np.round(nu)):
-        x = np.random.randn(nu,n)
+        x = np.random.randn(int(nu),n)
     else:
         x = np.diag(np.sqrt(np.atleast_1d(stats.chi2.rvs(nu-np.arange(n)))))
         x[np.triu_indices_from(x,1)] = np.random.randn(n*(n-1)//2)
