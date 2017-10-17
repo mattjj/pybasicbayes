@@ -7,6 +7,9 @@ __all__ = ['Regression', 'RegressionNonconj', 'ARDRegression',
 import numpy as np
 from numpy import newaxis as na
 
+from scipy.linalg import solve_triangular
+from scipy.special import gammaln
+
 from pybasicbayes.abstractions import GibbsSampling, MaxLikelihood, \
     MeanField, MeanFieldSVI
 from pybasicbayes.util.stats import sample_gaussian, sample_mniw, \
@@ -898,6 +901,150 @@ class DiagonalRegression(Regression, MeanFieldSVI):
         self._meanfieldupdate_sigma(stats, prob=prob, stepsize=stepsize)
 
 
+class RobustRegression(Regression):
+    """
+    Regression with multivariate-t distributed noise.
+
+        y | x ~ t(Ax + b, \Sigma, \nu)
+
+    where \nu >= 1 is the degrees of freedom.
+
+    This is equivalent to the model,
+
+        \tau ~ Gamma(\nu/2,  \nu/2)
+        y | x, \tau ~ N(Ax + b, \Sigma / \tau)
+
+    Note that we can rewrite the second step as
+
+        z | x ~ N(Ax + b, \Sigma)
+        y = z / \sqrt{\tau}
+
+    To perform inference in this model, we will introduce
+    auxiliary variables tau (precisions).  With these, we
+    can compute z = \sqrt{\tau} y and use the standard regression
+    object ot update A, b, Sigma | x, z.
+
+    We could also experiment with sampling \nu under an
+    uninformative prior, e.g. p(\nu) \propto \nu^{-2},
+    which is equivalent to a flat prior on \nu^{-1}.
+    """
+    def __init__(
+            self, nu_0=None,S_0=None, M_0=None, K_0=None, affine=False,
+            A=None, sigma=None, nu=None):
+
+        # Default to a somewhat intermediate value of nu
+        self.nu = nu if nu is not None else 4
+
+        super(RobustRegression, self).__init__(
+            nu_0=nu_0, S_0=S_0, M_0=M_0, K_0=K_0, affine=affine, A=A, sigma=sigma)
+
+    def log_likelihood(self,xy):
+        assert isinstance(xy, (tuple, np.ndarray))
+        sigma, D, nu = self.sigma, self.D_out, self.nu
+        x, y = (xy[:,:-D], xy[:,-D:]) if isinstance(xy,np.ndarray) else xy
+
+        sigma_inv, L = inv_psd(sigma, return_chol=True)
+        r = y - self.predict(x)
+        z = solve_triangular(L, r.T, lower=True).T
+
+        out = -0.5 * (nu + D) * np.log(1.0 + (z * z).sum(1) / nu)
+        out += gammaln((nu + D) / 2.0) - gammaln(nu / 2.0) - D / 2.0 * np.log(nu) \
+            - D / 2.0 * np.log(np.pi) - np.log(np.diag(L)).sum()
+
+        return out
+
+    def resample(self, data=[], stats=None):
+        assert stats is None, \
+            "We only support RobustRegression.resample() with data, not stats."
+
+        # First sample auxiliary variables for each data point
+        tau = self._resample_precision(data)
+
+        # Rescale the data by \sqrt{\tau} and resample as in standard Regression
+        super(RobustRegression, self).resample(self._rescale_data(data, tau))
+
+        # Resample degrees of freedom \nu
+        self._resample_nu()
+
+    def _resample_precision(self, data):
+        assert isinstance(data, (list, tuple, np.ndarray))
+        if isinstance(data, list):
+            return [self._resample_precision(d) for d in data]
+
+        elif isinstance(data, tuple):
+            x, y = data
+
+        else:
+            x, y = data[:, :self.D_in], data[:, self.D_in:]
+
+        assert x.ndim == y.ndim == 2
+        assert x.shape[0] == y.shape[0]
+        assert x.shape[1] == self.D_in - 1 if self.affine else self.D_in
+        assert y.shape[1] == self.D_out
+        N = x.shape[0]
+
+        # Compute posterior params of gamma distribution
+        a_post = self.nu / 2.0 + self.D_out / 2.0
+
+        r = y - self.predict(x)
+        L = np.linalg.cholesky(self.sigma)
+        # z = dpotrs(L, r.T, lower=True)[0].T
+        z = solve_triangular(L, r.T, lower=True).T
+        b_post = self.nu / 2.0 + (z * z).sum(1) / 2.0
+
+        assert np.isscalar(a_post) and b_post.shape == (N,)
+        tau = np.random.gamma(a_post, 1./b_post)
+
+        return tau
+
+    def _rescale_data(self, data, precisions):
+        assert isinstance(data, (list, tuple, np.ndarray))
+        if isinstance(data, list):
+            assert isinstance(precisions, list)
+            return [self._rescale_data(d, p) for d, p in zip(data, precisions)]
+
+        elif isinstance(data, tuple):
+            x, y = data
+
+        else:
+            x, y = data[:, :self.D_in], data[:, self.D_in:]
+
+        # Return data as an array so that _ARMixin can work with it.
+        # Note that the AR striding memory benefits are lost because
+        # this forces us to copy memory.
+        return np.hstack((x, np.sqrt(precisions)[:, None] * y))
+
+    def _resample_nu(self):
+        # TODO: Resample the degrees of freedom parameter
+        pass
+
+    # Not supporting MLE or mean field for now
+    def max_likelihood(self,data,weights=None,stats=None):
+        raise NotImplementedError
+
+    def meanfieldupdate(self, data=None, weights=None, stats=None):
+        raise NotImplementedError
+
+    def meanfield_sgdstep(self, data, weights, prob, stepsize, stats=None):
+        raise NotImplementedError
+
+    def meanfield_expectedstats(self):
+        raise NotImplementedError
+
+    def expected_log_likelihood(self, xy=None, stats=None):
+        raise NotImplementedError
+
+    def get_vlb(self):
+        raise NotImplementedError
+
+    def resample_from_mf(self):
+        raise NotImplementedError
+
+    def _set_params_from_mf(self):
+        raise NotImplementedError
+
+    def _initialize_mean_field(self):
+        pass
 
 
 class _ARMixin(object):
