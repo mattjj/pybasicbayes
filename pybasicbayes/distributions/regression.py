@@ -1096,3 +1096,7 @@ class ARDAutoRegression(_ARMixin,ARDRegression):
                 + ([1] if M_0.shape[1] % M_0.shape[0] and M_0.shape[0] != 1 else [])
         super(ARDAutoRegression,self).__init__(
                 M_0=M_0,blocksizes=blocksizes,**kwargs)
+
+
+class RobustAutoRegression(_ARMixin, RobustRegression):
+    pass
