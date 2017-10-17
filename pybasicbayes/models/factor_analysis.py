@@ -23,7 +23,7 @@ class FactorAnalysisStates(object):
     """
     Wrapper for the latent states of a factor analysis model
     """
-    def __init__(self, model, data, mask=None):
+    def __init__(self, model, data, mask=None, **kwargs):
         self.model = model
         self.X = data
         self.mask = mask
@@ -142,6 +142,7 @@ class FactorAnalysisStates(object):
 
 class _FactorAnalysisBase(Model):
     __metaclass__ = abc.ABCMeta
+    _states_class = FactorAnalysisStates
 
     def __init__(self, D_obs, D_latent,
                  W=None, sigmasq=None,
@@ -169,8 +170,8 @@ class _FactorAnalysisBase(Model):
     def sigmasq(self):
         return self.regression.sigmasq_flat
 
-    def add_data(self, data, mask=None):
-        self.data_list.append(FactorAnalysisStates(self, data, mask=mask))
+    def add_data(self, data, mask=None, **kwargs):
+        self.data_list.append(self._states_class(self, data, mask=mask, **kwargs))
         return self.data_list[-1]
 
     def generate(self, keep=True, N=1, mask=None, **kwargs):
@@ -179,7 +180,7 @@ class _FactorAnalysisBase(Model):
         Z = np.random.randn(N, self.D_latent)
         X = np.dot(Z, W.T) + np.sqrt(sigmasq) * np.random.randn(N, self.D_obs)
 
-        data = FactorAnalysisStates(self, X, mask=mask)
+        data = self._states_class(self, X, mask=mask, **kwargs)
         data.Z = Z
         if keep:
             self.data_list.append(data)

@@ -477,7 +477,7 @@ class Mixture(ModelGibbsSampling, ModelMeanField, ModelEM, ModelParallelTemperin
                     [l.expectations[:,idx] for l in self.labels_list])
 
         # mixture weights
-        self.weights.max_likelihood(np.arange(len(self.components)),
+        self.weights.max_likelihood(None,
                 [l.expectations for l in self.labels_list])
 
     @property

@@ -564,6 +564,10 @@ class DiagonalRegression(Regression, MeanFieldSVI):
         # Cache the standard parameters for A as well
         self._mf_A_cache = {}
 
+        # Store the natural hypparams.  These correspond to the suff. stats
+        # (y^2, yxT, xxT, n)
+        # self.natural_hypparam = (2 * self.beta_0, self.h_0, self.J_0, 1.0)
+
     @property
     def D_out(self):
         return self._D_out
@@ -761,7 +765,6 @@ class DiagonalRegression(Regression, MeanFieldSVI):
 
         ysq, yxT, xxT, n = stats
 
-        assert np.all(n > 0), "Cannot perform max likelihood with zero data points!"
         self.A = np.array([
             np.linalg.solve(self.J_0 + xxTd, self.h_0 + yxTd)
             for xxTd, yxTd in zip(xxT, yxT)
@@ -786,6 +789,11 @@ class DiagonalRegression(Regression, MeanFieldSVI):
 
         self._meanfieldupdate_A(stats)
         self._meanfieldupdate_sigma(stats)
+
+        # Update A and sigmasq_flat
+        A, _, sigmasq_inv, _ = self.mf_expectations
+        self.A = A.copy()
+        self.sigmasq_flat = 1. / sigmasq_inv
 
     def _meanfieldupdate_A(self, stats, prob=1.0, stepsize=1.0):
         E_sigmasq_inv = self.mf_alpha / self.mf_beta
@@ -888,6 +896,8 @@ class DiagonalRegression(Regression, MeanFieldSVI):
 
         self._meanfieldupdate_A(stats, prob=prob, stepsize=stepsize)
         self._meanfieldupdate_sigma(stats, prob=prob, stepsize=stepsize)
+
+
 
 
 class _ARMixin(object):
