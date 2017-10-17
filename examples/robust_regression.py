@@ -9,7 +9,7 @@ import seaborn as sns
 sns.set_style("white")
 
 from pybasicbayes.util.text import progprint_xrange
-from pybasicbayes.distributions.regression import Regression, RobustRegression
+from pybasicbayes.distributions import Regression, RobustRegression
 
 D_out = 1
 D_in = 2

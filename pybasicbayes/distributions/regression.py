@@ -2,7 +2,8 @@ from __future__ import division
 from builtins import zip
 from builtins import range
 __all__ = ['Regression', 'RegressionNonconj', 'ARDRegression',
-           'AutoRegression', 'ARDAutoRegression', 'DiagonalRegression']
+           'AutoRegression', 'ARDAutoRegression', 'DiagonalRegression',
+           'RobustRegression', 'RobustAutoRegression']
 
 import numpy as np
 from numpy import newaxis as na
