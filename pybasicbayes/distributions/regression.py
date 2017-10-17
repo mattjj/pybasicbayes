@@ -914,17 +914,13 @@ class RobustRegression(Regression):
         \tau ~ Gamma(\nu/2,  \nu/2)
         y | x, \tau ~ N(Ax + b, \Sigma / \tau)
 
-    Note that we can rewrite the second step as
-
-        z | x ~ N(Ax + b, \Sigma)
-        y = z / \sqrt{\tau}
-
     To perform inference in this model, we will introduce
     auxiliary variables tau (precisions).  With these, we
-    can compute z = \sqrt{\tau} y and use the standard regression
-    object ot update A, b, Sigma | x, z.
+    can compute sufficient statistics scaled by \tau and
+    use the standard regression object to
+    update A, b, Sigma | x, y, \tau.
 
-    We could also experiment with sampling \nu under an
+    TODO: We could also experiment with sampling \nu under an
     uninformative prior, e.g. p(\nu) \propto \nu^{-2},
     which is equivalent to a flat prior on \nu^{-1}.
     """
@@ -953,6 +949,77 @@ class RobustRegression(Regression):
 
         return out
 
+    def rvs(self,x=None,size=1,return_xy=True):
+        A, sigma, nu, D = self.A, self.sigma, self.nu, self.D_out
+
+        if self.affine:
+            A, b = A[:,:-1], A[:,-1]
+
+        x = np.random.normal(size=(size, A.shape[1])) if x is None else x
+        N = x.shape[0]
+        mu = self.predict(x)
+
+        # Sample precisions and t-distributed residuals
+        tau = np.random.gamma(nu / 2.0, 2.0 / nu, size=(N,))
+        resid = np.random.randn(N, D).dot(np.linalg.cholesky(sigma).T)
+        resid /= tau[:, None]
+
+        y = mu + resid
+        return np.hstack((x,y)) if return_xy else y
+
+    def _get_statistics(self, data):
+        raise Exception("RobustRegression needs scaled statistics.")
+
+    def _get_scaled_statistics(self, data, precisions):
+        assert isinstance(data, (list, tuple, np.ndarray))
+        if isinstance(data,list):
+            return sum((self._get_scaled_statistics(d, p) for d, p in zip(data, precisions)),
+                       self._empty_statistics())
+
+        elif isinstance(data, tuple):
+            x, y = data
+            bad = np.isnan(x).any(1) | np.isnan(y).any(1)
+            x, y = x[~bad], y[~bad]
+            precisions = precisions[~bad]
+
+            n, D = y.shape
+
+            scaled_x = x * precisions[:, None]
+            scaled_y = y * precisions[:, None]
+            xxT = scaled_x.T.dot(x)
+            yxT = scaled_y.T.dot(x)
+            yyT = scaled_y.T.dot(y)
+
+            if self.affine:
+                x, y = scaled_x.sum(0), scaled_y.sum(0)
+                xxT = blockarray([[xxT,     x[:,na]],
+                                  [x[na,:], np.atleast_2d(precisions.sum())]])
+                yxT = np.hstack((yxT, y[:,na]))
+
+            return np.array([yyT, yxT, xxT, n])
+
+        else:
+            # data passed in like np.hstack((x, y))
+            bad = np.isnan(data).any(1)
+            data = data[~bad]
+            precisions = precisions[~bad]
+            n, D = data.shape[0], self.D_out
+
+            scaled_data = data * precisions[: None]
+            statmat = scaled_data.T.dot(data)
+
+            xxT, yxT, yyT = \
+                statmat[:-D,:-D], statmat[-D:,:-D], statmat[-D:,-D:]
+
+            if self.affine:
+                xy = scaled_data.sum(0)
+                x, y = xy[:-D], xy[-D:]
+                xxT = blockarray([[xxT,     x[:,na]],
+                                  [x[na,:], np.atleast_2d(precisions.sum())]])
+                yxT = np.hstack((yxT, y[:,na]))
+
+            return np.array([yyT, yxT, xxT, n])
+
     def resample(self, data=[], stats=None):
         assert stats is None, \
             "We only support RobustRegression.resample() with data, not stats."
@@ -960,8 +1027,9 @@ class RobustRegression(Regression):
         # First sample auxiliary variables for each data point
         tau = self._resample_precision(data)
 
-        # Rescale the data by \sqrt{\tau} and resample as in standard Regression
-        super(RobustRegression, self).resample(self._rescale_data(data, tau))
+        # Compute statistics, scaling by tau, and resample as in standard Regression
+        stats = self._get_scaled_statistics(data, tau)
+        super(RobustRegression, self).resample(stats=stats)
 
         # Resample degrees of freedom \nu
         self._resample_nu()
@@ -988,7 +1056,6 @@ class RobustRegression(Regression):
 
         r = y - self.predict(x)
         L = np.linalg.cholesky(self.sigma)
-        # z = dpotrs(L, r.T, lower=True)[0].T
         z = solve_triangular(L, r.T, lower=True).T
         b_post = self.nu / 2.0 + (z * z).sum(1) / 2.0
 
@@ -996,23 +1063,6 @@ class RobustRegression(Regression):
         tau = np.random.gamma(a_post, 1./b_post)
 
         return tau
-
-    def _rescale_data(self, data, precisions):
-        assert isinstance(data, (list, tuple, np.ndarray))
-        if isinstance(data, list):
-            assert isinstance(precisions, list)
-            return [self._rescale_data(d, p) for d, p in zip(data, precisions)]
-
-        elif isinstance(data, tuple):
-            x, y = data
-
-        else:
-            x, y = data[:, :self.D_in], data[:, self.D_in:]
-
-        # Return data as an array so that _ARMixin can work with it.
-        # Note that the AR striding memory benefits are lost because
-        # this forces us to copy memory.
-        return np.hstack((x, np.sqrt(precisions)[:, None] * y))
 
     def _resample_nu(self):
         # TODO: Resample the degrees of freedom parameter
