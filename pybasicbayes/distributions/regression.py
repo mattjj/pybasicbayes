@@ -942,9 +942,9 @@ class RobustRegression(Regression):
 
         sigma_inv, L = inv_psd(sigma, return_chol=True)
         r = y - self.predict(x)
-        z = solve_triangular(L, r.T, lower=True).T
+        z = sigma_inv.dot(r.T).T
 
-        out = -0.5 * (nu + D) * np.log(1.0 + (z * z).sum(1) / nu)
+        out = -0.5 * (nu + D) * np.log(1.0 + (r * z).sum(1) / nu)
         out += gammaln((nu + D) / 2.0) - gammaln(nu / 2.0) - D / 2.0 * np.log(nu) \
             - D / 2.0 * np.log(np.pi) - np.log(np.diag(L)).sum()
 
@@ -1054,16 +1054,20 @@ class RobustRegression(Regression):
         assert y.shape[1] == self.D_out
         N = x.shape[0]
 
+        # Weed out the nan's
+        bad = np.any(np.isnan(x), axis=1) | np.any(np.isnan(y), axis=1)
+
         # Compute posterior params of gamma distribution
         a_post = self.nu / 2.0 + self.D_out / 2.0
 
         r = y - self.predict(x)
-        L = np.linalg.cholesky(self.sigma)
-        z = solve_triangular(L, r.T, lower=True).T
-        b_post = self.nu / 2.0 + (z * z).sum(1) / 2.0
+        sigma_inv = inv_psd(self.sigma)
+        z = sigma_inv.dot(r.T).T
+        b_post = self.nu / 2.0 + (r * z).sum(1) / 2.0
 
         assert np.isscalar(a_post) and b_post.shape == (N,)
-        tau = np.random.gamma(a_post, 1./b_post)
+        tau = np.zeros(N)
+        tau[~bad] = np.random.gamma(a_post, 1./b_post[~bad])
 
         return tau
 
