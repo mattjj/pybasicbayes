@@ -90,12 +90,15 @@ class Regression(GibbsSampling, MeanField, MaxLikelihood):
 
     @staticmethod
     def _natural_to_standard(natparam):
-        A,B,C,d = natparam
+        A,B,C,d = natparam   # natparam is roughly (yyT, yxT, xxT, n)
         nu = d
         Kinv = C
         K = inv_psd(Kinv)
-        M = B.dot(K)
-        S = A - B.dot(K).dot(B.T)
+        # M = B.dot(K)
+        M = np.linalg.solve(Kinv, B.T).T
+        # This subtraction seems unstable!
+        # It does not necessarily return a PSD matrix
+        S = A - M.dot(B.T)
 
         # numerical padding here...
         K += 1e-8*np.eye(K.shape[0])
@@ -103,6 +106,7 @@ class Regression(GibbsSampling, MeanField, MaxLikelihood):
         assert np.all(0 < np.linalg.eigvalsh(S))
         assert np.all(0 < np.linalg.eigvalsh(K))
 
+        # standard is degrees of freedom, mean of sigma (ish), mean of A, cov of rows of A
         return nu, S, M, K
 
     ### getting statistics
@@ -982,25 +986,25 @@ class RobustRegression(Regression):
             bad = np.isnan(x).any(1) | np.isnan(y).any(1)
             x, y = x[~bad], y[~bad]
             precisions = precisions[~bad]
-
+            sqrt_prec = np.sqrt(precisions)
             n, D = y.shape
 
-            scaled_x = x * precisions[:, na]
-            scaled_y = y * precisions[:, na]
-            xxT = scaled_x.T.dot(x)
-            yxT = scaled_y.T.dot(x)
-            yyT = scaled_y.T.dot(y)
-
             if self.affine:
-                x, y = scaled_x.sum(0), scaled_y.sum(0)
-                xxT = blockarray([[xxT,     x[:,na]],
-                                  [x[na,:], np.atleast_2d(precisions.sum())]])
-                yxT = np.hstack((yxT, y[:,na]))
+                x = np.column_stack((x, np.ones(n)))
 
+            # Scale by the precision
+            # xs = x * sqrt_prec[:, na]
+            # ys = y * sqrt_prec[:, na]
+            xs = x * np.tile(sqrt_prec[:, None], (1, x.shape[1]))
+            ys = y * np.tile(sqrt_prec[:, None], (1, D))
+
+            xxT, yxT, yyT = xs.T.dot(xs), ys.T.dot(xs), ys.T.dot(ys)
             return np.array([yyT, yxT, xxT, n])
 
         else:
             # data passed in like np.hstack((x, y))
+            # x, y = data[:,:-self.D_out], data[:,-self.D_out:]
+            # return self._get_scaled_statistics((x, y), precisions)
             bad = np.isnan(data).any(1)
             data = data[~bad]
             precisions = precisions[~bad]
