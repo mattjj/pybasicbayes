@@ -317,6 +317,7 @@ def invwishart_entropy(sigma,nu,chol=None):
     return invwishart_log_partitionfunction(sigma,nu,chol)-(nu-D-1)/2*Elogdetlmbda + nu*D/2
 
 def invwishart_log_partitionfunction(sigma,nu,chol=None):
+    # In Bishop B.79 notation, this is -log B(W, nu), where W = sigma^{-1}
     D = sigma.shape[0]
     chol = np.linalg.cholesky(sigma) if chol is None else chol
     return -1*(nu*np.log(chol.diagonal()).sum() - (nu*D/2*np.log(2) + D*(D-1)/4*np.log(np.pi) \
