@@ -26,9 +26,9 @@ class FactorAnalysisStates(object):
     def __init__(self, model, data, mask=None, **kwargs):
         self.model = model
         self.X = data
-        self.mask = mask
         if mask is None:
             mask = np.ones_like(data, dtype=bool)
+        self.mask = mask
         assert data.shape == mask.shape and mask.dtype == bool
         assert self.X.shape[1] == self.D_obs
 
