@@ -972,7 +972,7 @@ class RobustRegression(Regression):
         # Sample precisions and t-distributed residuals
         tau = np.random.gamma(nu / 2.0, 2.0 / nu, size=(N,))
         resid = np.random.randn(N, D).dot(np.linalg.cholesky(sigma).T)
-        resid /= tau[:, None]
+        resid /= np.sqrt(tau[:, None])
 
         y = mu + resid
         return np.hstack((x,y)) if return_xy else y
