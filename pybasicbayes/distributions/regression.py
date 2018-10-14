@@ -5,11 +5,13 @@ __all__ = ['Regression', 'RegressionNonconj', 'ARDRegression',
            'AutoRegression', 'ARDAutoRegression', 'DiagonalRegression',
            'RobustRegression', 'RobustAutoRegression']
 
+from warnings import warn
+
 import numpy as np
 from numpy import newaxis as na
 
 from scipy.linalg import solve_triangular
-from scipy.special import gammaln
+from scipy.special import gammaln, digamma, polygamma
 
 from pybasicbayes.abstractions import GibbsSampling, MaxLikelihood, \
     MeanField, MeanFieldSVI
@@ -925,7 +927,10 @@ class RobustRegression(Regression):
     use the standard regression object to
     update A, b, Sigma | x, y, \tau.
 
-    TODO: We could also experiment with sampling \nu under an
+    The degrees of freedom parameter \nu is updated via maximum
+    likelihood using a generalized Newton's method proposed by
+    Tom Minka.  We are not using any prior on \nu, but we 
+    could experiment with updating \nu under an
     uninformative prior, e.g. p(\nu) \propto \nu^{-2},
     which is equivalent to a flat prior on \nu^{-1}.
     """
@@ -1039,7 +1044,7 @@ class RobustRegression(Regression):
         super(RobustRegression, self).resample(stats=stats)
 
         # Resample degrees of freedom \nu
-        self._resample_nu()
+        self._resample_nu(tau)
 
     def _resample_precision(self, data):
         assert isinstance(data, (list, tuple, np.ndarray))
@@ -1075,9 +1080,48 @@ class RobustRegression(Regression):
 
         return tau
 
-    def _resample_nu(self):
-        # TODO: Resample the degrees of freedom parameter
-        pass
+    def _resample_nu(self, tau, nu0=4, max_iter=100, nu_min=1e-3, nu_max=100, tol=1e-4, verbose=False):
+        """
+        Generalized Newton's method for the degrees of freedom parameter, nu, 
+        of a Student's t distribution.  See the notebook in the doc/students_t
+        folder for a complete derivation. 
+        """
+        if len(tau) == 0:
+            self.nu = nu0
+            return
+
+        tau = np.concatenate(tau) if isinstance(tau, list) else tau
+        E_tau = np.mean(tau)
+        E_logtau = np.mean(np.log(tau))
+
+        from scipy.special import digamma, polygamma
+        delbo = lambda nu: 1/2 * (1 + np.log(nu/2)) - 1/2 * digamma(nu/2) + 1/2 * E_logtau - 1/2 * E_tau
+        ddelbo = lambda nu: 1/(2 * nu) - 1/4 * polygamma(1, nu/2)
+
+        dnu = np.inf
+        nu = nu0
+        for itr in range(max_iter):
+            if abs(dnu) < tol:
+                break
+                
+            if nu < nu_min or nu > nu_max:
+                warn("generalized_newton_studentst_dof fixed point grew beyond "
+                     "bounds [{},{}].".format(nu_min, nu_max))
+                nu = np.clip(nu, nu_min, nu_max)
+                break
+            
+            # Perform the generalized Newton update
+            a = -nu**2 * ddelbo(nu)
+            b = delbo(nu) - a / nu
+            assert a > 0 and b < 0, "generalized_newton_studentst_dof encountered invalid values of a,b"
+            dnu = -a / b - nu
+            nu = nu + dnu
+
+        if itr == max_iter - 1:
+            warn("generalized_newton_studentst_dof failed to converge" 
+                 "at tolerance {} in {} iterations.".format(tol, itr))
+
+        self.nu = nu
 
     # Not supporting MLE or mean field for now
     def max_likelihood(self,data,weights=None,stats=None):

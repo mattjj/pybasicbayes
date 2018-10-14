@@ -79,8 +79,8 @@ plt.imshow(mu.reshape((npts, npts)),
            cmap="RdBu", vmin=-ylim, vmax=ylim,
            alpha=0.8,
            extent=xlim + tuple(reversed(xlim)))
-plt.scatter(X[~inds,0], X[~inds,1], c=y[~inds], cmap="RdBu", vmin=-ylim, vmax=ylim, edgecolors='gray')
-plt.scatter(X[inds,0], X[inds,1], c=y[inds], cmap="RdBu", vmin=-ylim, vmax=ylim, edgecolors='k', linewidths=1)
+plt.scatter(X[~inds,0], X[~inds,1], c=y[~inds, 0], cmap="RdBu", vmin=-ylim, vmax=ylim, edgecolors='gray')
+plt.scatter(X[inds,0], X[inds,1], c=y[inds, 0], cmap="RdBu", vmin=-ylim, vmax=ylim, edgecolors='k', linewidths=1)
 plt.xlim(xlim)
 plt.ylim(xlim)
 plt.title("True")
@@ -91,8 +91,8 @@ plt.imshow(mu.reshape((npts, npts)),
            cmap="RdBu", vmin=-ylim, vmax=ylim,
            alpha=0.8,
            extent=xlim + tuple(reversed(xlim)))
-plt.scatter(X[~inds,0], X[~inds,1], c=y[~inds], cmap="RdBu", vmin=-ylim, vmax=ylim, edgecolors='gray')
-plt.scatter(X[inds,0], X[inds,1], c=y[inds], cmap="RdBu", vmin=-ylim, vmax=ylim, edgecolors='k', linewidths=1)
+plt.scatter(X[~inds,0], X[~inds,1], c=y[~inds, 0], cmap="RdBu", vmin=-ylim, vmax=ylim, edgecolors='gray')
+plt.scatter(X[inds,0], X[inds,1], c=y[inds, 0], cmap="RdBu", vmin=-ylim, vmax=ylim, edgecolors='k', linewidths=1)
 plt.xlim(xlim)
 plt.ylim(xlim)
 plt.title("Standard Regression")
@@ -103,8 +103,8 @@ plt.imshow(mu.reshape((npts, npts)),
            cmap="RdBu", vmin=-ylim, vmax=ylim,
            alpha=0.8,
            extent=xlim + tuple(reversed(xlim)))
-plt.scatter(X[~inds,0], X[~inds,1], c=y[~inds], cmap="RdBu", vmin=-ylim, vmax=ylim, edgecolors='gray')
-plt.scatter(X[inds,0], X[inds,1], c=y[inds], cmap="RdBu", vmin=-ylim, vmax=ylim, edgecolors='k', linewidths=1)
+plt.scatter(X[~inds,0], X[~inds,1], c=y[~inds, 0], cmap="RdBu", vmin=-ylim, vmax=ylim, edgecolors='gray')
+plt.scatter(X[inds,0], X[inds,1], c=y[inds, 0], cmap="RdBu", vmin=-ylim, vmax=ylim, edgecolors='k', linewidths=1)
 plt.xlim(xlim)
 plt.ylim(xlim)
 plt.title("Robust Regression")
