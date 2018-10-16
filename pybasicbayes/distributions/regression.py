@@ -1086,11 +1086,11 @@ class RobustRegression(Regression):
         of a Student's t distribution.  See the notebook in the doc/students_t
         folder for a complete derivation. 
         """
+        tau = np.concatenate(tau) if (isinstance(tau, list) and len(tau) > 0) else tau
         if len(tau) == 0:
             self.nu = nu0
             return
 
-        tau = np.concatenate(tau) if isinstance(tau, list) else tau
         E_tau = np.mean(tau)
         E_logtau = np.mean(np.log(tau))
 
