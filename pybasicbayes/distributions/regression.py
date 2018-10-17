@@ -939,7 +939,7 @@ class RobustRegression(Regression):
             A=None, sigma=None, nu=None):
 
         # Default to a somewhat intermediate value of nu
-        self.nu = nu if nu is not None else 4
+        self.nu = self.default_nu = nu if nu is not None else 4.0
 
         super(RobustRegression, self).__init__(
             nu_0=nu_0, S_0=S_0, M_0=M_0, K_0=K_0, affine=affine, A=A, sigma=sigma)
@@ -1075,54 +1075,53 @@ class RobustRegression(Regression):
         b_post = self.nu / 2.0 + (r * z).sum(1) / 2.0
 
         assert np.isscalar(a_post) and b_post.shape == (N,)
-        tau = np.zeros(N)
+        tau = np.nan * np.ones(N)
         tau[~bad] = np.random.gamma(a_post, 1./b_post[~bad])
 
         return tau
-
-    def _resample_nu(self, tau, nu0=4, max_iter=100, nu_min=1e-3, nu_max=100, tol=1e-4, verbose=False):
+        
+    def _resample_nu(self, tau, N_steps=100, prop_std=0.1, alpha=1, beta=1):
         """
-        Generalized Newton's method for the degrees of freedom parameter, nu, 
-        of a Student's t distribution.  See the notebook in the doc/students_t
-        folder for a complete derivation. 
+        Update the degree of freedom parameter with 
+        Metropolis-Hastings. Assume a prior nu ~ Ga(alpha, beta) 
+        and use a proposal nu' ~ N(nu, prop_std^2). If proposals
+        are negative, reject automatically due to likelihood.
         """
-        tau = np.concatenate(tau) if (isinstance(tau, list) and len(tau) > 0) else tau
-        if len(tau) == 0:
-            self.nu = nu0
-            return
+        # Convert tau to a list of arrays
+        taus = [tau] if isinstance(tau, np.ndarray) else tau
 
-        E_tau = np.mean(tau)
-        E_logtau = np.mean(np.log(tau))
+        N = 0
+        E_tau = 0
+        E_logtau = 0
+        for tau in taus:
+            bad = ~np.isfinite(tau)
+            N += np.sum(~bad)
+            E_tau += np.sum(tau[~bad])
+            E_logtau += np.sum(np.log(tau[~bad]))
 
-        from scipy.special import digamma, polygamma
-        delbo = lambda nu: 1/2 * (1 + np.log(nu/2)) - 1/2 * digamma(nu/2) + 1/2 * E_logtau - 1/2 * E_tau
-        ddelbo = lambda nu: 1/(2 * nu) - 1/4 * polygamma(1, nu/2)
+        if N > 0:
+            E_tau /= N
+            E_logtau /= N
+        
+        # Compute the log prior, likelihood, and posterior
+        lprior = lambda nu: (alpha - 1) * np.log(nu) - alpha * nu
+        ll = lambda nu: N * (nu/2 * np.log(nu/2)  - gammaln(nu/2) + (nu/2 - 1) * E_logtau - nu/2 * E_tau)
+        lp = lambda nu: ll(nu) + lprior(nu)
 
-        dnu = np.inf
-        nu = nu0
-        for itr in range(max_iter):
-            if abs(dnu) < tol:
-                break
-                
-            if nu < nu_min or nu > nu_max:
-                warn("generalized_newton_studentst_dof fixed point grew beyond "
-                     "bounds [{},{}].".format(nu_min, nu_max))
-                nu = np.clip(nu, nu_min, nu_max)
-                break
-            
-            # Perform the generalized Newton update
-            a = -nu**2 * ddelbo(nu)
-            b = delbo(nu) - a / nu
-            assert a > 0 and b < 0, "generalized_newton_studentst_dof encountered invalid values of a,b"
-            dnu = -a / b - nu
-            nu = nu + dnu
+        lp_curr = lp(self.nu)
+        for step in range(N_steps):
+            # Symmetric proposal
+            nu_new = self.nu + prop_std * np.random.randn()
+            if nu_new <1e-3:
+                # Reject if too small
+                continue
 
-        if itr == max_iter - 1:
-            warn("generalized_newton_studentst_dof failed to converge" 
-                 "at tolerance {} in {} iterations.".format(tol, itr))
-
-        self.nu = nu
-
+            # Accept / reject based on likelihoods
+            lp_new = lp(nu_new)
+            if np.log(np.random.rand()) < lp_new - lp_curr:
+                self.nu = nu_new
+                lp_curr = lp_new
+        
     # Not supporting MLE or mean field for now
     def max_likelihood(self,data,weights=None,stats=None):
         raise NotImplementedError
