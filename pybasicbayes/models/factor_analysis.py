@@ -23,12 +23,12 @@ class FactorAnalysisStates(object):
     """
     Wrapper for the latent states of a factor analysis model
     """
-    def __init__(self, model, data, mask=None):
+    def __init__(self, model, data, mask=None, **kwargs):
         self.model = model
         self.X = data
-        self.mask = mask
         if mask is None:
             mask = np.ones_like(data, dtype=bool)
+        self.mask = mask
         assert data.shape == mask.shape and mask.dtype == bool
         assert self.X.shape[1] == self.D_obs
 
@@ -58,8 +58,18 @@ class FactorAnalysisStates(object):
 
 
     def log_likelihood(self):
-        mu = np.dot(self.Z, self.W.T)
-        return -0.5 * np.sum(((self.X - mu) * self.mask) ** 2 / self.sigmasq)
+        # mu = np.dot(self.Z, self.W.T)
+        # return -0.5 * np.sum(((self.X - mu) * self.mask) ** 2 / self.sigmasq)
+
+        # Compute the marginal likelihood, integrating out z
+        mu_x = np.zeros(self.D_obs)
+        Sigma_x = self.W.dot(self.W.T) + np.diag(self.sigmasq)
+
+        if not np.all(self.mask):
+            raise Exception("Need to implement this!")
+        else:
+            from scipy.stats import multivariate_normal
+            return multivariate_normal(mu_x, Sigma_x).logpdf(self.X)
 
     ## Gibbs
     def resample(self):
@@ -142,6 +152,7 @@ class FactorAnalysisStates(object):
 
 class _FactorAnalysisBase(Model):
     __metaclass__ = abc.ABCMeta
+    _states_class = FactorAnalysisStates
 
     def __init__(self, D_obs, D_latent,
                  W=None, sigmasq=None,
@@ -169,8 +180,8 @@ class _FactorAnalysisBase(Model):
     def sigmasq(self):
         return self.regression.sigmasq_flat
 
-    def add_data(self, data, mask=None):
-        self.data_list.append(FactorAnalysisStates(self, data, mask=mask))
+    def add_data(self, data, mask=None, **kwargs):
+        self.data_list.append(self._states_class(self, data, mask=mask, **kwargs))
         return self.data_list[-1]
 
     def generate(self, keep=True, N=1, mask=None, **kwargs):
@@ -179,14 +190,20 @@ class _FactorAnalysisBase(Model):
         Z = np.random.randn(N, self.D_latent)
         X = np.dot(Z, W.T) + np.sqrt(sigmasq) * np.random.randn(N, self.D_obs)
 
-        data = FactorAnalysisStates(self, X, mask=mask)
+        data = self._states_class(self, X, mask=mask, **kwargs)
         data.Z = Z
         if keep:
             self.data_list.append(data)
-        return data
+        return data.X, data.Z
+
+    def _log_likelihoods(self, x, mask=None, **kwargs):
+        self.add_data(x, mask=mask, **kwargs)
+        states = self.data_list.pop()
+        return states.log_likelihood()
 
     def log_likelihood(self):
-        return np.sum([d.log_likelihood() for d in self.data_list])
+        return sum([d.log_likelihood().sum() for d in self.data_list])
+
 
     def log_probability(self):
         lp = 0

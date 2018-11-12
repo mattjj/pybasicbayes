@@ -344,9 +344,10 @@ class Gaussian(
             - D*self.kappa_0/self.kappa_mf - self.kappa_0*self.nu_mf*
             np.dot(self.mu_mf -
                 self.mu_0,np.linalg.solve(self.sigma_mf,self.mu_mf - self.mu_0))) \
-            + invwishart_log_partitionfunction(self.sigma_0,self.nu_0) \
+            - invwishart_log_partitionfunction(self.sigma_0,self.nu_0) \
             + (self.nu_0 - D - 1)/2*loglmbdatilde - 1/2*self.nu_mf \
             * np.linalg.solve(self.sigma_mf,self.sigma_0).trace()
+
 
         return p_avgengy + q_entropy
 

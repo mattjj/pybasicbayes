@@ -2,10 +2,16 @@ from __future__ import division
 from builtins import zip
 from builtins import range
 __all__ = ['Regression', 'RegressionNonconj', 'ARDRegression',
-           'AutoRegression', 'ARDAutoRegression', 'DiagonalRegression']
+           'AutoRegression', 'ARDAutoRegression', 'DiagonalRegression',
+           'RobustRegression', 'RobustAutoRegression']
+
+from warnings import warn
 
 import numpy as np
 from numpy import newaxis as na
+
+from scipy.linalg import solve_triangular
+from scipy.special import gammaln, digamma, polygamma
 
 from pybasicbayes.abstractions import GibbsSampling, MaxLikelihood, \
     MeanField, MeanFieldSVI
@@ -86,12 +92,15 @@ class Regression(GibbsSampling, MeanField, MaxLikelihood):
 
     @staticmethod
     def _natural_to_standard(natparam):
-        A,B,C,d = natparam
+        A,B,C,d = natparam   # natparam is roughly (yyT, yxT, xxT, n)
         nu = d
         Kinv = C
         K = inv_psd(Kinv)
-        M = B.dot(K)
-        S = A - B.dot(K).dot(B.T)
+        # M = B.dot(K)
+        M = np.linalg.solve(Kinv, B.T).T
+        # This subtraction seems unstable!
+        # It does not necessarily return a PSD matrix
+        S = A - M.dot(B.T)
 
         # numerical padding here...
         K += 1e-8*np.eye(K.shape[0])
@@ -99,6 +108,7 @@ class Regression(GibbsSampling, MeanField, MaxLikelihood):
         assert np.all(0 < np.linalg.eigvalsh(S))
         assert np.all(0 < np.linalg.eigvalsh(K))
 
+        # standard is degrees of freedom, mean of sigma (ish), mean of A, cov of rows of A
         return nu, S, M, K
 
     ### getting statistics
@@ -564,6 +574,10 @@ class DiagonalRegression(Regression, MeanFieldSVI):
         # Cache the standard parameters for A as well
         self._mf_A_cache = {}
 
+        # Store the natural hypparams.  These correspond to the suff. stats
+        # (y^2, yxT, xxT, n)
+        # self.natural_hypparam = (2 * self.beta_0, self.h_0, self.J_0, 1.0)
+
     @property
     def D_out(self):
         return self._D_out
@@ -761,7 +775,6 @@ class DiagonalRegression(Regression, MeanFieldSVI):
 
         ysq, yxT, xxT, n = stats
 
-        assert np.all(n > 0), "Cannot perform max likelihood with zero data points!"
         self.A = np.array([
             np.linalg.solve(self.J_0 + xxTd, self.h_0 + yxTd)
             for xxTd, yxTd in zip(xxT, yxT)
@@ -786,6 +799,11 @@ class DiagonalRegression(Regression, MeanFieldSVI):
 
         self._meanfieldupdate_A(stats)
         self._meanfieldupdate_sigma(stats)
+
+        # Update A and sigmasq_flat
+        A, _, sigmasq_inv, _ = self.mf_expectations
+        self.A = A.copy()
+        self.sigmasq_flat = 1. / sigmasq_inv
 
     def _meanfieldupdate_A(self, stats, prob=1.0, stepsize=1.0):
         E_sigmasq_inv = self.mf_alpha / self.mf_beta
@@ -890,6 +908,249 @@ class DiagonalRegression(Regression, MeanFieldSVI):
         self._meanfieldupdate_sigma(stats, prob=prob, stepsize=stepsize)
 
 
+class RobustRegression(Regression):
+    """
+    Regression with multivariate-t distributed noise.
+
+        y | x ~ t(Ax + b, \Sigma, \nu)
+
+    where \nu >= 1 is the degrees of freedom.
+
+    This is equivalent to the model,
+
+        \tau ~ Gamma(\nu/2,  \nu/2)
+        y | x, \tau ~ N(Ax + b, \Sigma / \tau)
+
+    To perform inference in this model, we will introduce
+    auxiliary variables tau (precisions).  With these, we
+    can compute sufficient statistics scaled by \tau and
+    use the standard regression object to
+    update A, b, Sigma | x, y, \tau.
+
+    The degrees of freedom parameter \nu is updated via maximum
+    likelihood using a generalized Newton's method proposed by
+    Tom Minka.  We are not using any prior on \nu, but we 
+    could experiment with updating \nu under an
+    uninformative prior, e.g. p(\nu) \propto \nu^{-2},
+    which is equivalent to a flat prior on \nu^{-1}.
+    """
+    def __init__(
+            self, nu_0=None,S_0=None, M_0=None, K_0=None, affine=False,
+            A=None, sigma=None, nu=None):
+
+        # Default to a somewhat intermediate value of nu
+        self.nu = self.default_nu = nu if nu is not None else 4.0
+
+        super(RobustRegression, self).__init__(
+            nu_0=nu_0, S_0=S_0, M_0=M_0, K_0=K_0, affine=affine, A=A, sigma=sigma)
+
+    def log_likelihood(self,xy):
+        assert isinstance(xy, (tuple, np.ndarray))
+        sigma, D, nu = self.sigma, self.D_out, self.nu
+        x, y = (xy[:,:-D], xy[:,-D:]) if isinstance(xy,np.ndarray) else xy
+
+        sigma_inv, L = inv_psd(sigma, return_chol=True)
+        r = y - self.predict(x)
+        z = sigma_inv.dot(r.T).T
+
+        out = -0.5 * (nu + D) * np.log(1.0 + (r * z).sum(1) / nu)
+        out += gammaln((nu + D) / 2.0) - gammaln(nu / 2.0) - D / 2.0 * np.log(nu) \
+            - D / 2.0 * np.log(np.pi) - np.log(np.diag(L)).sum()
+
+        return out
+
+    def rvs(self,x=None,size=1,return_xy=True):
+        A, sigma, nu, D = self.A, self.sigma, self.nu, self.D_out
+
+        if self.affine:
+            A, b = A[:,:-1], A[:,-1]
+
+        x = np.random.normal(size=(size, A.shape[1])) if x is None else x
+        N = x.shape[0]
+        mu = self.predict(x)
+
+        # Sample precisions and t-distributed residuals
+        tau = np.random.gamma(nu / 2.0, 2.0 / nu, size=(N,))
+        resid = np.random.randn(N, D).dot(np.linalg.cholesky(sigma).T)
+        resid /= np.sqrt(tau[:, None])
+
+        y = mu + resid
+        return np.hstack((x,y)) if return_xy else y
+
+    def _get_statistics(self, data):
+        raise Exception("RobustRegression needs scaled statistics.")
+
+    def _get_scaled_statistics(self, data, precisions):
+        assert isinstance(data, (list, tuple, np.ndarray))
+        if isinstance(data,list):
+            return sum((self._get_scaled_statistics(d, p) for d, p in zip(data, precisions)),
+                       self._empty_statistics())
+
+        elif isinstance(data, tuple):
+            x, y = data
+            bad = np.isnan(x).any(1) | np.isnan(y).any(1)
+            x, y = x[~bad], y[~bad]
+            precisions = precisions[~bad]
+            sqrt_prec = np.sqrt(precisions)
+            n, D = y.shape
+
+            if self.affine:
+                x = np.column_stack((x, np.ones(n)))
+
+            # Scale by the precision
+            # xs = x * sqrt_prec[:, na]
+            # ys = y * sqrt_prec[:, na]
+            xs = x * np.tile(sqrt_prec[:, None], (1, x.shape[1]))
+            ys = y * np.tile(sqrt_prec[:, None], (1, D))
+
+            xxT, yxT, yyT = xs.T.dot(xs), ys.T.dot(xs), ys.T.dot(ys)
+            return np.array([yyT, yxT, xxT, n])
+
+        else:
+            # data passed in like np.hstack((x, y))
+            # x, y = data[:,:-self.D_out], data[:,-self.D_out:]
+            # return self._get_scaled_statistics((x, y), precisions)
+            bad = np.isnan(data).any(1)
+            data = data[~bad]
+            precisions = precisions[~bad]
+            n, D = data.shape[0], self.D_out
+
+            # This tile call is suboptimal but without it we can hit issues
+            # with strided data, as in autoregressive models.
+            scaled_data = data * np.tile(precisions[:,None], (1, data.shape[1]))
+            statmat = scaled_data.T.dot(data)
+
+            xxT, yxT, yyT = \
+                statmat[:-D,:-D], statmat[-D:,:-D], statmat[-D:,-D:]
+
+            if self.affine:
+                xy = scaled_data.sum(0)
+                x, y = xy[:-D], xy[-D:]
+                xxT = blockarray([[xxT,     x[:,na]],
+                                  [x[na,:], np.atleast_2d(precisions.sum())]])
+                yxT = np.hstack((yxT, y[:,na]))
+
+            return np.array([yyT, yxT, xxT, n])
+
+    def resample(self, data=[], stats=None):
+        assert stats is None, \
+            "We only support RobustRegression.resample() with data, not stats."
+
+        # First sample auxiliary variables for each data point
+        tau = self._resample_precision(data)
+
+        # Compute statistics, scaling by tau, and resample as in standard Regression
+        stats = self._get_scaled_statistics(data, tau)
+        super(RobustRegression, self).resample(stats=stats)
+
+        # Resample degrees of freedom \nu
+        self._resample_nu(tau)
+
+    def _resample_precision(self, data):
+        assert isinstance(data, (list, tuple, np.ndarray))
+        if isinstance(data, list):
+            return [self._resample_precision(d) for d in data]
+
+        elif isinstance(data, tuple):
+            x, y = data
+
+        else:
+            x, y = data[:, :-self.D_out], data[:, -self.D_out:]
+
+        assert x.ndim == y.ndim == 2
+        assert x.shape[0] == y.shape[0]
+        assert x.shape[1] == self.D_in - 1 if self.affine else self.D_in
+        assert y.shape[1] == self.D_out
+        N = x.shape[0]
+
+        # Weed out the nan's
+        bad = np.any(np.isnan(x), axis=1) | np.any(np.isnan(y), axis=1)
+
+        # Compute posterior params of gamma distribution
+        a_post = self.nu / 2.0 + self.D_out / 2.0
+
+        r = y - self.predict(x)
+        sigma_inv = inv_psd(self.sigma)
+        z = sigma_inv.dot(r.T).T
+        b_post = self.nu / 2.0 + (r * z).sum(1) / 2.0
+
+        assert np.isscalar(a_post) and b_post.shape == (N,)
+        tau = np.nan * np.ones(N)
+        tau[~bad] = np.random.gamma(a_post, 1./b_post[~bad])
+
+        return tau
+        
+    def _resample_nu(self, tau, N_steps=100, prop_std=0.1, alpha=1, beta=1):
+        """
+        Update the degree of freedom parameter with 
+        Metropolis-Hastings. Assume a prior nu ~ Ga(alpha, beta) 
+        and use a proposal nu' ~ N(nu, prop_std^2). If proposals
+        are negative, reject automatically due to likelihood.
+        """
+        # Convert tau to a list of arrays
+        taus = [tau] if isinstance(tau, np.ndarray) else tau
+
+        N = 0
+        E_tau = 0
+        E_logtau = 0
+        for tau in taus:
+            bad = ~np.isfinite(tau)
+            N += np.sum(~bad)
+            E_tau += np.sum(tau[~bad])
+            E_logtau += np.sum(np.log(tau[~bad]))
+
+        if N > 0:
+            E_tau /= N
+            E_logtau /= N
+        
+        # Compute the log prior, likelihood, and posterior
+        lprior = lambda nu: (alpha - 1) * np.log(nu) - alpha * nu
+        ll = lambda nu: N * (nu/2 * np.log(nu/2)  - gammaln(nu/2) + (nu/2 - 1) * E_logtau - nu/2 * E_tau)
+        lp = lambda nu: ll(nu) + lprior(nu)
+
+        lp_curr = lp(self.nu)
+        for step in range(N_steps):
+            # Symmetric proposal
+            nu_new = self.nu + prop_std * np.random.randn()
+            if nu_new <1e-3:
+                # Reject if too small
+                continue
+
+            # Accept / reject based on likelihoods
+            lp_new = lp(nu_new)
+            if np.log(np.random.rand()) < lp_new - lp_curr:
+                self.nu = nu_new
+                lp_curr = lp_new
+        
+    # Not supporting MLE or mean field for now
+    def max_likelihood(self,data,weights=None,stats=None):
+        raise NotImplementedError
+
+    def meanfieldupdate(self, data=None, weights=None, stats=None):
+        raise NotImplementedError
+
+    def meanfield_sgdstep(self, data, weights, prob, stepsize, stats=None):
+        raise NotImplementedError
+
+    def meanfield_expectedstats(self):
+        raise NotImplementedError
+
+    def expected_log_likelihood(self, xy=None, stats=None):
+        raise NotImplementedError
+
+    def get_vlb(self):
+        raise NotImplementedError
+
+    def resample_from_mf(self):
+        raise NotImplementedError
+
+    def _set_params_from_mf(self):
+        raise NotImplementedError
+
+    def _initialize_mean_field(self):
+        pass
+
+
 class _ARMixin(object):
     @property
     def nlags(self):
@@ -903,7 +1164,7 @@ class _ARMixin(object):
         return self.D_out
 
     def predict(self, x):
-        return super(_ARMixin,self).predict(np.atleast_2d(x.ravel()))
+        return super(_ARMixin,self).predict(np.atleast_2d(x))
 
     def rvs(self,lagged_data):
         return super(_ARMixin,self).rvs(
@@ -939,3 +1200,7 @@ class ARDAutoRegression(_ARMixin,ARDRegression):
                 + ([1] if M_0.shape[1] % M_0.shape[0] and M_0.shape[0] != 1 else [])
         super(ARDAutoRegression,self).__init__(
                 M_0=M_0,blocksizes=blocksizes,**kwargs)
+
+
+class RobustAutoRegression(_ARMixin, RobustRegression):
+    pass
