@@ -49,6 +49,10 @@ class FactorAnalysisStates(object):
         return self.model.W
 
     @property
+    def mean(self):
+        return self.model.mean
+
+    @property
     def sigmasq(self):
         return self.model.sigmasq
 
@@ -56,20 +60,31 @@ class FactorAnalysisStates(object):
     def regression(self):
         return self.model.regression
 
-
     def log_likelihood(self):
         # mu = np.dot(self.Z, self.W.T)
         # return -0.5 * np.sum(((self.X - mu) * self.mask) ** 2 / self.sigmasq)
 
         # Compute the marginal likelihood, integrating out z
-        mu_x = np.zeros(self.D_obs)
+        mu_x = self.mean
         Sigma_x = self.W.dot(self.W.T) + np.diag(self.sigmasq)
 
+        from scipy.stats import multivariate_normal
         if not np.all(self.mask):
-            raise Exception("Need to implement this!")
+            # Find the patterns of missing dta
+            missing_patterns = np.unique(self.mask, axis=0)
+
+            # Evaluate the likelihood for each missing pattern
+            lls = np.zeros(self.N)
+            for pat in missing_patterns:
+                inds = np.all(self.mask == pat, axis=1)
+                lls[inds] = \
+                    multivariate_normal(mu_x[pat], Sigma_x[np.ix_(pat, pat)])\
+                    .logpdf(self.X[np.ix_(inds, pat)])
+
         else:
-            from scipy.stats import multivariate_normal
-            return multivariate_normal(mu_x, Sigma_x).logpdf(self.X)
+            lls = multivariate_normal(mu_x, Sigma_x).logpdf(self.X)
+
+        return lls
 
     ## Gibbs
     def resample(self):
@@ -81,7 +96,7 @@ class FactorAnalysisStates(object):
         for n in range(self.N):
             Jobs = self.mask[n] / sigmasq
             Jpost = J0 + (W * Jobs[:, None]).T.dot(W)
-            hpost = h0 + (self.X[n] * Jobs).dot(W)
+            hpost = h0 + ((self.X[n] - self.mean) * Jobs).dot(W)
             self.Z[n] = sample_gaussian(J=Jpost, h=hpost)
 
     ## Mean field
@@ -98,6 +113,9 @@ class FactorAnalysisStates(object):
         E_W, E_WWT, E_sigmasq_inv, _ = self.regression.mf_expectations
         self._meanfieldupdate(E_W, E_WWT, E_sigmasq_inv)
 
+        # Copy over the expected states to Z
+        self.Z = self.E_Z
+
     def _meanfieldupdate(self, E_W, E_WWT, E_sigmasq_inv):
         N, D_obs, D_lat = self.N, self.D_obs, self.D_latent
         E_WWT_vec = E_WWT.reshape(D_obs, -1)
@@ -113,7 +131,7 @@ class FactorAnalysisStates(object):
             Jobs = self.mask[n] * E_sigmasq_inv
             # Faster than Jpost = J0 + np.sum(E_WWT * Jobs[:,None,None], axis=0)
             Jpost = J0 + (np.dot(Jobs, E_WWT_vec)).reshape((D_lat, D_lat))
-            hpost = h0 + (self.X[n] * Jobs).dot(E_W)
+            hpost = h0 + ((self.X[n] - self.mean) * Jobs).dot(E_W)
 
             # Get the expectations for this set of indices
             Sigma_post = np.linalg.inv(Jpost)
@@ -124,8 +142,9 @@ class FactorAnalysisStates(object):
 
     def _set_expected_stats(self):
         D_lat = self.D_latent
-        E_Xsq = np.sum(self.X**2 * self.mask, axis=0)
-        E_XZT = (self.X * self.mask).T.dot(self.E_Z)
+        Xc = self.X - self.mean
+        E_Xsq = np.sum(Xc**2 * self.mask, axis=0)
+        E_XZT = (Xc * self.mask).T.dot(self.E_Z)
         E_ZZT_vec = self.E_ZZT.reshape((self.E_ZZT.shape[0], D_lat ** 2))
         E_ZZT = np.array([np.dot(self.mask[:, d], E_ZZT_vec).reshape((D_lat, D_lat))
                           for d in range(self.D_obs)])
@@ -170,6 +189,9 @@ class _FactorAnalysisBase(Model):
                 alpha_0=alpha_0, beta_0=beta_0,
                 A=W, sigmasq=sigmasq)
 
+        # Handle the mean separately since DiagonalRegression doesn't support affine :-/
+        self.mean = np.zeros(D_obs)
+
         self.data_list = []
 
     @property
@@ -180,6 +202,11 @@ class _FactorAnalysisBase(Model):
     def sigmasq(self):
         return self.regression.sigmasq_flat
 
+    def set_empirical_mean(self):
+        self.mean = np.zeros(self.D_obs)
+        for n in range(self.D_obs):
+            self.mean[n] = np.concatenate([d.X[d.mask[:,n] == 1, n] for d in self.data_list]).mean()
+
     def add_data(self, data, mask=None, **kwargs):
         self.data_list.append(self._states_class(self, data, mask=mask, **kwargs))
         return self.data_list[-1]
@@ -188,7 +215,7 @@ class _FactorAnalysisBase(Model):
         # Sample from the factor analysis model
         W, sigmasq = self.W, self.sigmasq
         Z = np.random.randn(N, self.D_latent)
-        X = np.dot(Z, W.T) + np.sqrt(sigmasq) * np.random.randn(N, self.D_obs)
+        X = self.mean + np.dot(Z, W.T) + np.sqrt(sigmasq) * np.random.randn(N, self.D_obs)
 
         data = self._states_class(self, X, mask=mask, **kwargs)
         data.Z = Z
@@ -204,7 +231,6 @@ class _FactorAnalysisBase(Model):
     def log_likelihood(self):
         return sum([d.log_likelihood().sum() for d in self.data_list])
 
-
     def log_probability(self):
         lp = 0
 
@@ -216,7 +242,7 @@ class _FactorAnalysisBase(Model):
         return lp
 
 
-class _FactorAnalysisGibbs(ModelGibbsSampling, _FactorAnalysisBase):
+class _FactorAnalysisGibbs(_FactorAnalysisBase, ModelGibbsSampling):
     __metaclass__ = abc.ABCMeta
 
     def resample_model(self):
@@ -229,7 +255,7 @@ class _FactorAnalysisGibbs(ModelGibbsSampling, _FactorAnalysisBase):
         self.regression.resample((Zs, Xs), mask=mask)
 
 
-class _FactorAnalysisEM(ModelEM, _FactorAnalysisBase):
+class _FactorAnalysisEM(_FactorAnalysisBase, ModelEM):
 
     def _null_stats(self):
         return objarray(
@@ -238,19 +264,16 @@ class _FactorAnalysisEM(ModelEM, _FactorAnalysisBase):
              np.zeros((self.D_obs, self.D_latent, self.D_latent)),
              np.zeros(self.D_obs)])
 
-    def log_likelihood(self):
-        # TODO: Fix inheritance issues...
-        return np.sum([d.log_likelihood() for d in self.data_list])
-
     def EM_step(self):
         for data in self.data_list:
             data.E_step()
 
         stats = self._null_stats() + sum([d.E_emission_stats for d in self.data_list])
         self.regression.max_likelihood(data=None, weights=None, stats=stats)
+        assert np.all(np.isfinite(self.sigmasq ))
 
 
-class _FactorAnalysisMeanField(ModelMeanField, ModelMeanFieldSVI, _FactorAnalysisBase):
+class _FactorAnalysisMeanField(_FactorAnalysisBase, ModelMeanField, ModelMeanFieldSVI):
     __metaclass__ = abc.ABCMeta
 
     def _null_stats(self):

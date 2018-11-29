@@ -6,7 +6,6 @@ import matplotlib.pyplot as plt
 from matplotlib.cm import get_cmap
 
 import pybasicbayes.models.factor_analysis
-reload(pybasicbayes.models.factor_analysis)
 from pybasicbayes.models.factor_analysis import FactorAnalysis
 
 N = 2000
@@ -29,8 +28,8 @@ def generate_synth_data():
     # Create a true model and sample from it
     mask = np.random.rand(N,D_obs) < 0.9
     true_model = FactorAnalysis(D_obs, D_latent)
-    true_data = true_model.generate(N=N, mask=mask, keep=True)
-    return true_model, true_data
+    X, Z_true = true_model.generate(N=N, mask=mask, keep=True)
+    return true_model, X, Z_true, mask
 
 
 def plot_results(lls, angles, Ztrue, Zinf):
@@ -69,15 +68,14 @@ def plot_results(lls, angles, Ztrue, Zinf):
 
     plt.show()
 
-def gibbs_example(true_model, true_data):
-    X, mask = true_data.X, true_data.mask
-
+def gibbs_example(true_model, X, Z_true, mask):   
     # Fit a test model
     model = FactorAnalysis(
         D_obs, D_latent,
         # W=true_model.W, sigmasq=true_model.sigmasq
         )
     inf_data = model.add_data(X, mask=mask)
+    model.set_empirical_mean()
 
     lps = []
     angles = []
@@ -87,17 +85,16 @@ def gibbs_example(true_model, true_data):
         lps.append(model.log_likelihood())
         angles.append(principal_angle(true_model.W, model.W))
 
-    plot_results(lps, angles, true_data.Z, inf_data.Z)
+    plot_results(lps, angles, Z_true, inf_data.Z)
 
-def em_example(true_model, true_data):
-    X, mask = true_data.X, true_data.mask
-
+def em_example(true_model, X, Z_true, mask):
     # Fit a test model
     model = FactorAnalysis(
         D_obs, D_latent,
         # W=true_model.W, sigmasq=true_model.sigmasq
         )
     inf_data = model.add_data(X, mask=mask)
+    model.set_empirical_mean()
 
     lps = []
     angles = []
@@ -107,17 +104,16 @@ def em_example(true_model, true_data):
         lps.append(model.log_likelihood())
         angles.append(principal_angle(true_model.W, model.W))
 
-    plot_results(lps, angles, true_data.Z, inf_data.E_Z)
+    plot_results(lps, angles, Z_true, inf_data.E_Z)
 
-def meanfield_example(true_model, true_data):
-    X, mask = true_data.X, true_data.mask
-
+def meanfield_example(true_model, X, Z_true, mask):
     # Fit a test model
     model = FactorAnalysis(
         D_obs, D_latent,
         # W=true_model.W, sigmasq=true_model.sigmasq
         )
     inf_data = model.add_data(X, mask=mask)
+    model.set_empirical_mean()
 
     lps = []
     angles = []
@@ -128,11 +124,9 @@ def meanfield_example(true_model, true_data):
         E_W, _, _, _ = model.regression.mf_expectations
         angles.append(principal_angle(true_model.W, E_W))
 
-    plot_results(lps, angles, true_data.Z, inf_data.Z)
+    plot_results(lps, angles, Z_true, inf_data.Z)
 
-def svi_example(true_model, true_data):
-    X, mask = true_data.X, true_data.mask
-
+def svi_example(true_model, X, Z_true, mask):
     # Fit a test model
     model = FactorAnalysis(
         D_obs, D_latent,
@@ -158,16 +152,15 @@ def svi_example(true_model, true_data):
         angles.append(principal_angle(true_model.W, E_W))
 
     # Compute the expected states for the first minibatch of data
-    model.add_data(X[:minibatchsize], mask[:minibatchsize])
+    model.add_data(X, mask)
     statesobj = model.data_list.pop()
     statesobj.meanfieldupdate()
     Z_inf = statesobj.E_Z
-    Z_true = true_data.Z[:minibatchsize]
     plot_results(lps, angles, Z_true, Z_inf)
 
 if __name__ == "__main__":
-    true_model, true_data = generate_synth_data()
-    gibbs_example(true_model, true_data)
-    em_example(true_model, true_data)
-    meanfield_example(true_model, true_data)
-    svi_example(true_model, true_data)
+    true_model, X, Z_true, mask = generate_synth_data()
+    gibbs_example(true_model, X, Z_true, mask)
+    em_example(true_model, X, Z_true, mask)
+    meanfield_example(true_model, X, Z_true, mask)
+    svi_example(true_model, X, Z_true, mask)
