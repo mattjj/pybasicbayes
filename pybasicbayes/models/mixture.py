@@ -10,7 +10,7 @@ na = np.newaxis
 import scipy.special as special
 import abc, copy
 from warnings import warn
-from scipy.misc import logsumexp
+from scipy.special import logsumexp
 
 from pybasicbayes.abstractions import ModelGibbsSampling, ModelMeanField, ModelEM
 from pybasicbayes.abstractions import Distribution, GibbsSampling, MeanField, Collapsed, \

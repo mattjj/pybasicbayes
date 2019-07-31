@@ -7,7 +7,7 @@ na = np.newaxis
 import scipy.stats as stats
 import scipy.special as special
 import scipy.linalg
-from scipy.misc import logsumexp
+from scipy.special import logsumexp
 from numpy.core.umath_tests import inner1d
 
 from .general import any_none, blockarray

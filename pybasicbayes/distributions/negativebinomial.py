@@ -11,7 +11,7 @@ __all__ = [
 import numpy as np
 from numpy import newaxis as na
 import scipy.special as special
-from scipy.misc import logsumexp
+from scipy.special import logsumexp
 from warnings import warn
 
 from pybasicbayes.abstractions import Distribution, GibbsSampling, \
